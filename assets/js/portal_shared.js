@@ -162,6 +162,8 @@ var PortalUI = (function ($) {
         });
 
         function _close() {
+            /* Unbind keyboard handler before removing modal */
+            $(document).off('keydown.portalConfirm');
             $modal.removeClass('portal-dialog-in').addClass('portal-dialog-out');
             setTimeout(function () { $modal.remove(); }, 300);
         }
@@ -185,7 +187,11 @@ var PortalUI = (function ($) {
         });
 
         /* Keyboard: Escape = cancel, Enter = confirm */
-        $(document).one('keydown.portalConfirm', function (e) {
+        $(document).on('keydown.portalConfirm', function (e) {
+            if (!$('#portal-confirm-dialog').length) {
+                $(document).off('keydown.portalConfirm');
+                return;
+            }
             if (e.key === 'Escape') {
                 _close();
                 if (typeof onCancel === 'function') onCancel();

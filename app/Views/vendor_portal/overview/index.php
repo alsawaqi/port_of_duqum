@@ -23,7 +23,7 @@
                     </div>
                     <div>
                         <div class="ps-stat-label"><?php echo app_lang("status"); ?></div>
-                        <div class="ps-stat-value"><?php echo esc(ucfirst($vendor_info->status ?? '-')); ?></div>
+                        <div class="ps-stat-value"><?php echo esc($vendor_info->status ? ucfirst($vendor_info->status) : '-'); ?></div>
                     </div>
                 </div>
 
