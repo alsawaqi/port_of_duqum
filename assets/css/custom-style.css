@@ -1,0 +1,643 @@
+/*Write your custom css in this file.*/
+
+/* -------------------------------------------------------------------------- */
+/* Gate Pass Tables - unified professional design                              */
+/* -------------------------------------------------------------------------- */
+table[id^="gate-pass-"],
+table[id^="gp-"],
+table#gp-visitors-inline,
+table#gp-vehicles-inline {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid #e4e9f2;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+table[id^="gate-pass-"] thead th,
+table[id^="gp-"] thead th,
+table#gp-visitors-inline thead th,
+table#gp-vehicles-inline thead th {
+    background: linear-gradient(180deg, #f9fbff 0%, #f2f6fc 100%);
+    color: #344054;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e4e9f2;
+    padding: 12px 14px;
+    vertical-align: middle;
+}
+
+table[id^="gate-pass-"] tbody td,
+table[id^="gp-"] tbody td,
+table#gp-visitors-inline tbody td,
+table#gp-vehicles-inline tbody td {
+    border-bottom: 1px solid #eef2f8;
+    color: #334155;
+    font-size: 13px;
+    padding: 11px 14px;
+    vertical-align: middle;
+    background: #ffffff;
+}
+
+table[id^="gate-pass-"] tbody tr:nth-child(even) td,
+table[id^="gp-"] tbody tr:nth-child(even) td,
+table#gp-visitors-inline tbody tr:nth-child(even) td,
+table#gp-vehicles-inline tbody tr:nth-child(even) td {
+    background: #fafcff;
+}
+
+table[id^="gate-pass-"] tbody tr:hover td,
+table[id^="gp-"] tbody tr:hover td,
+table#gp-visitors-inline tbody tr:hover td,
+table#gp-vehicles-inline tbody tr:hover td {
+    background: #f4f8ff;
+    transition: background-color 0.2s ease;
+}
+
+table[id^="gate-pass-"] tbody tr:last-child td,
+table[id^="gp-"] tbody tr:last-child td,
+table#gp-visitors-inline tbody tr:last-child td,
+table#gp-vehicles-inline tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+/* DataTable wrapper polish */
+div[id^="gate-pass-"][id$="-table_wrapper"],
+div[id^="gp-"][id$="-table_wrapper"] {
+    padding: 12px 14px 14px;
+}
+
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_length label,
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_filter label,
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_info,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_length label,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_filter label,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_info {
+    color: #667085;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_filter input,
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_length select,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_filter input,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_length select {
+    border: 1px solid #d0d7e3;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #344054;
+    min-height: 36px;
+    box-shadow: none;
+}
+
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_filter input:focus,
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_length select:focus,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_filter input:focus,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_length select:focus {
+    border-color: #7aa2ff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    outline: 0;
+}
+
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button {
+    border: 1px solid #d0d7e3 !important;
+    border-radius: 10px !important;
+    background: #ffffff !important;
+    color: #344054 !important;
+    font-weight: 600;
+    min-width: 34px;
+    height: 34px;
+    line-height: 32px;
+    padding: 0 10px !important;
+    margin: 0 3px;
+}
+
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button:hover,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button:hover {
+    border-color: #94a9d8 !important;
+    background: #f1f6ff !important;
+    color: #1f3b7a !important;
+}
+
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button.current,
+div[id^="gate-pass-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button.current:hover,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button.current,
+div[id^="gp-"][id$="-table_wrapper"] .dataTables_paginate .paginate_button.current:hover {
+    border-color: #2152c8 !important;
+    background: #2152c8 !important;
+    color: #ffffff !important;
+}
+
+table[id^="gate-pass-"] .btn.btn-sm,
+table[id^="gp-"] .btn.btn-sm {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    div[id^="gate-pass-"][id$="-table_wrapper"],
+    div[id^="gp-"][id$="-table_wrapper"] {
+        padding: 10px;
+    }
+
+    table[id^="gate-pass-"] thead th,
+    table[id^="gp-"] thead th,
+    table[id^="gate-pass-"] tbody td,
+    table[id^="gp-"] tbody td {
+        padding: 10px 10px;
+        font-size: 12px;
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Gate Pass Pro UI - pages, cards, forms, buttons, animations                */
+/* -------------------------------------------------------------------------- */
+@keyframes gpProFadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes gpProSoftPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.22);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    }
+}
+
+.gp-pro-page {
+    animation: gpProFadeInUp 0.35s ease both;
+}
+
+.gp-pro-page .gp-pro-title {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border: 1px solid #e5ecf7;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 6px 20px rgba(16, 24, 40, 0.05);
+}
+
+.gp-pro-page .gp-pro-title h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1e3a5f;
+    letter-spacing: 0.01em;
+}
+
+.gp-pro-subtitle {
+    margin-top: 4px;
+    color: #667085;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.gp-pro-card {
+    border: 1px solid #e5ecf7;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(16, 24, 40, 0.06);
+    overflow: hidden;
+    animation: gpProFadeInUp 0.3s ease both;
+}
+
+.gp-pro-card:hover {
+    box-shadow: 0 14px 34px rgba(16, 24, 40, 0.09);
+}
+
+.gp-pro-table-shell {
+    padding: 6px;
+}
+
+.gp-pro-page .btn,
+.gp-pro-modal-footer .btn {
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.gp-pro-page .btn:hover,
+.gp-pro-modal-footer .btn:hover {
+    transform: translateY(-1px);
+}
+
+.gp-pro-btn {
+    border: 0;
+    background: linear-gradient(135deg, #2f66f2 0%, #1849d6 100%);
+    color: #fff;
+}
+
+.gp-pro-btn:hover,
+.gp-pro-btn:focus {
+    color: #fff;
+    filter: brightness(1.04);
+    box-shadow: 0 8px 22px rgba(47, 102, 242, 0.28);
+}
+
+.gp-pro-btn-secondary {
+    border: 1px solid #d4dbe8;
+    background: #ffffff;
+    color: #344054;
+}
+
+.gp-pro-btn-secondary:hover {
+    background: #f8fbff;
+    border-color: #b9c7e1;
+    color: #1f3b7a;
+}
+
+.gp-pro-btn-success {
+    border: 0;
+    background: linear-gradient(135deg, #18a874 0%, #108e62 100%);
+    color: #fff;
+}
+
+.gp-pro-btn-danger {
+    border: 0;
+    background: linear-gradient(135deg, #df425a 0%, #c92f46 100%);
+    color: #fff;
+}
+
+.gp-pro-btn-icon i {
+    margin-right: 6px;
+}
+
+.gp-pro-page .form-control,
+.gp-pro-modal-body .form-control {
+    border-radius: 10px;
+    border: 1px solid #d6deea;
+    min-height: 40px;
+}
+
+.gp-pro-page textarea.form-control,
+.gp-pro-modal-body textarea.form-control {
+    min-height: 90px;
+}
+
+.gp-pro-page .form-control:focus,
+.gp-pro-modal-body .form-control:focus {
+    border-color: #7aa2ff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.gp-pro-modal-body {
+    animation: gpProFadeInUp 0.25s ease both;
+}
+
+.gp-pro-modal-footer {
+    border-top: 1px solid #e6edf8;
+    background: #fbfdff;
+}
+
+.gp-pro-section-head {
+    border-bottom: 1px solid #ebf0f8;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.gp-pro-stat-card {
+    border: 1px solid #e6edf8;
+    border-radius: 12px;
+    box-shadow: none;
+    background: #fbfdff;
+}
+
+.gp-pro-inline-alert {
+    border-radius: 12px;
+    border-width: 1px;
+}
+
+.gp-pro-animated-in {
+    animation: gpProFadeInUp 0.35s ease both;
+}
+
+.gp-pro-pulse {
+    animation: gpProSoftPulse 1.6s ease infinite;
+}
+
+@media (max-width: 768px) {
+    .gp-pro-page .gp-pro-title {
+        padding: 12px;
+    }
+
+    .gp-pro-page .gp-pro-title h1 {
+        font-size: 18px;
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Gate Pass Portal - extra premium refinement                                */
+/* -------------------------------------------------------------------------- */
+
+/* Page header: flex layout so title and button align correctly */
+.gp-portal-pro .gp-portal-page-header,
+.gp-portal-pro .gp-pro-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border: 1px solid #dbe5f6;
+    background: linear-gradient(135deg, #ffffff 0%, #f4f8ff 65%, #edf4ff 100%);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 6px 20px rgba(16, 24, 40, 0.05);
+}
+
+.gp-portal-pro .gp-portal-header-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.gp-portal-pro .gp-portal-page-title,
+.gp-portal-pro .gp-portal-page-header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1e3a5f;
+    letter-spacing: 0.01em;
+    line-height: 1.3;
+}
+
+.gp-portal-pro .gp-portal-header-text .gp-pro-subtitle,
+.gp-portal-pro .gp-portal-page-header .gp-pro-subtitle {
+    margin: 4px 0 0 0;
+    color: #667085;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.gp-portal-pro .gp-portal-header-actions,
+.gp-portal-pro .title-button-group {
+    flex-shrink: 0;
+}
+
+.gp-portal-pro .gp-portal-header-actions .btn,
+.gp-portal-pro .title-button-group .btn {
+    min-height: 42px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.gp-portal-create-btn {
+    box-shadow: 0 10px 24px rgba(33, 82, 200, 0.28);
+}
+
+.gp-portal-create-btn:hover {
+    box-shadow: 0 12px 26px rgba(33, 82, 200, 0.34);
+}
+
+/* Table */
+.gp-portal-pro #gp-requests-table {
+    border-radius: 14px;
+}
+
+.gp-portal-pro #gp-requests-table thead th {
+    background: linear-gradient(180deg, #f7faff 0%, #eef4ff 100%);
+    vertical-align: middle;
+    text-align: left;
+}
+
+.gp-portal-pro #gp-requests-table thead th.gp-col-status,
+.gp-portal-pro #gp-requests-table tbody td.gp-col-status,
+.gp-portal-pro #gp-requests-table thead th.gp-col-details,
+.gp-portal-pro #gp-requests-table tbody td.gp-col-details {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.gp-portal-pro #gp-requests-table tbody td {
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+/* Center Status and Details columns (nth fallback if column class not on td) */
+.gp-portal-pro #gp-requests-table tbody td:nth-last-child(2),
+.gp-portal-pro #gp-requests-table tbody td.gp-col-status {
+    text-align: center;
+}
+
+.gp-portal-pro #gp-requests-table tbody td:last-child,
+.gp-portal-pro #gp-requests-table tbody td.gp-col-details {
+    text-align: center;
+}
+
+/* Status badge */
+.gp-portal-pro .gp-portal-status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.gp-portal-pro .gp-portal-status-badge.gp-portal-status-rop_approved {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.gp-portal-pro .gp-portal-status-badge.gp-portal-status-submitted,
+.gp-portal-pro .gp-portal-status-badge.gp-portal-status-department_approved,
+.gp-portal-pro .gp-portal-status-badge.gp-portal-status-commercial_approved {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.gp-portal-pro .gp-portal-status-badge.gp-portal-status-returned {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.gp-portal-pro .gp-portal-status-badge.gp-portal-status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Row actions: Details + Edit */
+.gp-portal-pro .gp-portal-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.gp-portal-pro .gp-portal-btn-details {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e40af;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    transition: all 0.2s ease;
+}
+
+.gp-portal-pro .gp-portal-btn-details:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e3a8a;
+}
+
+.gp-portal-pro .gp-portal-btn-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+}
+
+.gp-portal-pro .gp-portal-btn-edit:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+
+.gp-portal-pro .gp-portal-btn-edit i.icon-14 {
+    width: 14px;
+    height: 14px;
+}
+
+.gp-portal-pro .gp-portal-btn-details i.icon-14 {
+    width: 14px;
+    height: 14px;
+}
+
+/* DataTables toolbar: search and length in one row, aligned */
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_wrapper .row:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 0 2px;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_length,
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_filter {
+    margin: 0;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_filter input {
+    min-width: 220px;
+    border-radius: 10px;
+    border: 1px solid #d0d7e3;
+    padding: 8px 12px 8px 32px;
+    font-size: 13px;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_length select {
+    border-radius: 8px;
+    border: 1px solid #d0d7e3;
+    padding: 6px 28px 6px 10px;
+    font-size: 13px;
+}
+
+/* Pagination */
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_paginate {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #eef2f8;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_paginate .paginate_button {
+    padding: 6px 12px;
+    margin: 0 2px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #334155;
+    transition: all 0.2s ease;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_paginate .paginate_button:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_paginate .paginate_button.current {
+    background: linear-gradient(135deg, #2f66f2 0%, #1849d6 100%);
+    border-color: #2f66f2;
+    color: #fff;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_paginate .paginate_button.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.gp-portal-pro #gp-requests-table_wrapper .dataTables_info {
+    padding-top: 12px;
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.gp-portal-pro #gp-tabs {
+    border: 0;
+    gap: 8px;
+}
+
+.gp-portal-pro #gp-tabs .nav-link {
+    border: 1px solid #d7e0ef;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-weight: 600;
+    color: #344054;
+    background: #ffffff;
+    transition: all .2s ease;
+}
+
+.gp-portal-pro #gp-tabs .nav-link:hover {
+    border-color: #9fb5e2;
+    background: #f6f9ff;
+    color: #1f3b7a;
+}
+
+.gp-portal-pro #gp-tabs .nav-link.active {
+    border-color: #2f66f2;
+    background: linear-gradient(135deg, #2f66f2 0%, #1849d6 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 20px rgba(33, 82, 200, 0.25);
+}
+
+.gp-portal-pro .tab-content {
+    animation: gpProFadeInUp .3s ease both;
+}
