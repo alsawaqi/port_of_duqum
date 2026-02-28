@@ -641,3 +641,249 @@ table[id^="gp-"] .btn.btn-sm {
 .gp-portal-pro .tab-content {
     animation: gpProFadeInUp .3s ease both;
 }
+
+/* ================================================================
+   Professional Left Navigation Sidebar
+   ================================================================ */
+
+/* ── Keyframes ──────────────────────────────────────────────────── */
+@keyframes sidebarItemFadeIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Sidebar container ──────────────────────────────────────────── */
+.sidebar {
+    background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+    box-shadow: 4px 0 28px rgba(0, 0, 0, 0.22) !important;
+    -webkit-box-shadow: 4px 0 28px rgba(0, 0, 0, 0.22) !important;
+    border-right: none !important;
+}
+
+/* ── Brand / logo area ──────────────────────────────────────────── */
+.sidebar-brand {
+    background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    padding: 14px 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* ── Scrollable area ────────────────────────────────────────────── */
+.sidebar-scroll {
+    background: transparent !important;
+    padding-top: 6px;
+}
+
+/* ── Sidebar menu wrapper ───────────────────────────────────────── */
+.sidebar-menu {
+    padding: 8px 0 20px !important;
+}
+
+/* ── Every list item ────────────────────────────────────────────── */
+.sidebar-menu li {
+    margin: 1px 0 !important;
+    animation: sidebarItemFadeIn .28s ease both;
+}
+
+/* Staggered entrance animation for first 10 items */
+.sidebar-menu > li:nth-child(1)  { animation-delay: .04s; }
+.sidebar-menu > li:nth-child(2)  { animation-delay: .07s; }
+.sidebar-menu > li:nth-child(3)  { animation-delay: .10s; }
+.sidebar-menu > li:nth-child(4)  { animation-delay: .13s; }
+.sidebar-menu > li:nth-child(5)  { animation-delay: .16s; }
+.sidebar-menu > li:nth-child(6)  { animation-delay: .19s; }
+.sidebar-menu > li:nth-child(7)  { animation-delay: .22s; }
+.sidebar-menu > li:nth-child(8)  { animation-delay: .25s; }
+.sidebar-menu > li:nth-child(9)  { animation-delay: .28s; }
+.sidebar-menu > li:nth-child(10) { animation-delay: .31s; }
+
+/* ── Menu links ─────────────────────────────────────────────────── */
+.sidebar-menu li a {
+    color: #9baac4 !important;
+    background: transparent !important;
+    margin: 2px 10px !important;
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.12px !important;
+    transition: color .2s ease, background .2s ease, transform .15s ease !important;
+    position: relative !important;
+}
+
+/* Feather icon sizing */
+.sidebar-menu li a svg {
+    width: 17px !important;
+    height: 17px !important;
+    flex-shrink: 0 !important;
+    stroke-width: 1.8 !important;
+    opacity: .75;
+    transition: opacity .2s ease, stroke .2s ease !important;
+}
+
+/* Menu label text */
+.sidebar-menu li a span.menu-text {
+    margin-left: 11px !important;
+    transition: opacity .2s ease !important;
+}
+
+/* ── Hover state ────────────────────────────────────────────────── */
+.sidebar-menu li a:hover,
+.sidebar-menu li a:focus {
+    color: #ffffff !important;
+    background: rgba(102, 144, 244, 0.13) !important;
+    transform: translateX(3px) !important;
+}
+
+.sidebar-menu li a:hover svg,
+.sidebar-menu li a:focus svg {
+    opacity: 1 !important;
+}
+
+/* ── Active state ───────────────────────────────────────────────── */
+.sidebar-menu li.active > a {
+    color: #ffffff !important;
+    background: linear-gradient(135deg, #6690F4 0%, #4f7bf7 100%) !important;
+    box-shadow: 0 6px 18px rgba(102, 144, 244, 0.40) !important;
+    font-weight: 600 !important;
+    transform: translateX(0) !important;
+}
+
+.sidebar-menu li.active > a svg {
+    opacity: 1 !important;
+    stroke: #ffffff !important;
+}
+
+/* ── Badge in sidebar ───────────────────────────────────────────── */
+.sidebar-menu .badge {
+    margin-left: auto !important;
+    margin-top: 0 !important;
+    font-size: 10px !important;
+    padding: 3px 7px !important;
+    border-radius: 999px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+}
+
+/* ── Expand/collapse chevron ────────────────────────────────────── */
+#sidebar-menu li.expand > a::before {
+    border-color: #6b7fa0 !important;
+    border-width: 0 1.5px 1.5px 0 !important;
+    padding: 2.5px !important;
+    right: 1.2rem !important;
+    top: 1.25rem !important;
+    transition: all .25s ease-out !important;
+}
+
+#sidebar-menu li.expand.open > a::before {
+    border-color: #ffffff !important;
+    top: 1.45rem !important;
+}
+
+/* ── Submenu container ──────────────────────────────────────────── */
+.sidebar-menu li ul {
+    background: rgba(0, 0, 0, 0.18) !important;
+    margin: 0 10px !important;
+    border-radius: 0 0 10px 10px !important;
+    padding: 4px 0 6px !important;
+    border-left: 2px solid rgba(102, 144, 244, 0.30) !important;
+    margin-left: 22px !important;
+    transition: max-height .3s ease !important;
+}
+
+/* ── Submenu links ──────────────────────────────────────────────── */
+.sidebar-menu li ul li a {
+    padding: 8px 14px 8px 20px !important;
+    margin: 1px 6px !important;
+    font-size: 12.5px !important;
+    color: #7b8fad !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: transparent !important;
+    transition: color .18s ease, background .18s ease, transform .15s ease !important;
+}
+
+.sidebar-menu li ul li a svg {
+    display: none !important;
+}
+
+/* Dot indicator before submenu item */
+.sidebar-menu li ul li a::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    background: #3d5070;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background .18s ease, transform .18s ease;
+}
+
+.sidebar-menu li ul li a:hover,
+.sidebar-menu li ul li a:focus {
+    color: #ffffff !important;
+    background: rgba(102, 144, 244, 0.12) !important;
+    transform: translateX(3px) !important;
+}
+
+.sidebar-menu li ul li a:hover::before,
+.sidebar-menu li ul li a:focus::before {
+    background: #6690F4;
+    transform: scale(1.5);
+}
+
+/* ── Mobile sidebar (< 990px) ───────────────────────────────────── */
+@media (max-width: 990px) {
+    .sidebar .sidebar-brand {
+        background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    }
+
+    .sidebar .sidebar-scroll {
+        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    }
+}
+
+/* ── Collapsed/toggled sidebar (> 991px) ────────────────────────── */
+@media (min-width: 991px) {
+    .sidebar-toggled .sidebar {
+        background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+    }
+
+    .sidebar-toggled .sidebar-brand {
+        background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+    }
+
+    .sidebar-toggled .sidebar-menu li:hover {
+        background: transparent !important;
+    }
+
+    .sidebar-toggled .sidebar-menu li:hover > a {
+        color: #ffffff !important;
+        background: rgba(102, 144, 244, 0.18) !important;
+        box-shadow: none !important;
+    }
+
+    .sidebar-toggled .sidebar-menu li ul {
+        background: linear-gradient(175deg, #1c2240 0%, #131929 100%) !important;
+        border-left: 2px solid rgba(102, 144, 244, 0.35) !important;
+        margin-left: 0 !important;
+        border-radius: 0 8px 8px 0 !important;
+    }
+
+    .sidebar-toggled .sidebar-menu li ul li a {
+        color: #9baac4 !important;
+        background: transparent !important;
+    }
+
+    .sidebar-toggled .sidebar-menu li ul li a:hover {
+        color: #ffffff !important;
+        background: rgba(102, 144, 244, 0.12) !important;
+    }
+}

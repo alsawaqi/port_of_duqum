@@ -123,7 +123,7 @@
 </div><!-- sidebar menu end -->
 
 <script type='text/javascript'>
-    feather.replace();
+    if (typeof feather !== "undefined") feather.replace();
 
     $(document).ready(function() {
         $("#sidebar-menu li").click(function() {
