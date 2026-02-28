@@ -1,17 +1,17 @@
-<div id="page-content" class="page-wrapper clearfix">
-  <div class="card">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+  <div class="card gp-pro-card">
     <div class="page-title clearfix">
       <h1>Gate Pass Fee Rules</h1>
       <div class="title-button-group">
         <?php echo modal_anchor(
           get_uri("gate_pass_fee_rules/modal_form"),
           "<i data-feather='plus-circle' class='icon-16'></i> Add Rule",
-          ["class" => "btn btn-default"]
+          ["class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon"]
         ); ?>
       </div>
     </div>
 
-    <div class="table-responsive">
+    <div class="table-responsive gp-pro-table-shell">
       <table id="gate-pass-fee-rules-table" class="display" width="100%"></table>
     </div>
   </div>
