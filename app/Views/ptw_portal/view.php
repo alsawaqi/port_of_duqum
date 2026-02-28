@@ -21,7 +21,7 @@
         if (!target || !url) return;
 
         const $pane = $(target);
-        $pane.html("<div class='p15 text-muted'>Loading...</div>");
+        $pane.html(typeof PortalUI !== "undefined" ? PortalUI.tabLoadingHtml() : "<div class='p15 text-muted'>Loading...</div>");
 
         $.ajax({
             url: url,
@@ -31,7 +31,10 @@
                 if (typeof feather !== "undefined") feather.replace();
             },
             error: function (xhr) {
-                $pane.html("<div class='p15 text-danger'>Failed to load PTW tab.</div>");
+                $pane.html(typeof PortalUI !== "undefined"
+                    ? PortalUI.tabErrorHtml()
+                    : "<div class='p15 text-danger'>Failed to load PTW tab.</div>");
+                if (typeof feather !== "undefined") feather.replace();
                 console.error("PTW tab load error:", xhr.responseText);
             }
         });

@@ -247,7 +247,7 @@ $(document).ready(function() {
 
     setTimeout(function() {
         $(".gp-requests").addClass("gp-requests-ready");
-        if (window.feather) feather.replace();
+        if (typeof feather !== "undefined") feather.replace();
     }, 40);
 
     $t.appTable({
@@ -263,23 +263,13 @@ $(document).ready(function() {
             { title: '<i data-feather="menu" class="icon-16"></i>', class: "text-center option w100" }
         ],
         onDrawCallback: function() {
-            $("#gp-requests-table tbody tr").each(function(idx, row) {
-                $(row).css({
-                    opacity: 0,
-                    transform: "translateY(4px)"
-                });
-                setTimeout(function() {
-                    $(row).css({
-                        opacity: 1,
-                        transform: "translateY(0)",
-                        transition: "opacity .18s ease, transform .18s ease"
-                    });
-                }, 30 * idx);
-            });
-            if (window.feather) feather.replace();
+            if (typeof PortalUI !== "undefined") {
+                PortalUI.animateRows("#gp-requests-table");
+            }
+            if (typeof feather !== "undefined") feather.replace();
         }
     });
 
-    if (window.feather) feather.replace();
+    if (typeof feather !== "undefined") feather.replace();
 });
 </script>
