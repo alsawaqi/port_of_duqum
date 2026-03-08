@@ -36,6 +36,25 @@ class Permission_manager {
         return get_setting($module_name) == "1";
     }
 
+
+    /**
+ * Whether the user has a specific Tender permission (view/create/update/delete for a section).
+ */
+function can_tender($section, $action) {
+    if ($this->is_admin()) {
+        return true;
+    }
+    $key = "can_{$action}_tender_{$section}";
+    return get_array_value($this->permissions, $key) == "1";
+}
+
+function can_tender_3key_opening() {
+    if ($this->is_admin()) {
+        return true;
+    }
+    return get_array_value($this->permissions, "can_tender_open_bids_3key") == "1";
+}
+
     function can_manage_invoices() {
 
         if (!$this->is_active_module("module_invoice")) {

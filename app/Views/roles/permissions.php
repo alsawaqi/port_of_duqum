@@ -10,163 +10,225 @@
             <ul class="permission-list">
 
             <li>
-    <span data-feather="settings" class="icon-14 ml-20"></span>
-    <h5>Master Data Permissions:</h5>
+                    <span data-feather="settings" class="icon-14 ml-20"></span>
+                    <h5>Master Data Permissions:</h5>
 
-<div class="row">
+                <div class="row">
 
-  <!-- Countries -->
-  <div class="col-md-6 mb-3">
-    <div class="fw-semibold">Countries</div>
+                <!-- Countries -->
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold">Countries</div>
 
-    <div class="form-check">
-      <?php echo form_checkbox("can_view_countries", "1", ($can_view_countries ?? false) ? true : false, "id='can_view_countries' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_view_countries">View</label>
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_countries", "1", ($can_view_countries ?? false) ? true : false, "id='can_view_countries' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_countries">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_countries", "1", ($can_create_countries ?? false) ? true : false, "id='can_create_countries' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_countries">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_countries", "1", ($can_update_countries ?? false) ? true : false, "id='can_update_countries' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_countries">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_countries", "1", ($can_delete_countries ?? false) ? true : false, "id='can_delete_countries' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_countries">Delete</label>
+                    </div>
+                </div>
+
+                <!-- Regions -->
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold">Regions</div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_regions", "1", ($can_view_regions ?? false) ? true : false, "id='can_view_regions' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_regions">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_regions", "1", ($can_create_regions ?? false) ? true : false, "id='can_create_regions' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_regions">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_regions", "1", ($can_update_regions ?? false) ? true : false, "id='can_update_regions' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_regions">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_regions", "1", ($can_delete_regions ?? false) ? true : false, "id='can_delete_regions' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_regions">Delete</label>
+                    </div>
+                </div>
+
+                <!-- Cities -->
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold">Cities</div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_cities", "1", ($can_view_cities ?? false) ? true : false, "id='can_view_cities' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_cities">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_cities", "1", ($can_create_cities ?? false) ? true : false, "id='can_create_cities' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_cities">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_cities", "1", ($can_update_cities ?? false) ? true : false, "id='can_update_cities' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_cities">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_cities", "1", ($can_delete_cities ?? false) ? true : false, "id='can_delete_cities' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_cities">Delete</label>
+                    </div>
+                </div>
+
+                <!-- Legal Types -->
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold">Legal Types</div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_legal_types", "1", ($can_view_legal_types ?? false) ? true : false, "id='can_view_legal_types' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_legal_types">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_legal_types", "1", ($can_create_legal_types ?? false) ? true : false, "id='can_create_legal_types' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_legal_types">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_legal_types", "1", ($can_update_legal_types ?? false) ? true : false, "id='can_update_legal_types' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_legal_types">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_legal_types", "1", ($can_delete_legal_types ?? false) ? true : false, "id='can_delete_legal_types' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_legal_types">Delete</label>
+                    </div>
+                </div>
+
+                <!-- Vendor Categories -->
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold">Vendor Categories</div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_vendor_categories", "1", ($can_view_vendor_categories ?? false) ? true : false, "id='can_view_vendor_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_vendor_categories">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_vendor_categories", "1", ($can_create_vendor_categories ?? false) ? true : false, "id='can_create_vendor_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_vendor_categories">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_vendor_categories", "1", ($can_update_vendor_categories ?? false) ? true : false, "id='can_update_vendor_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_vendor_categories">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_vendor_categories", "1", ($can_delete_vendor_categories ?? false) ? true : false, "id='can_delete_vendor_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_vendor_categories">Delete</label>
+                    </div>
+                </div>
+
+                <!-- Vendor Sub Categories -->
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold">Vendor Sub Categories</div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_vendor_sub_categories", "1", ($can_view_vendor_sub_categories ?? false) ? true : false, "id='can_view_vendor_sub_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_vendor_sub_categories">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_vendor_sub_categories", "1", ($can_create_vendor_sub_categories ?? false) ? true : false, "id='can_create_vendor_sub_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_vendor_sub_categories">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_vendor_sub_categories", "1", ($can_update_vendor_sub_categories ?? false) ? true : false, "id='can_update_vendor_sub_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_vendor_sub_categories">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_vendor_sub_categories", "1", ($can_delete_vendor_sub_categories ?? false) ? true : false, "id='can_delete_vendor_sub_categories' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_vendor_sub_categories">Delete</label>
+                    </div>
+                </div>
+
+                </div>
+
+             </li>
+
+
+             <li>
+    <span data-feather="briefcase" class="icon-14 ml-20"></span>
+    <h5>Tender Permissions:</h5>
+
+    <div class="row">
+        <?php
+        $tender_sections = [
+            "requests"        => "Tender Requests (Internal)",
+            "manager_inbox"   => "Department Manager Inbox (Department Manager Review)",
+            "finance_inbox"   => "Finance Inbox (Budget Verification)",
+            "procurement"     => "Procurement (Tender Setup)",
+            "committee"       => "Tender Committee / ITC",
+            "technical_eval"  => "Technical Evaluation",
+            "commercial_eval" => "Commercial Evaluation",
+            "reports"         => "Tender Reports",
+            "portal"          => "Tender Vendor Portal"
+        ];
+
+        foreach ($tender_sections as $key => $label) {
+            $v = ${"can_view_tender_" . $key} ?? false;
+            $c = ${"can_create_tender_" . $key} ?? false;
+            $u = ${"can_update_tender_" . $key} ?? false;
+            $d = ${"can_delete_tender_" . $key} ?? false;
+        ?>
+            <div class="col-md-6 mb-3">
+                <div class="fw-semibold"><?php echo $label; ?></div>
+
+                <div class="form-check">
+                    <?php echo form_checkbox("can_view_tender_" . $key, "1", $v ? true : false, "id='can_view_tender_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_tender_<?php echo $key; ?>">View</label>
+                </div>
+
+                <div class="form-check">
+                    <?php echo form_checkbox("can_create_tender_" . $key, "1", $c ? true : false, "id='can_create_tender_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_tender_<?php echo $key; ?>">Create</label>
+                </div>
+
+                <div class="form-check">
+                    <?php echo form_checkbox("can_update_tender_" . $key, "1", $u ? true : false, "id='can_update_tender_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_tender_<?php echo $key; ?>">Update</label>
+                </div>
+
+                <div class="form-check">
+                    <?php echo form_checkbox("can_delete_tender_" . $key, "1", $d ? true : false, "id='can_delete_tender_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_tender_<?php echo $key; ?>">Delete</label>
+                </div>
+            </div>
+        <?php } ?>
     </div>
 
+    <hr>
+
+    <div class="mb-2 fw-semibold">Tender Workflow Actions:</div>
     <div class="form-check">
-      <?php echo form_checkbox("can_create_countries", "1", ($can_create_countries ?? false) ? true : false, "id='can_create_countries' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_create_countries">Create</label>
+        <?php echo form_checkbox("can_tender_open_bids_3key", "1", ($can_tender_open_bids_3key ?? false) ? true : false, "id='can_tender_open_bids_3key' class='form-check-input'"); ?>
+        <label class="form-check-label" for="can_tender_open_bids_3key">
+            Allow 3-Key Bid Opening (Committee)
+        </label>
     </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_update_countries", "1", ($can_update_countries ?? false) ? true : false, "id='can_update_countries' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_update_countries">Update</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_delete_countries", "1", ($can_delete_countries ?? false) ? true : false, "id='can_delete_countries' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_delete_countries">Delete</label>
-    </div>
-  </div>
-
-  <!-- Regions -->
-  <div class="col-md-6 mb-3">
-    <div class="fw-semibold">Regions</div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_view_regions", "1", ($can_view_regions ?? false) ? true : false, "id='can_view_regions' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_view_regions">View</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_create_regions", "1", ($can_create_regions ?? false) ? true : false, "id='can_create_regions' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_create_regions">Create</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_update_regions", "1", ($can_update_regions ?? false) ? true : false, "id='can_update_regions' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_update_regions">Update</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_delete_regions", "1", ($can_delete_regions ?? false) ? true : false, "id='can_delete_regions' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_delete_regions">Delete</label>
-    </div>
-  </div>
-
-  <!-- Cities -->
-  <div class="col-md-6 mb-3">
-    <div class="fw-semibold">Cities</div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_view_cities", "1", ($can_view_cities ?? false) ? true : false, "id='can_view_cities' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_view_cities">View</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_create_cities", "1", ($can_create_cities ?? false) ? true : false, "id='can_create_cities' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_create_cities">Create</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_update_cities", "1", ($can_update_cities ?? false) ? true : false, "id='can_update_cities' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_update_cities">Update</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_delete_cities", "1", ($can_delete_cities ?? false) ? true : false, "id='can_delete_cities' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_delete_cities">Delete</label>
-    </div>
-  </div>
-
-  <!-- Legal Types -->
-  <div class="col-md-6 mb-3">
-    <div class="fw-semibold">Legal Types</div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_view_legal_types", "1", ($can_view_legal_types ?? false) ? true : false, "id='can_view_legal_types' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_view_legal_types">View</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_create_legal_types", "1", ($can_create_legal_types ?? false) ? true : false, "id='can_create_legal_types' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_create_legal_types">Create</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_update_legal_types", "1", ($can_update_legal_types ?? false) ? true : false, "id='can_update_legal_types' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_update_legal_types">Update</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_delete_legal_types", "1", ($can_delete_legal_types ?? false) ? true : false, "id='can_delete_legal_types' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_delete_legal_types">Delete</label>
-    </div>
-  </div>
-
-  <!-- Vendor Categories -->
-  <div class="col-md-6 mb-3">
-    <div class="fw-semibold">Vendor Categories</div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_view_vendor_categories", "1", ($can_view_vendor_categories ?? false) ? true : false, "id='can_view_vendor_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_view_vendor_categories">View</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_create_vendor_categories", "1", ($can_create_vendor_categories ?? false) ? true : false, "id='can_create_vendor_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_create_vendor_categories">Create</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_update_vendor_categories", "1", ($can_update_vendor_categories ?? false) ? true : false, "id='can_update_vendor_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_update_vendor_categories">Update</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_delete_vendor_categories", "1", ($can_delete_vendor_categories ?? false) ? true : false, "id='can_delete_vendor_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_delete_vendor_categories">Delete</label>
-    </div>
-  </div>
-
-  <!-- Vendor Sub Categories -->
-  <div class="col-md-6 mb-3">
-    <div class="fw-semibold">Vendor Sub Categories</div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_view_vendor_sub_categories", "1", ($can_view_vendor_sub_categories ?? false) ? true : false, "id='can_view_vendor_sub_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_view_vendor_sub_categories">View</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_create_vendor_sub_categories", "1", ($can_create_vendor_sub_categories ?? false) ? true : false, "id='can_create_vendor_sub_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_create_vendor_sub_categories">Create</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_update_vendor_sub_categories", "1", ($can_update_vendor_sub_categories ?? false) ? true : false, "id='can_update_vendor_sub_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_update_vendor_sub_categories">Update</label>
-    </div>
-
-    <div class="form-check">
-      <?php echo form_checkbox("can_delete_vendor_sub_categories", "1", ($can_delete_vendor_sub_categories ?? false) ? true : false, "id='can_delete_vendor_sub_categories' class='form-check-input'"); ?>
-      <label class="form-check-label" for="can_delete_vendor_sub_categories">Delete</label>
-    </div>
-  </div>
-
-</div>
-
 </li>
 
                 <li>

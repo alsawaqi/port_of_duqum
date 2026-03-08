@@ -109,7 +109,7 @@ class Crud_model extends Model {
         return $this->db_builder->getWhere($where, $limit, $offset);
     }
 
-    function ci_save(&$data = array(), $id = 0) {
+    function ci_save($data = array(), $id = 0) {
         //allowed fields should be assigned
         $db_fields = $this->db->getFieldNames($this->table);
         foreach ($db_fields as $field) {

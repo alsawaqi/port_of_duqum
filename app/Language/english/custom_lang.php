@@ -85,6 +85,7 @@ $lang["add_menu_item"] = "Add Menu Item";
 $lang["add_submenu_item"] = "Add Submenu Item";
 $lang["select"] = "Select";
 $lang["otp_channel"] = "OTP Channel";
+$lang["all_companies"] ="All Companies";
  
 $lang["select_vendor_category"] = "Select Vendor Category";
 $lang["ptw_portal"] = "PTW Portal";
@@ -352,5 +353,38 @@ $lang["add_credential"] = "Add Credentials";
 $lang["number"] = "Number";
 $lang["issue_date"] = "Issue Date";
 $lang["expiry_date"] = "Expiry Date";
+
+
+
+
+$lang["tender"] = "Tender";
+$lang["tender_requests"] = "Tender Requests";
+$lang["tender_finance_inbox"] = "Tender Finance Inbox";
+$lang["tender_committee_inbox"] = "Tender Committee Inbox";
+$lang["tender_procurement_inbox"] = "Tender Procurement Inbox";
+
+
+
+
+$lang["tender_master"] = "Tender Master";
+$lang["tender_finance_users"] = "Tender Finance Users";
+$lang["tender_committee_users"] = "Tender Committee Users";
+$lang["tender_procurement_users"] = "Tender Procurement Users";
+$lang["tender_department_users"] = "Tender Department Users";
+
+$lang["add_tender_finance_user"] = "Add Finance User";
+$lang["add_tender_committee_user"] = "Add Committee User";
+$lang["add_tender_procurement_user"] = "Add Procurement User";
+$lang["add_tender_department_user"] = "Add Department User";
+
+
+
+$lang["tender_department_manager_users"] = "Tender Department Manager Users";
+$lang["add_tender_department_manager_user"] = "Add Department Manager User";
+$lang["tender_technical_users"] = "Tender Technical Users";
+$lang["add_tender_technical_user"] = "Add Technical User";
+$lang["tender_commercial_users"] = "Tender Commercial Users";
+$lang["add_tender_commercial_user"] = "Add Commercial User";
+$lang["tender_department_manager_inbox"] = "Tender Department Manager Inbox";
 
 return $lang;

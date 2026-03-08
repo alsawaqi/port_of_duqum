@@ -4,450 +4,449 @@ use App\Controllers\Security_Controller;
 use App\Controllers\Tasks;
 use App\Libraries\Template;
 
-/**
+/*
  * get clock in/ clock out widget
  * @return html
  */
 if (!function_exists('clock_widget')) {
-
-    function clock_widget($remove_wrapper = 0) {
+    function clock_widget($remove_wrapper = 0)
+    {
         $ci = new Security_Controller(false);
-        $view_data["clock_status"] = $ci->Attendance_model->current_clock_in_record($ci->login_user->id);
-        $view_data["remove_wrapper"] = $remove_wrapper;
+        $view_data['clock_status'] = $ci->Attendance_model->current_clock_in_record($ci->login_user->id);
+        $view_data['remove_wrapper'] = $remove_wrapper;
         $template = new Template();
-        return $template->view("attendance/clock_widget", $view_data);
+
+        return $template->view('attendance/clock_widget', $view_data);
     }
 }
 
-/**
+/*
  * activity logs widget for projects
  * @param array $params
  * @return html
  */
 if (!function_exists('activity_logs_widget')) {
-
-    function activity_logs_widget($params = array()) {
+    function activity_logs_widget($params = [])
+    {
         $ci = new Security_Controller(false);
 
-        $limit = get_array_value($params, "limit");
-        $limit = $limit ? $limit : "20";
-        $offset = get_array_value($params, "offset");
-        $offset = $offset ? $offset : "0";
+        $limit = get_array_value($params, 'limit');
+        $limit = $limit ? $limit : '20';
+        $offset = get_array_value($params, 'offset');
+        $offset = $offset ? $offset : '0';
 
-        $params["user_id"] = $ci->login_user->id;
-        $params["is_admin"] = $ci->login_user->is_admin;
-        $params["user_type"] = $ci->login_user->user_type;
-        $params["client_id"] = $ci->login_user->client_id;
+        $params['user_id'] = $ci->login_user->id;
+        $params['is_admin'] = $ci->login_user->is_admin;
+        $params['user_type'] = $ci->login_user->user_type;
+        $params['client_id'] = $ci->login_user->client_id;
 
-        //check if user has restriction to view only assigned tasks
-        $params["show_assigned_tasks_only"] = get_array_value($ci->login_user->permissions, "show_assigned_tasks_only");
+        // check if user has restriction to view only assigned tasks
+        $params['show_assigned_tasks_only'] = get_array_value($ci->login_user->permissions, 'show_assigned_tasks_only');
 
         $logs = $ci->Activity_logs_model->get_details($params);
 
-        $view_data["activity_logs"] = $logs->result;
-        $view_data["result_remaining"] = $logs->found_rows - $limit - $offset;
-        $view_data["next_page_offset"] = $offset + $limit;
+        $view_data['activity_logs'] = $logs->result;
+        $view_data['result_remaining'] = $logs->found_rows - $limit - $offset;
+        $view_data['next_page_offset'] = $offset + $limit;
 
-        $view_data["log_for"] = get_array_value($params, "log_for");
-        $view_data["log_for_id"] = get_array_value($params, "log_for_id");
-        $view_data["log_type"] = get_array_value($params, "log_type");
-        $view_data["log_type_id"] = get_array_value($params, "log_type_id");
+        $view_data['log_for'] = get_array_value($params, 'log_for');
+        $view_data['log_for_id'] = get_array_value($params, 'log_for_id');
+        $view_data['log_type'] = get_array_value($params, 'log_type');
+        $view_data['log_type_id'] = get_array_value($params, 'log_type_id');
 
-        echo $view_data["result_remaining"] = view("activity_logs/activity_logs_widget", $view_data);
+        echo $view_data['result_remaining'] = view('activity_logs/activity_logs_widget', $view_data);
     }
 }
 
-/**
+/*
  * get timeline widget
  * @param array $params
  * @return html
  */
 if (!function_exists('timeline_widget')) {
-
-    function timeline_widget($params = array()) {
+    function timeline_widget($params = [])
+    {
         $ci = new Security_Controller(false);
-        $limit = get_array_value($params, "limit");
-        $limit = $limit ? $limit : "20";
-        $offset = get_array_value($params, "offset");
-        $offset = $offset ? $offset : "0";
+        $limit = get_array_value($params, 'limit');
+        $limit = $limit ? $limit : '20';
+        $offset = get_array_value($params, 'offset');
+        $offset = $offset ? $offset : '0';
 
-        $is_first_load = get_array_value($params, "is_first_load");
+        $is_first_load = get_array_value($params, 'is_first_load');
         if ($is_first_load) {
-            $view_data["is_first_load"] = true;
+            $view_data['is_first_load'] = true;
         } else {
-            $view_data["is_first_load"] = false;
+            $view_data['is_first_load'] = false;
         }
 
-        //allowed on specific member/teams only
+        // allowed on specific member/teams only
         $permissions = $ci->login_user->permissions;
-        $module_permission = get_array_value($permissions, "timeline_permission_specific");
+        $module_permission = get_array_value($permissions, 'timeline_permission_specific');
 
         if ($module_permission) {
-            $permissions = explode(",", $module_permission);
+            $permissions = explode(',', $module_permission);
             $allowed_members = prepare_allowed_members_array($permissions, $ci->login_user->id);
             if ($allowed_members) {
-                $params["allowed_members"] = implode(',', $allowed_members);
+                $params['allowed_members'] = implode(',', $allowed_members);
             }
         }
 
         $Posts_model = model("App\Models\Posts_model");
         $logs = $Posts_model->get_details($params);
-        $view_data["posts"] = $logs->result;
+        $view_data['posts'] = $logs->result;
         $view_data['single_post'] = '';
-        $view_data["result_remaining"] = $logs->found_rows - $limit - $offset;
-        $view_data["next_page_offset"] = $offset + $limit;
+        $view_data['result_remaining'] = $logs->found_rows - $limit - $offset;
+        $view_data['next_page_offset'] = $offset + $limit;
 
-        $user_id = get_array_value($params, "user_id");
+        $user_id = get_array_value($params, 'user_id');
         if ($user_id && !count($logs->result)) {
-            //show a no post found message to user's wall for empty post list
+            // show a no post found message to user's wall for empty post list
             $template = new Template();
-            return $template->view("timeline/no_post_message");
+
+            return $template->view('timeline/no_post_message');
         } else {
             $template = new Template();
-            return $template->view("timeline/post_list", $view_data);
+
+            return $template->view('timeline/post_list', $view_data);
         }
     }
 }
 
-
-/**
+/*
  * get announcement notice
-
+ *
  * @return html
  */
 if (!function_exists('announcements_alert_widget')) {
-
-    function announcements_alert_widget() {
+    function announcements_alert_widget()
+    {
         $ci = new Security_Controller(false);
 
-        $client_group_ids = "";
-        if ($ci->login_user->user_type === "client") {
+        $client_group_ids = '';
+        if ($ci->login_user->user_type === 'client') {
             $client_group_ids = $ci->Clients_model->get_one($ci->login_user->client_id)->group_ids;
         }
 
-        $options = array(
-            "user_id" => $ci->login_user->id,
-            "user_type" => $ci->login_user->user_type,
-            "client_group_ids" => $client_group_ids,
-            "team_ids" => $ci->login_user->team_ids
-        );
+        $options = [
+            'user_id' => $ci->login_user->id,
+            'user_type' => $ci->login_user->user_type,
+            'client_group_ids' => $client_group_ids,
+            'team_ids' => $ci->login_user->team_ids,
+        ];
 
         $announcements = $ci->Announcements_model->get_unread_announcements($options)->getResult();
-        $view_data["announcements"] = $announcements;
+        $view_data['announcements'] = $announcements;
         $template = new Template();
-        return $template->view("announcements/alert", $view_data);
+
+        return $template->view('announcements/alert', $view_data);
     }
 }
 
-
-/**
+/*
  * get tasks widget of loged in user
- * 
+ *
  * @return html
  */
 if (!function_exists('my_open_tasks_widget')) {
-
-    function my_open_tasks_widget() {
+    function my_open_tasks_widget()
+    {
         $ci = new Security_Controller(false);
-        $view_data["total"] = $ci->Tasks_model->count_my_open_tasks($ci->login_user->id);
+        $view_data['total'] = $ci->Tasks_model->count_my_open_tasks($ci->login_user->id);
         $template = new Template();
-        return $template->view("tasks/open_tasks_widget", $view_data);
+
+        return $template->view('tasks/open_tasks_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get tasks status widteg of loged in user
- * 
+ *
  * @return html
  */
 if (!function_exists('my_task_stataus_widget')) {
-
-    function my_task_stataus_widget($custom_class = "") {
+    function my_task_stataus_widget($custom_class = '')
+    {
         $ci = new Security_Controller(false);
-        $view_data["task_statuses"] = $ci->Tasks_model->get_task_statistics(array("user_id" => $ci->login_user->id))->task_statuses;
-        $view_data["custom_class"] = $custom_class;
+        $view_data['task_statuses'] = $ci->Tasks_model->get_task_statistics(['user_id' => $ci->login_user->id])->task_statuses;
+        $view_data['custom_class'] = $custom_class;
 
         $template = new Template();
-        return $template->view("tasks/my_task_status_widget", $view_data);
+
+        return $template->view('tasks/my_task_status_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get todays event widget
- * 
+ *
  * @return html
  */
 if (!function_exists('events_today_widget')) {
-
-    function events_today_widget() {
+    function events_today_widget()
+    {
         $ci = new Security_Controller(false);
 
-        $options = array(
-            "user_id" => $ci->login_user->id,
-            "team_ids" => $ci->login_user->team_ids
-        );
+        $options = [
+            'user_id' => $ci->login_user->id,
+            'team_ids' => $ci->login_user->team_ids,
+        ];
 
-        if ($ci->login_user->user_type == "client") {
-            $options["is_client"] = true;
+        if ($ci->login_user->user_type == 'client') {
+            $options['is_client'] = true;
         }
 
-        $view_data["total"] = $ci->Events_model->count_events_today($options);
+        $view_data['total'] = $ci->Events_model->count_events_today($options);
         $template = new Template();
-        return $template->view("events/events_today", $view_data);
+
+        return $template->view('events/events_today', $view_data);
     }
 }
 
-
-/**
+/*
  * get new posts widget
- * 
+ *
  * @return html
  */
 if (!function_exists('new_posts_widget')) {
-
-    function new_posts_widget() {
+    function new_posts_widget()
+    {
         $ci = new Security_Controller(false);
 
-        //allowed on specific member/teams only
-        $allowed_member_ids = "";
+        // allowed on specific member/teams only
+        $allowed_member_ids = '';
         $permissions = $ci->login_user->permissions;
-        $module_permission = get_array_value($permissions, "timeline_permission_specific");
+        $module_permission = get_array_value($permissions, 'timeline_permission_specific');
 
         if ($module_permission) {
-            $permissions = explode(",", $module_permission);
+            $permissions = explode(',', $module_permission);
             $allowed_members = prepare_allowed_members_array($permissions, $ci->login_user->id);
             if ($allowed_members) {
                 $allowed_member_ids = implode(',', $allowed_members);
             }
         }
 
-        $view_data["total"] = $ci->Posts_model->count_new_posts($allowed_member_ids);
+        $view_data['total'] = $ci->Posts_model->count_new_posts($allowed_member_ids);
         $template = new Template();
-        return $template->view("timeline/new_posts_widget", $view_data);
+
+        return $template->view('timeline/new_posts_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get event list widget
- * 
+ *
  * @return html
  */
 if (!function_exists('events_widget')) {
-
-    function events_widget() {
+    function events_widget()
+    {
         $ci = new Security_Controller(false);
 
-        $options = array("user_id" => $ci->login_user->id, "limit" => 20, "team_ids" => $ci->login_user->team_ids);
+        $options = ['user_id' => $ci->login_user->id, 'limit' => 20, 'team_ids' => $ci->login_user->team_ids];
 
-        if ($ci->login_user->user_type == "client") {
-            $options["is_client"] = true;
+        if ($ci->login_user->user_type == 'client') {
+            $options['is_client'] = true;
         }
 
-        $view_data["events"] = $ci->Events_model->get_upcomming_events($options);
+        $view_data['events'] = $ci->Events_model->get_upcomming_events($options);
 
         $template = new Template();
-        return $template->view("events/events_widget", $view_data);
+
+        return $template->view('events/events_widget', $view_data);
     }
 }
 
-
-/**
- * get event icons based on event sharing 
- * 
+/*
+ * get event icons based on event sharing
+ *
  * @return html
  */
 if (!function_exists('get_event_icon')) {
-
-    function get_event_icon($share_with = "") {
-        $icon = "";
+    function get_event_icon($share_with = '')
+    {
+        $icon = '';
         if (!$share_with) {
-            $icon = "lock";
-        } else if ($share_with == "all") {
-            $icon = "globe";
+            $icon = 'lock';
+        } elseif ($share_with == 'all') {
+            $icon = 'globe';
         } else {
-            $icon = "at-sign";
+            $icon = 'at-sign';
         }
+
         return $icon;
     }
 }
 
-
-/**
+/*
  * get open timers widget
- * 
+ *
  * @return html
  */
 if (!function_exists('has_my_open_timers')) {
-
-    function has_my_open_timers() {
+    function has_my_open_timers()
+    {
         $ci = new Security_Controller(false);
         $timers = $ci->Timesheets_model->get_open_timers($ci->login_user->id);
+
         return $timers->resultID->num_rows;
     }
 }
 
-
-/**
+/*
  * get income expense widget
- * 
+ *
  * @return html
  */
 if (!function_exists('income_vs_expenses_widget')) {
-
-    function income_vs_expenses_widget($custom_class = "", $show_own_expenses_only_user_id = 0, $show_own_invoices_only_user_id = 0, $show_own_client_invoice_user_id = 0) {
+    function income_vs_expenses_widget($custom_class = '', $show_own_expenses_only_user_id = 0, $show_own_invoices_only_user_id = 0, $show_own_client_invoice_user_id = 0)
+    {
         $Expenses_model = model("App\Models\Expenses_model");
         $Invoice_payments_model = model("App\Models\Invoice_payments_model");
 
-        $info = $Expenses_model->get_income_expenses_info(array("show_own_expenses_only_user_id" => $show_own_expenses_only_user_id));
+        $info = $Expenses_model->get_income_expenses_info(['show_own_expenses_only_user_id' => $show_own_expenses_only_user_id]);
 
         $today = explode('-', get_today_date());
         $current_year = get_array_value($today, 0);
         $previous_year = get_array_value($today, 0) - 1;
-        $view_data["current_year_info"] = $Expenses_model->get_income_expenses_info(array("year" => $current_year, "show_own_expenses_only_user_id" => $show_own_expenses_only_user_id));
-        $view_data["previous_year_info"] = $Expenses_model->get_income_expenses_info(array("year" => $previous_year, "show_own_expenses_only_user_id" => $show_own_expenses_only_user_id));
+        $view_data['current_year_info'] = $Expenses_model->get_income_expenses_info(['year' => $current_year, 'show_own_expenses_only_user_id' => $show_own_expenses_only_user_id]);
+        $view_data['previous_year_info'] = $Expenses_model->get_income_expenses_info(['year' => $previous_year, 'show_own_expenses_only_user_id' => $show_own_expenses_only_user_id]);
 
-        $view_data["income"] = $info->income ? $info->income : 0;
-        $view_data["expenses"] = $info->expneses ? $info->expneses : 0;
-        $view_data["custom_class"] = $custom_class;
-
+        $view_data['income'] = $info->income ? $info->income : 0;
+        $view_data['expenses'] = $info->expneses ? $info->expneses : 0;
+        $view_data['custom_class'] = $custom_class;
 
         $expenses_array = $Expenses_model->get_yearly_expenses_chart_data($current_year, 0, $show_own_expenses_only_user_id);
 
-        $options = array(
-            "year" => $current_year,
-            "show_own_client_invoice_user_id" => $show_own_client_invoice_user_id,
-            "show_own_invoices_only_user_id" => $show_own_invoices_only_user_id
-        );
+        $options = [
+            'year' => $current_year,
+            'show_own_client_invoice_user_id' => $show_own_client_invoice_user_id,
+            'show_own_invoices_only_user_id' => $show_own_invoices_only_user_id,
+        ];
 
         $payments_array = $Invoice_payments_model->get_yearly_payments_chart_data($options);
 
-        $view_data["monthly_income_data"] = json_encode($payments_array);
-        $view_data["monthly_expenses_data"] = json_encode($expenses_array);
+        $view_data['monthly_income_data'] = json_encode($payments_array);
+        $view_data['monthly_expenses_data'] = json_encode($expenses_array);
 
         $template = new Template();
-        return $template->view("expenses/income_expenses_widget", $view_data);
+
+        return $template->view('expenses/income_expenses_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get ticket status widget
- * 
+ *
  * @return html
  */
 if (!function_exists('ticket_status_widget')) {
-
-    function ticket_status_widget($data = array()) {
+    function ticket_status_widget($data = [])
+    {
         $ci = new Security_Controller(false);
         $Tickets_model = model("App\Models\Tickets_model");
 
-        $tickets_array = array();
+        $tickets_array = [];
 
-        $today = get_my_local_time("Y-m-d");
+        $today = get_my_local_time('Y-m-d');
 
-        //for last 30 days tickets
-        $start_date = subtract_period_from_date($today, 30, "days");
+        // for last 30 days tickets
+        $start_date = subtract_period_from_date($today, 30, 'days');
         $end_date = $today;
 
-        $options = array();
-        $allowed_ticket_types = get_array_value($data, "allowed_ticket_types");
-        if ($ci->login_user->user_type == "staff") {
-            $options["allowed_ticket_types"] = $allowed_ticket_types;
-            $options["show_assigned_tickets_only_user_id"] = get_array_value($data, "show_assigned_tickets_only_user_id");
+        $options = [];
+        $allowed_ticket_types = get_array_value($data, 'allowed_ticket_types');
+        if ($ci->login_user->user_type == 'staff') {
+            $options['allowed_ticket_types'] = $allowed_ticket_types;
+            $options['show_assigned_tickets_only_user_id'] = get_array_value($data, 'show_assigned_tickets_only_user_id');
         }
 
-        $options["group_by"] = "created_date";
+        $options['group_by'] = 'created_date';
 
         $created_date_options = $options;
-        $created_date_options["start_date"] = $start_date;
-        $created_date_options["end_date"] = $end_date;
+        $created_date_options['start_date'] = $start_date;
+        $created_date_options['end_date'] = $end_date;
 
         $tickets_result = $Tickets_model->get_ticket_statistics($created_date_options)->getResult();
 
-        $ticket_result_array = array();
+        $ticket_result_array = [];
         foreach ($tickets_result as $ticket) {
             $ticket_result_array[$ticket->date] = $ticket->total;
         }
 
-        $ticks = array();
-        for ($i = 29; $i >= 0; $i--) {
-            $date_index = subtract_period_from_date($today, $i, "days", "Y-m-d");
+        $ticks = [];
+        for ($i = 29; $i >= 0; --$i) {
+            $date_index = subtract_period_from_date($today, $i, 'days', 'Y-m-d');
 
             $index_value = get_array_value($ticket_result_array, $date_index);
             if (!$index_value) {
                 $index_value = 0;
             }
 
-            $ticks[] = explode("-", $date_index)[2]; // Show only date part.
+            $ticks[] = explode('-', $date_index)[2]; // Show only date part.
             $tickets_array[] = $index_value;
         }
 
-        $view_data["ticks"] = json_encode($ticks);
-        $view_data["total_tickets"] = json_encode($tickets_array);
+        $view_data['ticks'] = json_encode($ticks);
+        $view_data['total_tickets'] = json_encode($tickets_array);
 
-        $options["group_by"] = "ticket_type";
-        $view_data["tickets_info"] = $Tickets_model->get_ticket_statistics($options)->getResult();
+        $options['group_by'] = 'ticket_type';
+        $view_data['tickets_info'] = $Tickets_model->get_ticket_statistics($options)->getResult();
 
-        $options["group_by"] = "ticket_status";
+        $options['group_by'] = 'ticket_status';
         $ticket_status_info = $Tickets_model->get_ticket_statistics($options)->getResult();
-        $view_data["new"] = 0;
-        $view_data["open"] = 0;
-        $view_data["closed"] = 0;
+        $view_data['new'] = 0;
+        $view_data['open'] = 0;
+        $view_data['closed'] = 0;
         foreach ($ticket_status_info as $status) {
-            if ($status->status === "new") {
-                $view_data["new"] = $status->total;
-            } else if ($status->status === "closed") {
-                $view_data["closed"] = $status->total;
+            if ($status->status === 'new') {
+                $view_data['new'] = $status->total;
+            } elseif ($status->status === 'closed') {
+                $view_data['closed'] = $status->total;
             } else {
-                $view_data["open"] += $status->total ? $status->total : 0;
+                $view_data['open'] += $status->total ? $status->total : 0;
             }
         }
 
         $template = new Template();
-        return $template->view("tickets/ticket_status_widget", $view_data);
+
+        return $template->view('tickets/ticket_status_widget', $view_data);
     }
 }
 
-
-
-
-/**
+/*
  * get invoice statistics widget
- * 
+ *
  * @return html
  */
 if (!function_exists('invoice_statistics_widget')) {
-
-    function invoice_statistics_widget($options = array()) {
+    function invoice_statistics_widget($options = [])
+    {
         $ci = new Security_Controller(false);
 
-        $currency = get_array_value($options, "currency");
-        $currency_symbol = get_array_value($options, "currency_symbol");
+        $currency = get_array_value($options, 'currency');
+        $currency_symbol = get_array_value($options, 'currency_symbol');
 
-        if ($ci->login_user->user_type == "client") {
-            $options["client_id"] = $ci->login_user->client_id;
+        if ($ci->login_user->user_type == 'client') {
+            $options['client_id'] = $ci->login_user->client_id;
             $client_info = $ci->Clients_model->get_one($ci->login_user->client_id);
             $currency = $client_info->currency;
             $currency_symbol = $client_info->currency_symbol;
         }
 
-        $currency = $currency ? $currency : get_setting("default_currency");
-        $currency_symbol = $currency_symbol ? $currency_symbol : get_setting("currency_symbol");
+        $currency = $currency ? $currency : get_setting('default_currency');
+        $currency_symbol = $currency_symbol ? $currency_symbol : get_setting('currency_symbol');
 
-        $options["currency"] = $currency;
-        $options["payments"] = true;
+        $options['currency'] = $currency;
+        $options['payments'] = true;
         $info = $ci->Invoices_model->invoice_statistics($options);
 
-        $payments = array();
-        $payments_array = array();
+        $payments = [];
+        $payments_array = [];
 
-        $invoices = array();
-        $invoices_array = array();
+        $invoices = [];
+        $invoices_array = [];
 
-        for ($i = 1; $i <= 12; $i++) {
+        for ($i = 1; $i <= 12; ++$i) {
             $payments[$i] = 0;
             $invoices[$i] = 0;
         }
@@ -467,54 +466,53 @@ if (!function_exists('invoice_statistics_widget')) {
             $invoices_array[] = $invoice;
         }
 
-        $view_data["payments"] = json_encode($payments_array);
-        $view_data["invoices"] = json_encode($invoices_array);
-        $view_data["currencies"] = $info->currencies;
-        $view_data["currency_symbol"] = clean_data($currency_symbol);
+        $view_data['payments'] = json_encode($payments_array);
+        $view_data['invoices'] = json_encode($invoices_array);
+        $view_data['currencies'] = $info->currencies;
+        $view_data['currency_symbol'] = clean_data($currency_symbol);
 
         $template = new Template();
-        return $template->view("invoices/invoice_statistics_widget/index", $view_data);
+
+        return $template->view('invoices/invoice_statistics_widget/index', $view_data);
     }
 }
 
-
-/**
+/*
  * get projects statistics widget
- * 
+ *
  * @return html
  */
 if (!function_exists('project_timesheet_statistics_widget')) {
-
-    function project_timesheet_statistics_widget($type = "", $options = array()) {
+    function project_timesheet_statistics_widget($type = '', $options = [])
+    {
         $ci = new Security_Controller(false);
 
-        $timesheets = array();
-        $timesheets_array = array();
+        $timesheets = [];
+        $timesheets_array = [];
 
-        $ticks = array();
-        $today = get_my_local_time("Y-m-d");
+        $ticks = [];
+        $today = get_my_local_time('Y-m-d');
 
-        if ($type == "all_timesheet_statistics") {
-            $start_date = get_array_value($options, "start_date");
-            $end_date = get_array_value($options, "end_date");
+        if ($type == 'all_timesheet_statistics') {
+            $start_date = get_array_value($options, 'start_date');
+            $end_date = get_array_value($options, 'end_date');
         } else {
-            $start_date = date("Y-m-", strtotime($today)) . "01";
-            $end_date = date("Y-m-t", strtotime($today));
+            $start_date = date('Y-m-', strtotime($today)).'01';
+            $end_date = date('Y-m-t', strtotime($today));
         }
 
+        $timesheet_options = ['start_date' => $start_date, 'end_date' => $end_date];
 
-        $timesheet_options = array("start_date" => $start_date, "end_date" => $end_date);
-
-        if ($type == "my_timesheet_statistics") {
-            $timesheet_options["user_id"] = $ci->login_user->id;
+        if ($type == 'my_timesheet_statistics') {
+            $timesheet_options['user_id'] = $ci->login_user->id;
         }
 
         $timesheets_result = $ci->Timesheets_model->get_timesheet_statistics($timesheet_options)->timesheets_data;
-        $view_data["timesheet_users_result"] = $ci->Timesheets_model->get_timesheet_statistics($timesheet_options)->timesheet_users_data;
+        $view_data['timesheet_users_result'] = $ci->Timesheets_model->get_timesheet_statistics($timesheet_options)->timesheet_users_data;
 
-        $days_of_month = date("t", strtotime($today));
+        $days_of_month = date('t', strtotime($today));
 
-        for ($i = 1; $i <= $days_of_month; $i++) {
+        for ($i = 1; $i <= $days_of_month; ++$i) {
             $timesheets[$i] = 0;
         }
 
@@ -526,49 +524,48 @@ if (!function_exists('project_timesheet_statistics_widget')) {
             $timesheets_array[] = $value;
         }
 
-        for ($i = 1; $i <= $days_of_month; $i++) {
+        for ($i = 1; $i <= $days_of_month; ++$i) {
             $ticks[] = $i;
         }
 
-        $view_data["timesheets"] = json_encode($timesheets_array);
-        $view_data["timesheet_type"] = $type;
-        $view_data["ticks"] = json_encode($ticks);
-        $view_data["month"] = strtolower(date("F", strtotime($start_date)));
+        $view_data['timesheets'] = json_encode($timesheets_array);
+        $view_data['timesheet_type'] = $type;
+        $view_data['ticks'] = json_encode($ticks);
+        $view_data['month'] = strtolower(date('F', strtotime($start_date)));
 
         $template = new Template();
 
-        if ($type == "my_timesheet_statistics") {
-            return $template->view("projects/timesheets/timesheet_wedget", $view_data);
+        if ($type == 'my_timesheet_statistics') {
+            return $template->view('projects/timesheets/timesheet_wedget', $view_data);
         } else {
-            return $template->view("projects/timesheets/all_timesheet_wedget", $view_data);
+            return $template->view('projects/timesheets/all_timesheet_wedget', $view_data);
         }
     }
 }
 
-
-/**
+/*
  * get timecard statistics
- * 
+ *
  * @return html
  */
 if (!function_exists('timecard_statistics_widget')) {
-
-    function timecard_statistics_widget() {
+    function timecard_statistics_widget()
+    {
         $ci = new Security_Controller(false);
 
-        $timecards = array();
-        $timecards_array = array();
+        $timecards = [];
+        $timecards_array = [];
 
-        $ticks = array();
+        $ticks = [];
 
-        $today = get_my_local_time("Y-m-d");
-        $start_date = date("Y-m-", strtotime($today)) . "01";
-        $end_date = date("Y-m-t", strtotime($today));
-        $options = array("start_date" => $start_date, "end_date" => $end_date, "user_id" => $ci->login_user->id);
+        $today = get_my_local_time('Y-m-d');
+        $start_date = date('Y-m-', strtotime($today)).'01';
+        $end_date = date('Y-m-t', strtotime($today));
+        $options = ['start_date' => $start_date, 'end_date' => $end_date, 'user_id' => $ci->login_user->id];
         $timesheets_result = $ci->Attendance_model->get_timecard_statistics($options)->getResult();
-        $days_of_month = date("t", strtotime($today));
+        $days_of_month = date('t', strtotime($today));
 
-        for ($i = 0; $i <= $days_of_month; $i++) {
+        for ($i = 0; $i <= $days_of_month; ++$i) {
             $timecards[$i] = 0;
         }
 
@@ -580,188 +577,188 @@ if (!function_exists('timecard_statistics_widget')) {
             $timecards_array[] = $value;
         }
 
-        for ($i = 0; $i <= $days_of_month; $i++) {
+        for ($i = 0; $i <= $days_of_month; ++$i) {
             $ticks[] = $i;
         }
 
-        $view_data["timecards"] = json_encode($timecards_array);
-        $view_data["ticks"] = json_encode($ticks);
+        $view_data['timecards'] = json_encode($timecards_array);
+        $view_data['ticks'] = json_encode($ticks);
         $template = new Template();
-        return $template->view("attendance/timecard_statistics", $view_data);
+
+        return $template->view('attendance/timecard_statistics', $view_data);
     }
 }
 
-/**
+/*
  * get project count status widteg
  * @param integer $user_id
- * 
+ *
  * @return html
  */
 if (!function_exists('count_project_status_widget')) {
-
-    function count_project_status_widget($user_id = 0) {
+    function count_project_status_widget($user_id = 0)
+    {
         $ci = new Security_Controller(false);
 
         if (!$user_id && $ci->login_user->is_admin) {
-            $options = array(
-                "user_id" => ""
-            );
+            $options = [
+                'user_id' => '',
+            ];
         } else {
-            $options = array(
-                "user_id" => $user_id ? $user_id : $ci->login_user->id
-            );
+            $options = [
+                'user_id' => $user_id ? $user_id : $ci->login_user->id,
+            ];
         }
 
         $info = $ci->Projects_model->count_project_status($options);
-        $view_data["project_open"] = $info->open;
-        $view_data["project_completed"] = $info->completed;
+        $view_data['project_open'] = $info->open;
+        $view_data['project_completed'] = $info->completed;
         $template = new Template();
-        return $template->view("projects/widgets/project_status_widget", $view_data);
+
+        return $template->view('projects/widgets/project_status_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * count total time widget
  * @param integer $user_id
- * 
+ *
  * @return html
  */
 if (!function_exists('count_total_time_widget')) {
-
-    function count_total_time_widget($user_id = 0) {
+    function count_total_time_widget($user_id = 0)
+    {
         $ci = new Security_Controller(false);
-        $options = array("user_id" => $user_id ? $user_id : $ci->login_user->id);
+        $options = ['user_id' => $user_id ? $user_id : $ci->login_user->id];
         $info = $ci->Timesheets_model->count_total_time($options);
-        $view_data["total_hours_worked"] = to_decimal_format($info->timecard_total / 60 / 60);
-        $view_data["total_project_hours"] = to_decimal_format($info->timesheet_total / 60 / 60);
+        $view_data['total_hours_worked'] = to_decimal_format($info->timecard_total / 60 / 60);
+        $view_data['total_project_hours'] = to_decimal_format($info->timesheet_total / 60 / 60);
 
         $permissions = $ci->login_user->permissions;
 
-        $view_data["show_total_hours_worked"] = false;
-        if (get_setting("module_attendance") == "1" && ($ci->login_user->is_admin || get_array_value($permissions, "attendance"))) {
-            $view_data["show_total_hours_worked"] = true;
+        $view_data['show_total_hours_worked'] = false;
+        if (get_setting('module_attendance') == '1' && ($ci->login_user->is_admin || get_array_value($permissions, 'attendance'))) {
+            $view_data['show_total_hours_worked'] = true;
         }
 
-        $view_data["show_projects_count"] = false;
-        if ($ci->login_user->is_admin || (get_array_value($permissions, "can_manage_all_projects") == "1" && !get_array_value($permissions, "do_not_show_projects"))) {
-            $view_data["show_projects_count"] = true;
+        $view_data['show_projects_count'] = false;
+        if ($ci->login_user->is_admin || (get_array_value($permissions, 'can_manage_all_projects') == '1' && !get_array_value($permissions, 'do_not_show_projects'))) {
+            $view_data['show_projects_count'] = true;
         }
 
-        $view_data["show_total_project_hours"] = false;
-        if (get_setting("module_project_timesheet") == "1" && ($ci->login_user->is_admin || (get_array_value($permissions, "timesheet_manage_permission") && !get_array_value($permissions, "do_not_show_projects")))) {
-            $view_data["show_total_project_hours"] = true;
+        $view_data['show_total_project_hours'] = false;
+        if (get_setting('module_project_timesheet') == '1' && ($ci->login_user->is_admin || (get_array_value($permissions, 'timesheet_manage_permission') && !get_array_value($permissions, 'do_not_show_projects')))) {
+            $view_data['show_total_project_hours'] = true;
         }
 
         $template = new Template();
-        return $template->view("attendance/total_time_widget", $view_data);
+
+        return $template->view('attendance/total_time_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * count total time widget
  * @param integer $user_id
  * @param string $widget_type
- * 
+ *
  * @return html
  */
 if (!function_exists('count_total_time_widget_small')) {
-
-    function count_total_time_widget_small($user_id = 0, $widget_type = "") {
+    function count_total_time_widget_small($user_id = 0, $widget_type = '')
+    {
         $ci = new Security_Controller(false);
-        $options = array("user_id" => $user_id ? $user_id : $ci->login_user->id);
+        $options = ['user_id' => $user_id ? $user_id : $ci->login_user->id];
         $info = $ci->Timesheets_model->count_total_time($options);
-        $view_data["total_hours_worked"] = to_decimal_format($info->timecard_total / 60 / 60);
-        $view_data["total_project_hours"] = to_decimal_format($info->timesheet_total / 60 / 60);
-        $view_data["widget_type"] = $widget_type;
+        $view_data['total_hours_worked'] = to_decimal_format($info->timecard_total / 60 / 60);
+        $view_data['total_project_hours'] = to_decimal_format($info->timesheet_total / 60 / 60);
+        $view_data['widget_type'] = $widget_type;
         $template = new Template();
-        return $template->view("attendance/total_time_widget_small", $view_data);
+
+        return $template->view('attendance/total_time_widget_small', $view_data);
     }
 }
 
-
-/**
+/*
  * get social links widget
  * @param object $weblinks
- * 
+ *
  * @return html
  */
 if (!function_exists('social_links_widget')) {
-
-    function social_links_widget($weblinks) {
-        $view_data["weblinks"] = $weblinks;
+    function social_links_widget($weblinks)
+    {
+        $view_data['weblinks'] = $weblinks;
 
         $template = new Template();
-        return $template->view("users/social_links_widget", $view_data);
+
+        return $template->view('users/social_links_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * count unread messages
  * @return number
  */
 if (!function_exists('count_unread_message')) {
-
-    function count_unread_message() {
+    function count_unread_message()
+    {
         $ci = new Security_Controller(false);
+
         return $ci->Messages_model->count_unread_message($ci->login_user->id, $ci->get_allowed_user_ids());
     }
 }
 
-
-/**
+/*
  * count new tickets
  * @param string $ticket_types
  * @return number
  */
 if (!function_exists('count_new_tickets')) {
-
-    function count_new_tickets($ticket_types = "", $show_assigned_tickets_only_user_id = 0) {
+    function count_new_tickets($ticket_types = '', $show_assigned_tickets_only_user_id = 0)
+    {
         $Tickets_model = model("App\Models\Tickets_model");
+
         return $Tickets_model->count_new_tickets($ticket_types, $show_assigned_tickets_only_user_id);
     }
 }
 
-
-/**
+/*
  * get all tasks kanban widget
- * 
+ *
  * @return html
  */
 if (!function_exists('all_tasks_kanban_widget')) {
-
-    function all_tasks_kanban_widget() {
+    function all_tasks_kanban_widget()
+    {
         $ci = new Security_Controller(false);
 
-        //only admin/ the user has permission to manage all projects, can see all projects, other team mebers can see only their own projects.
+        // only admin/ the user has permission to manage all projects, can see all projects, other team mebers can see only their own projects.
         $only_own_projects_user_id = 0;
-        if (!($ci->login_user->is_admin || get_array_value($ci->login_user->permissions, "can_manage_all_projects") == "1")) {
+        if (!($ci->login_user->is_admin || get_array_value($ci->login_user->permissions, 'can_manage_all_projects') == '1')) {
             $only_own_projects_user_id = $ci->login_user->id;
         }
 
         $projects = $ci->Tasks_model->get_my_projects_dropdown_list($only_own_projects_user_id)->getResult();
-        $projects_dropdown = array(array("id" => "", "text" => "- " . app_lang("project") . " -"));
+        $projects_dropdown = [['id' => '', 'text' => '- '.app_lang('project').' -']];
         foreach ($projects as $project) {
             if ($project->project_id && $project->project_title) {
-                $projects_dropdown[] = array("id" => $project->project_id, "text" => $project->project_title);
+                $projects_dropdown[] = ['id' => $project->project_id, 'text' => $project->project_title];
             }
         }
 
-        $options = array("user_type" => "staff");
-        if (get_array_value($ci->login_user->permissions, "hide_team_members_list_from_dropdowns") == "1") {
-            $options["id"] = $ci->login_user->id;
+        $options = ['user_type' => 'staff'];
+        if (get_array_value($ci->login_user->permissions, 'hide_team_members_list_from_dropdowns') == '1') {
+            $options['id'] = $ci->login_user->id;
         }
 
-        $team_members_dropdown = array(array("id" => "", "text" => "- " . app_lang("team_member") . " -"));
-        $assigned_to_list = $ci->Users_model->get_dropdown_list(array("first_name", "last_name"), "id", $options);
+        $team_members_dropdown = [['id' => '', 'text' => '- '.app_lang('team_member').' -']];
+        $assigned_to_list = $ci->Users_model->get_dropdown_list(['first_name', 'last_name'], 'id', $options);
         foreach ($assigned_to_list as $key => $value) {
-
             if ($key == $ci->login_user->id) {
-                $team_members_dropdown[] = array("id" => $key, "text" => $value, "isSelected" => true);
+                $team_members_dropdown[] = ['id' => $key, 'text' => $value, 'isSelected' => true];
             } else {
-                $team_members_dropdown[] = array("id" => $key, "text" => $value);
+                $team_members_dropdown[] = ['id' => $key, 'text' => $value];
             }
         }
 
@@ -769,14 +766,14 @@ if (!function_exists('all_tasks_kanban_widget')) {
         $view_data['projects_dropdown'] = json_encode($projects_dropdown);
 
         $view_data['task_statuses'] = $ci->Task_status_model->get_details()->getResult();
-        $view_data["custom_field_filters"] = $ci->Custom_fields_model->get_custom_field_filters("tasks", $ci->login_user->is_admin, $ci->login_user->user_type);
+        $view_data['custom_field_filters'] = $ci->Custom_fields_model->get_custom_field_filters('tasks', $ci->login_user->is_admin, $ci->login_user->user_type);
 
         $Task_priority_model = model("App\Models\Task_priority_model");
         $priorities = $Task_priority_model->get_details()->getResult();
-        $priorities_dropdown = array(array("id" => "", "text" => "- " . app_lang("priority") . " -"));
+        $priorities_dropdown = [['id' => '', 'text' => '- '.app_lang('priority').' -']];
 
         foreach ($priorities as $priority) {
-            $priorities_dropdown[] = array("id" => $priority->id, "text" => $priority->title);
+            $priorities_dropdown[] = ['id' => $priority->id, 'text' => $priority->title];
         }
 
         $view_data['priorities_dropdown'] = json_encode($priorities_dropdown);
@@ -786,719 +783,737 @@ if (!function_exists('all_tasks_kanban_widget')) {
         $view_data['labels_dropdown'] = json_encode($tasks->get_task_labels_dropdown_for_filter());
 
         $template = new Template();
-        return $template->view("tasks/kanban/all_tasks_kanban_widget", $view_data);
+
+        return $template->view('tasks/kanban/all_tasks_kanban_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get todo lists widget
- * 
+ *
  * @return html
  */
 if (!function_exists('todo_list_widget')) {
-
-    function todo_list_widget() {
+    function todo_list_widget()
+    {
         $template = new Template();
 
-        $view_data["view_type"] = "widget";
-        return $template->view("todo/todo_lists_widget", $view_data);
+        $view_data['view_type'] = 'widget';
+
+        return $template->view('todo/todo_lists_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get invalid access widget
- * 
+ *
  * @return html
  */
 if (!function_exists('invalid_access_widget')) {
-
-    function invalid_access_widget() {
+    function invalid_access_widget()
+    {
         $template = new Template();
-        return $template->view("dashboards/custom_dashboards/invalid_access_widget");
+
+        return $template->view('dashboards/custom_dashboards/invalid_access_widget');
     }
 }
 
-
-/**
+/*
  * get open projects widget
  * @param integer $user_id
- * 
+ *
  * @return html
  */
 if (!function_exists('open_projects_widget')) {
-
-    function open_projects_widget($user_id = 0) {
+    function open_projects_widget($user_id = 0)
+    {
         $ci = new Security_Controller(false);
 
         if ($ci->login_user->is_admin) {
-            $options = array(
-                "user_id" => ""
-            );
+            $options = [
+                'user_id' => '',
+            ];
         } else {
-            $options = array(
-                "user_id" => $user_id ? $user_id : $ci->login_user->id
-            );
+            $options = [
+                'user_id' => $user_id ? $user_id : $ci->login_user->id,
+            ];
         }
 
-        $view_data["project_open"] = $ci->Projects_model->count_project_status($options)->open;
+        $view_data['project_open'] = $ci->Projects_model->count_project_status($options)->open;
         $template = new Template();
-        return $template->view("projects/widgets/open_projects_widget", $view_data);
+
+        return $template->view('projects/widgets/open_projects_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get completed projects widget
  * @param integer $user_id
- * 
+ *
  * @return html
  */
 if (!function_exists('completed_projects_widget')) {
-
-    function completed_projects_widget($user_id = 0) {
+    function completed_projects_widget($user_id = 0)
+    {
         $ci = new Security_Controller(false);
 
         if ($ci->login_user->is_admin) {
-            $options = array(
-                "user_id" => ""
-            );
+            $options = [
+                'user_id' => '',
+            ];
         } else {
-            $options = array(
-                "user_id" => $user_id ? $user_id : $ci->login_user->id
-            );
+            $options = [
+                'user_id' => $user_id ? $user_id : $ci->login_user->id,
+            ];
         }
 
-        $view_data["project_completed"] = $ci->Projects_model->count_project_status($options)->completed;
+        $view_data['project_completed'] = $ci->Projects_model->count_project_status($options)->completed;
         $template = new Template();
-        return $template->view("projects/widgets/completed_projects_widget", $view_data);
+
+        return $template->view('projects/widgets/completed_projects_widget', $view_data);
     }
 }
 
-/**
+/*
  * get count of clocked in/out users widget
- * 
+ *
  * @return html
  */
 if (!function_exists('count_clock_in_out_widget_small')) {
-
-    function count_clock_in_out_widget_small($data = array()) {
+    function count_clock_in_out_widget_small($data = [])
+    {
         $ci = new Security_Controller(false);
 
-        $attendance_options = array(
-            "login_user_id" => $ci->login_user->id,
-            "access_type" => get_array_value($data, "attendance_access_type"),
-            "allowed_members" => get_array_value($data, "attendance_allowed_members"),
-        );
+        $attendance_options = [
+            'login_user_id' => $ci->login_user->id,
+            'access_type' => get_array_value($data, 'attendance_access_type'),
+            'allowed_members' => get_array_value($data, 'attendance_allowed_members'),
+        ];
 
         $Attendance_model = model("App\Models\Attendance_model");
-        $widget = get_array_value($data, "widget");
+        $widget = get_array_value($data, 'widget');
         $info = $Attendance_model->count_clock_status($attendance_options);
 
         $template = new Template();
 
-        if ($widget === "members_clocked_in") {
-            $view_data["members_clocked_in"] = $info->members_clocked_in ? $info->members_clocked_in : 0;
-            return $template->view("attendance/count_clock_in_widget", $view_data);
-        } else if ($widget == "members_clocked_out") {
-            $view_data["members_clocked_out"] = $info->members_clocked_out ? $info->members_clocked_out : 0;
-            return $template->view("attendance/count_clock_out_widget", $view_data);
+        if ($widget === 'members_clocked_in') {
+            $view_data['members_clocked_in'] = $info->members_clocked_in ? $info->members_clocked_in : 0;
+
+            return $template->view('attendance/count_clock_in_widget', $view_data);
+        } elseif ($widget == 'members_clocked_out') {
+            $view_data['members_clocked_out'] = $info->members_clocked_out ? $info->members_clocked_out : 0;
+
+            return $template->view('attendance/count_clock_out_widget', $view_data);
         }
     }
 }
 
-/**
+/*
  * get user's open project list widget
- * 
+ *
  * @return html
  */
 if (!function_exists('my_open_projects_widget')) {
-
-    function my_open_projects_widget($client_id = 0) {
+    function my_open_projects_widget($client_id = 0)
+    {
         $ci = new Security_Controller(false);
 
-        $options = array(
-            "status_id" => 1
-        );
+        $options = [
+            'status_id' => 1,
+        ];
 
-        if ($ci->login_user->user_type == "client") {
-            $options["client_id"] = $client_id;
-        } else if ($ci->login_user->is_admin) {
-            $options["user_id"] = "";
+        if ($ci->login_user->user_type == 'client') {
+            $options['client_id'] = $client_id;
+        } elseif ($ci->login_user->is_admin) {
+            $options['user_id'] = '';
         } else {
-            $options["user_id"] = $ci->login_user->id;
+            $options['user_id'] = $ci->login_user->id;
         }
 
-        $view_data["projects"] = $ci->Projects_model->get_details($options)->getResult();
+        $view_data['projects'] = $ci->Projects_model->get_details($options)->getResult();
         $template = new Template();
-        return $template->view("projects/widgets/my_open_projects_widget", $view_data);
+
+        return $template->view('projects/widgets/my_open_projects_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get user's starred project list widget
  * @param integer $user_id
- * 
+ *
  * @return html
  */
 if (!function_exists('my_starred_projects_widget')) {
-
-    function my_starred_projects_widget($user_id = 0) {
+    function my_starred_projects_widget($user_id = 0)
+    {
         $ci = new Security_Controller(false);
 
-        $options = array(
-            "user_id" => $user_id ? $user_id : $ci->login_user->id,
-            "starred_projects" => true
-        );
+        $options = [
+            'user_id' => $user_id ? $user_id : $ci->login_user->id,
+            'starred_projects' => true,
+        ];
 
-        $view_data["projects"] = $ci->Projects_model->get_details($options)->getResult();
+        $view_data['projects'] = $ci->Projects_model->get_details($options)->getResult();
         $template = new Template();
-        return $template->view("projects/widgets/my_starred_projects_widget", $view_data);
+
+        return $template->view('projects/widgets/my_starred_projects_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get sticky note widget for logged in user
  * @param string $custom_class
- * 
+ *
  * @return html
  */
 if (!function_exists('sticky_note_widget')) {
-
-    function sticky_note_widget($custom_class = "") {
+    function sticky_note_widget($custom_class = '')
+    {
         $template = new Template();
-        return $template->view("dashboards/sticky_note_widget", array("custom_class" => $custom_class));
+
+        return $template->view('dashboards/sticky_note_widget', ['custom_class' => $custom_class]);
     }
 }
 
-
-/**
+/*
  * get ticket status small widget for current logged in user
  * @param integer $user_id
  * @param string $type ($type should be new/open/closed)
- * 
+ *
  * @return html
  */
 if (!function_exists('ticket_status_widget_small')) {
-
-    function ticket_status_widget_small($data = array()) {
+    function ticket_status_widget_small($data = [])
+    {
         $ci = new Security_Controller(false);
-        $allowed_ticket_types = get_array_value($data, "allowed_ticket_types");
-        $status = get_array_value($data, "status");
+        $allowed_ticket_types = get_array_value($data, 'allowed_ticket_types');
+        $status = get_array_value($data, 'status');
 
-        $options = array("status" => $status);
-        if ($ci->login_user->user_type == "staff") {
-            $options["allowed_ticket_types"] = $allowed_ticket_types;
-            $options["show_assigned_tickets_only_user_id"] = get_array_value($data, "show_assigned_tickets_only_user_id");
+        $options = ['status' => $status];
+        if ($ci->login_user->user_type == 'staff') {
+            $options['allowed_ticket_types'] = $allowed_ticket_types;
+            $options['show_assigned_tickets_only_user_id'] = get_array_value($data, 'show_assigned_tickets_only_user_id');
         } else {
-            $options["client_id"] = $ci->login_user->client_id;
+            $options['client_id'] = $ci->login_user->client_id;
         }
 
-        $view_data["total_tickets"] = $ci->Tickets_model->count_tickets($options);
-        $view_data["status"] = $status;
+        $view_data['total_tickets'] = $ci->Tickets_model->count_tickets($options);
+        $view_data['status'] = $status;
 
         $template = new Template();
-        return $template->view("tickets/ticket_status_widget_small", $view_data);
+
+        return $template->view('tickets/ticket_status_widget_small', $view_data);
     }
 }
 
-
-/**
+/*
  * get all team members widget
- * 
+ *
  * @return html
  */
 if (!function_exists('all_team_members_widget')) {
-
-    function all_team_members_widget() {
+    function all_team_members_widget()
+    {
         $Users_model = model("App\Models\Users_model");
-        $options = array("status" => "active", "user_type" => "staff");
-        $view_data["members"] = $Users_model->get_details($options)->getResult();
+        $options = ['status' => 'active', 'user_type' => 'staff'];
+        $view_data['members'] = $Users_model->get_details($options)->getResult();
         $template = new Template();
-        return $template->view("team_members/team_members_widget", $view_data);
+
+        return $template->view('team_members/team_members_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get all clocked in team members widget
  * @param array $data containing access permissions
- * 
+ *
  * @return html
  */
 if (!function_exists('clocked_in_team_members_widget')) {
-
-    function clocked_in_team_members_widget($data = array()) {
+    function clocked_in_team_members_widget($data = [])
+    {
         $ci = new Security_Controller(false);
 
-        $options = array(
-            "login_user_id" => $ci->login_user->id,
-            "access_type" => get_array_value($data, "access_type"),
-            "allowed_members" => get_array_value($data, "allowed_members"),
-            "only_clocked_in_members" => true
-        );
+        $options = [
+            'login_user_id' => $ci->login_user->id,
+            'access_type' => get_array_value($data, 'access_type'),
+            'allowed_members' => get_array_value($data, 'allowed_members'),
+            'only_clocked_in_members' => true,
+        ];
 
-        $view_data["users"] = $ci->Attendance_model->get_details($options)->getResult();
+        $view_data['users'] = $ci->Attendance_model->get_details($options)->getResult();
 
         $template = new Template();
-        return $template->view("team_members/clocked_in_team_members_widget", $view_data);
+
+        return $template->view('team_members/clocked_in_team_members_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get all clocked out team members widget
  * @param array $data containing access permissions
- * 
+ *
  * @return html
  */
 if (!function_exists('clocked_out_team_members_widget')) {
-
-    function clocked_out_team_members_widget($data = array()) {
+    function clocked_out_team_members_widget($data = [])
+    {
         $ci = new Security_Controller(false);
 
-        $options = array(
-            "login_user_id" => $ci->login_user->id,
-            "access_type" => get_array_value($data, "access_type"),
-            "allowed_members" => get_array_value($data, "allowed_members")
-        );
+        $options = [
+            'login_user_id' => $ci->login_user->id,
+            'access_type' => get_array_value($data, 'access_type'),
+            'allowed_members' => get_array_value($data, 'allowed_members'),
+        ];
 
-        $view_data["users"] = $ci->Attendance_model->get_clocked_out_members($options)->getResult();
+        $view_data['users'] = $ci->Attendance_model->get_clocked_out_members($options)->getResult();
         $template = new Template();
-        return $template->view("team_members/clocked_out_team_members_widget", $view_data);
+
+        return $template->view('team_members/clocked_out_team_members_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get active members widget
- * 
+ *
  * @return html
  */
 if (!function_exists('active_members_and_clients_widget')) {
-
-    function active_members_and_clients_widget($user_type = "", $show_own_clients_only_user_id = "", $allowed_client_groups = "") {
+    function active_members_and_clients_widget($user_type = '', $show_own_clients_only_user_id = '', $allowed_client_groups = '')
+    {
         $ci = new Security_Controller(false);
 
-        $options = array("user_type" => $user_type, "exclude_user_id" => $ci->login_user->id, "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups);
+        $options = ['user_type' => $user_type, 'exclude_user_id' => $ci->login_user->id, 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups];
 
-        $view_data["users"] = $ci->Users_model->get_active_members_and_clients($options)->getResult();
-        $view_data["user_type"] = $user_type;
+        $view_data['users'] = $ci->Users_model->get_active_members_and_clients($options)->getResult();
+        $view_data['user_type'] = $user_type;
         $template = new Template();
-        return $template->view("team_members/active_members_and_clients_widget", $view_data);
+
+        return $template->view('team_members/active_members_and_clients_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get total invoices/payments/due value widget
  * @param string $type
- * 
+ *
  * @return html
  */
 if (!function_exists('get_invoices_value_widget')) {
-
-    function get_invoices_value_widget($type = "") {
+    function get_invoices_value_widget($type = '')
+    {
         $Invoices_model = model("App\Models\Invoices_model");
-        $options = array();
-        if ($type == "invoices") {
-            $options = array("return_only" => "invoices");
-        } else if ($type == "payments") {
-            $options = array("return_only" => "payments");
-        } else if ($type == "due") {
-            $options = array("return_only" => "due");
-        } else if ($type == "draft") {
-            $options = array("return_only" => "draft");
-        } else if ($type == "draft_count") {
-            $options = array("return_only" => "draft");
+        $options = [];
+        if ($type == 'invoices') {
+            $options = ['return_only' => 'invoices'];
+        } elseif ($type == 'payments') {
+            $options = ['return_only' => 'payments'];
+        } elseif ($type == 'due') {
+            $options = ['return_only' => 'due'];
+        } elseif ($type == 'draft') {
+            $options = ['return_only' => 'draft'];
+        } elseif ($type == 'draft_count') {
+            $options = ['return_only' => 'draft'];
         }
 
-        $view_data["invoices_info"] = $Invoices_model->get_invoices_total_and_paymnts($options);
-        $view_data["type"] = $type;
+        $view_data['invoices_info'] = $Invoices_model->get_invoices_total_and_paymnts($options);
+        $view_data['type'] = $type;
         $template = new Template();
-        return $template->view("invoices/total_invoices_value_widget", $view_data);
+
+        return $template->view('invoices/total_invoices_value_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get my tasks list widget
- * 
+ *
  * @return html
  */
 if (!function_exists('my_tasks_list_widget')) {
-
-    function my_tasks_list_widget() {
+    function my_tasks_list_widget()
+    {
         $Task_status_model = model("App\Models\Task_status_model");
         $view_data['task_statuses'] = $Task_status_model->get_details()->getResult();
         $template = new Template();
-        return $template->view("tasks/my_tasks_list_widget", $view_data);
+
+        return $template->view('tasks/my_tasks_list_widget', $view_data);
     }
 }
 
-/**
+/*
  * get pending leave approval widget
- * 
+ *
  * @return html
  */
 if (!function_exists('pending_leave_approval_widget')) {
-
-    function pending_leave_approval_widget($data = array()) {
+    function pending_leave_approval_widget($data = [])
+    {
         $ci = new Security_Controller(false);
 
-        $options = array(
-            "login_user_id" => $ci->login_user->id,
-            "access_type" => get_array_value($data, "access_type"),
-            "allowed_members" => get_array_value($data, "allowed_members"),
-            "status" => "pending"
-        );
-        $view_data["total"] = count($ci->Leave_applications_model->get_list($options)->getResult());
+        $options = [
+            'login_user_id' => $ci->login_user->id,
+            'access_type' => get_array_value($data, 'access_type'),
+            'allowed_members' => get_array_value($data, 'allowed_members'),
+            'status' => 'pending',
+        ];
+        $view_data['total'] = count($ci->Leave_applications_model->get_list($options)->getResult());
 
         $template = new Template();
-        return $template->view("leaves/pending_leave_approval_widget", $view_data);
+
+        return $template->view('leaves/pending_leave_approval_widget', $view_data);
     }
 }
 
-/**
+/*
  * get total clients
- * 
+ *
  * @return html
  */
 if (!function_exists('total_clients_widget')) {
-
-    function total_clients_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "") {
+    function total_clients_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '')
+    {
         $Clients_model = model("App\Models\Clients_model");
-        $view_data["total"] = $Clients_model->count_total_clients(array("show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
+        $view_data['total'] = $Clients_model->count_total_clients(['show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
         $template = new Template();
-        return $template->view("clients/total_clients_widget", $view_data);
+
+        return $template->view('clients/total_clients_widget', $view_data);
     }
 }
 
-/**
+/*
  * get total client contacts
- * 
+ *
  * @return html
  */
 if (!function_exists('total_contacts_widget')) {
-
-    function total_contacts_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "") {
+    function total_contacts_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '')
+    {
         $Users_model = model("App\Models\Users_model");
-        $view_data["total"] = $Users_model->count_total_contacts(array("show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
+        $view_data['total'] = $Users_model->count_total_contacts(['show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
         $template = new Template();
-        return $template->view("clients/total_contacts_widget", $view_data);
+
+        return $template->view('clients/total_contacts_widget', $view_data);
     }
 }
 
-/**
+/*
  * get active members on projects widget
- * 
+ *
  * @return html
  */
 if (!function_exists('active_members_on_projects_widget')) {
-
-    function active_members_on_projects_widget() {
+    function active_members_on_projects_widget()
+    {
         $Timesheets_model = model("App\Models\Timesheets_model");
-        $view_data["users_info"] = $Timesheets_model->active_members_on_projects()->getResult();
+        $view_data['users_info'] = $Timesheets_model->active_members_on_projects()->getResult();
 
         $template = new Template();
-        return $template->view("team_members/active_members_on_projects_widget", $view_data);
+
+        return $template->view('team_members/active_members_on_projects_widget', $view_data);
     }
 }
 
-/**
+/*
  * get open tickets list widget
- * 
+ *
  * @return html
  */
 if (!function_exists('open_tickets_list_widget')) {
-
-    function open_tickets_list_widget() {
+    function open_tickets_list_widget()
+    {
         $ci = new Security_Controller(false);
 
-        if ($ci->login_user->user_type == "client") {
-            $view_data["client_id"] = $ci->login_user->client_id;
+        if ($ci->login_user->user_type == 'client') {
+            $view_data['client_id'] = $ci->login_user->client_id;
             $template = new Template();
-            return $template->view("clients/tickets/open_tickets_list_widget", $view_data);
+
+            return $template->view('clients/tickets/open_tickets_list_widget', $view_data);
         } else {
             $template = new Template();
-            return $template->view("tickets/open_tickets_list_widget");
+
+            return $template->view('tickets/open_tickets_list_widget');
         }
     }
 }
 
-/**
+/*
  * get total leads
  * @param boolean $return_as_data
  * @return html
  */
 if (!function_exists('total_leads_widget')) {
-
-    function total_leads_widget($returen_as_data = false, $show_own_leads_only_user_id = "") {
+    function total_leads_widget($returen_as_data = false, $show_own_leads_only_user_id = '')
+    {
         $Clients_model = model("App\Models\Clients_model");
-        $view_data["total"] = $Clients_model->count_total_leads(array("show_own_leads_only_user_id" => $show_own_leads_only_user_id));
+        $view_data['total'] = $Clients_model->count_total_leads(['show_own_leads_only_user_id' => $show_own_leads_only_user_id]);
 
         $template = new Template();
+
         return $template->view('leads/total_leads_widget', $view_data, $returen_as_data);
     }
 }
 
-/**
+/*
  * get contacts count widget for client
  * @param string $widget_type
  * @param boolean $return_as_data
  * @return html
  */
 if (!function_exists('client_contacts_logged_in_widget')) {
-
-    function client_contacts_logged_in_widget($widget_type = "", $show_own_clients_only_user_id = "", $allowed_client_groups = "", $return_as_data = false) {
+    function client_contacts_logged_in_widget($widget_type = '', $show_own_clients_only_user_id = '', $allowed_client_groups = '', $return_as_data = false)
+    {
         $ci = new Security_Controller(false);
 
-        $last_online = "";
-        if ($widget_type === "logged_in_today") {
+        $last_online = '';
+        if ($widget_type === 'logged_in_today') {
             $last_online = get_today_date();
-        } else if ($widget_type === "logged_in_seven_days") {
-            $last_online = subtract_period_from_date(get_today_date(), 7, "days");
+        } elseif ($widget_type === 'logged_in_seven_days') {
+            $last_online = subtract_period_from_date(get_today_date(), 7, 'days');
         }
 
-        $options = array("last_online" => $last_online, "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups);
+        $options = ['last_online' => $last_online, 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups];
 
-        $view_data["contacts_count"] = $ci->Users_model->count_total_contacts($options);
-        $view_data["widget_type"] = $widget_type;
+        $view_data['contacts_count'] = $ci->Users_model->count_total_contacts($options);
+        $view_data['widget_type'] = $widget_type;
 
         $template = new Template();
-        return $template->view("clients/widgets/client_contacts_logged_in_widget", $view_data, $return_as_data);
+
+        return $template->view('clients/widgets/client_contacts_logged_in_widget', $view_data, $return_as_data);
     }
 }
 
-/**
+/*
  * get invoices count widget for client
  * @param string $widget_type
  * @param boolean $return_as_data
  * @return html
  */
 if (!function_exists('client_invoices_widget')) {
-
-    function client_invoices_widget($widget_type = "", $show_own_clients_only_user_id = "", $allowed_client_groups = "", $return_as_data = false) {
+    function client_invoices_widget($widget_type = '', $show_own_clients_only_user_id = '', $allowed_client_groups = '', $return_as_data = false)
+    {
         $Clients_model = model("App\Models\Clients_model");
 
-        $options = array("filter" => $widget_type, "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups);
-        $view_data["total"] = $Clients_model->count_total_clients($options);
-        $view_data["total_clients"] = $Clients_model->count_total_clients();
-        $view_data["widget_type"] = $widget_type;
+        $options = ['filter' => $widget_type, 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups];
+        $view_data['total'] = $Clients_model->count_total_clients($options);
+        $view_data['total_clients'] = $Clients_model->count_total_clients();
+        $view_data['widget_type'] = $widget_type;
 
         $template = new Template();
-        return $template->view("clients/widgets/client_invoices_widget", $view_data, $return_as_data);
+
+        return $template->view('clients/widgets/client_invoices_widget', $view_data, $return_as_data);
     }
 }
 
-/**
+/*
  * get projects count widget for client
  * @param boolean $return_as_data
  * @return html
  */
 if (!function_exists('client_projects_widget')) {
-
-    function client_projects_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "", $return_as_data = false) {
+    function client_projects_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '', $return_as_data = false)
+    {
         $Clients_model = model("App\Models\Clients_model");
 
-        $view_data["clients_has_open_projects"] = $Clients_model->count_total_clients(array("filter" => "has_open_projects", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_completed_projects"] = $Clients_model->count_total_clients(array("filter" => "has_completed_projects", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_any_hold_projects"] = $Clients_model->count_total_clients(array("filter" => "has_any_hold_projects", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_canceled_projects"] = $Clients_model->count_total_clients(array("filter" => "has_canceled_projects", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
+        $view_data['clients_has_open_projects'] = $Clients_model->count_total_clients(['filter' => 'has_open_projects', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_completed_projects'] = $Clients_model->count_total_clients(['filter' => 'has_completed_projects', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_any_hold_projects'] = $Clients_model->count_total_clients(['filter' => 'has_any_hold_projects', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_canceled_projects'] = $Clients_model->count_total_clients(['filter' => 'has_canceled_projects', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
 
         $template = new Template();
-        return $template->view("clients/widgets/projects_info_widget", $view_data, $return_as_data);
+
+        return $template->view('clients/widgets/projects_info_widget', $view_data, $return_as_data);
     }
 }
 
-/**
+/*
  * get estimates count widget for client
  * @param boolean $return_as_data
  * @return html
  */
 if (!function_exists('client_estimates_widget')) {
-
-    function client_estimates_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "", $return_as_data = false) {
+    function client_estimates_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '', $return_as_data = false)
+    {
         $Clients_model = model("App\Models\Clients_model");
 
-        $view_data["clients_has_open_estimates"] = $Clients_model->count_total_clients(array("filter" => "has_open_estimates", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_accepted_estimates"] = $Clients_model->count_total_clients(array("filter" => "has_accepted_estimates", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_new_estimate_requests"] = $Clients_model->count_total_clients(array("filter" => "has_new_estimate_requests", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_estimate_requests_in_progress"] = $Clients_model->count_total_clients(array("filter" => "has_estimate_requests_in_progress", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
+        $view_data['clients_has_open_estimates'] = $Clients_model->count_total_clients(['filter' => 'has_open_estimates', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_accepted_estimates'] = $Clients_model->count_total_clients(['filter' => 'has_accepted_estimates', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_new_estimate_requests'] = $Clients_model->count_total_clients(['filter' => 'has_new_estimate_requests', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_estimate_requests_in_progress'] = $Clients_model->count_total_clients(['filter' => 'has_estimate_requests_in_progress', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
 
         $template = new Template();
-        return $template->view("clients/widgets/client_estimates_widget", $view_data, $return_as_data);
+
+        return $template->view('clients/widgets/client_estimates_widget', $view_data, $return_as_data);
     }
 }
 
-/**
+/*
  * get clients has open tickets count
- * 
+ *
  * @return html
  */
 if (!function_exists('clients_has_open_tickets_widget')) {
-
-    function clients_has_open_tickets_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "") {
+    function clients_has_open_tickets_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '')
+    {
         $Clients_model = model("App\Models\Clients_model");
 
-        $options = array("show_own_clients_only_user_id" => $show_own_clients_only_user_id, "filter" => "has_open_tickets", "client_groups" => $allowed_client_groups);
+        $options = ['show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'filter' => 'has_open_tickets', 'client_groups' => $allowed_client_groups];
 
-        $view_data["clients_has_open_tickets"] = $Clients_model->count_total_clients($options);
-        $view_data["total_clients"] = $Clients_model->count_total_clients(array("show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
+        $view_data['clients_has_open_tickets'] = $Clients_model->count_total_clients($options);
+        $view_data['total_clients'] = $Clients_model->count_total_clients(['show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
         $template = new Template();
-        return $template->view("clients/widgets/clients_has_open_tickets_widget", $view_data);
+
+        return $template->view('clients/widgets/clients_has_open_tickets_widget', $view_data);
     }
 }
 
-/**
+/*
  * get clients has new orders count
- * 
+ *
  * @return html
  */
 if (!function_exists('clients_has_new_orders_widget')) {
-
-    function clients_has_new_orders_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "") {
+    function clients_has_new_orders_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '')
+    {
         $Clients_model = model("App\Models\Clients_model");
 
-        $options = array("filter" => "has_new_orders", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups);
+        $options = ['filter' => 'has_new_orders', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups];
 
-        $view_data["clients_has_new_orders"] = $Clients_model->count_total_clients($options);
-        $view_data["total_clients"] = $Clients_model->count_total_clients();
+        $view_data['clients_has_new_orders'] = $Clients_model->count_total_clients($options);
+        $view_data['total_clients'] = $Clients_model->count_total_clients();
         $template = new Template();
-        return $template->view("clients/widgets/clients_has_new_orders_widget", $view_data);
+
+        return $template->view('clients/widgets/clients_has_new_orders_widget', $view_data);
     }
 }
 
-/**
+/*
  * get proposals count widget for client
  * @param boolean $return_as_data
  * @return html
  */
 if (!function_exists('client_proposals_widget')) {
-
-    function client_proposals_widget($show_own_clients_only_user_id = "", $allowed_client_groups = "", $return_as_data = false) {
+    function client_proposals_widget($show_own_clients_only_user_id = '', $allowed_client_groups = '', $return_as_data = false)
+    {
         $Clients_model = model("App\Models\Clients_model");
 
-        $view_data["clients_has_open_proposals"] = $Clients_model->count_total_clients(array("filter" => "has_open_proposals", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_accepted_proposals"] = $Clients_model->count_total_clients(array("filter" => "has_accepted_proposals", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
-        $view_data["clients_has_rejected_proposals"] = $Clients_model->count_total_clients(array("filter" => "has_rejected_proposals", "show_own_clients_only_user_id" => $show_own_clients_only_user_id, "client_groups" => $allowed_client_groups));
+        $view_data['clients_has_open_proposals'] = $Clients_model->count_total_clients(['filter' => 'has_open_proposals', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_accepted_proposals'] = $Clients_model->count_total_clients(['filter' => 'has_accepted_proposals', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
+        $view_data['clients_has_rejected_proposals'] = $Clients_model->count_total_clients(['filter' => 'has_rejected_proposals', 'show_own_clients_only_user_id' => $show_own_clients_only_user_id, 'client_groups' => $allowed_client_groups]);
 
         $template = new Template();
-        return $template->view("clients/widgets/client_proposals_widget", $view_data, $return_as_data);
+
+        return $template->view('clients/widgets/client_proposals_widget', $view_data, $return_as_data);
     }
 }
 
 if (!function_exists('company_widget')) {
-
-    function company_widget($company_id = 0, $bill_from = "") {
-        $options = array("is_default" => true);
+    function company_widget($company_id = 0, $bill_from = '')
+    {
+        $options = ['is_default' => true];
         if ($company_id) {
-            $options = array("id" => $company_id);
+            $options = ['id' => $company_id];
         }
 
-        $options["deleted"] = 0;
+        $options['deleted'] = 0;
 
         $Company_model = model('App\Models\Company_model');
         $company_info = $Company_model->get_one_where($options);
 
-        //show default company when any specific company isn't exists
+        // show default company when any specific company isn't exists
         if ($company_id && !$company_info->id) {
-            $options = array("is_default" => true);
+            $options = ['is_default' => true];
             $company_info = $Company_model->get_one_where($options);
         }
 
-        $view_data["company_info"] = $company_info;
-        $view_data["bill_from"] = $bill_from;
+        $view_data['company_info'] = $company_info;
+        $view_data['bill_from'] = $bill_from;
 
-        return view("company/company_widget", $view_data);
+        return view('company/company_widget', $view_data);
     }
 }
 
-/**
+/*
  * get projects overview widget
  * @param integer $user_id
- * 
+ *
  * @return html
  */
 if (!function_exists('projects_overview_widget')) {
-
-    function projects_overview_widget() {
+    function projects_overview_widget()
+    {
         $ci = new Security_Controller(false);
 
         if ($ci->login_user->is_admin) {
-            $options = array(
-                "user_id" => ""
-            );
+            $options = [
+                'user_id' => '',
+            ];
         } else {
-            $options = array(
-                "user_id" => $ci->login_user->id
-            );
+            $options = [
+                'user_id' => $ci->login_user->id,
+            ];
         }
 
         $status_text_info = get_project_status_text_info();
 
-        $view_data["open_status_text"] = $status_text_info->open;
-        $view_data["completed_status_text"] = $status_text_info->completed;
-        $view_data["hold_status_text"] = $status_text_info->hold;
+        $view_data['open_status_text'] = $status_text_info->open;
+        $view_data['completed_status_text'] = $status_text_info->completed;
+        $view_data['hold_status_text'] = $status_text_info->hold;
 
-        $view_data["count_project_status"] = $ci->Projects_model->count_project_status($options);
+        $view_data['count_project_status'] = $ci->Projects_model->count_project_status($options);
 
-        $view_data["projects_info"] = $ci->Projects_model->count_task_points($options);
+        $view_data['projects_info'] = $ci->Projects_model->count_task_points($options);
 
         $template = new Template();
-        return $template->view("projects/widgets/projects_overview_widget", $view_data);
+
+        return $template->view('projects/widgets/projects_overview_widget', $view_data);
     }
 }
 
 if (!function_exists('reminders_widget')) {
-
-    function reminders_widget($return_reminders_only = false) {
+    function reminders_widget($return_reminders_only = false)
+    {
         $ci = new Security_Controller();
 
         $Events_model = model('App\Models\Events_model');
-        $local_time = get_my_local_time("Y-m-d H:i") . ":00";
-        $reminders = $Events_model->get_details(array(
-            "user_id" => $ci->login_user->id,
-            "type" => "all",
-            "reminder_status" => "new",
-            "reminder_start_date_time" => $local_time,
-            "reminder_end_date_time" => add_period_to_date($local_time, "1", "days", "Y-m-d H:i:s") //get reminders of next 24 hours
-        ))->getResult();
+        $local_time = get_my_local_time('Y-m-d H:i').':00';
+        $reminders = $Events_model->get_details([
+            'user_id' => $ci->login_user->id,
+            'type' => 'all',
+            'reminder_status' => 'new',
+            'reminder_start_date_time' => $local_time,
+            'reminder_end_date_time' => add_period_to_date($local_time, '1', 'days', 'Y-m-d H:i:s'), // get reminders of next 24 hours
+        ])->getResult();
 
         if ($return_reminders_only) {
             return $reminders;
         }
 
-        $view_data["reminders"] = $reminders;
+        $view_data['reminders'] = $reminders;
 
-        echo view("reminders/reminders_widget", $view_data);
+        echo view('reminders/reminders_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get estimate sent statistics widget
- * 
+ *
  * @return html
  */
 if (!function_exists('estimate_sent_statistics_widget')) {
-
-    function estimate_sent_statistics_widget($options = array()) {
+    function estimate_sent_statistics_widget($options = [])
+    {
         $ci = new Security_Controller(false);
 
-        $currency_symbol = get_array_value($options, "currency");
-        $currency_symbol = $currency_symbol ? $currency_symbol : get_setting("default_currency");
+        $currency_symbol = get_array_value($options, 'currency');
+        $currency_symbol = $currency_symbol ? $currency_symbol : get_setting('default_currency');
 
-        $options["currency_symbol"] = $currency_symbol;
+        $options['currency_symbol'] = $currency_symbol;
         $info = $ci->Estimates_model->estimate_sent_statistics($options);
 
-        $estimates = array();
-        $estimates_array = array();
+        $estimates = [];
+        $estimates_array = [];
 
-        for ($i = 1; $i <= 12; $i++) {
+        for ($i = 1; $i <= 12; ++$i) {
             $estimates[$i] = 0;
         }
 
@@ -1510,160 +1525,162 @@ if (!function_exists('estimate_sent_statistics_widget')) {
             $estimates_array[] = $estimate;
         }
 
-        $view_data["estimate_sent"] = json_encode($estimates_array);
-        $view_data["currencies"] = $info->currencies;
-        $view_data["currency_symbol"] = clean_data($currency_symbol);
+        $view_data['estimate_sent'] = json_encode($estimates_array);
+        $view_data['currencies'] = $info->currencies;
+        $view_data['currency_symbol'] = clean_data($currency_symbol);
 
         $template = new Template();
-        return $template->view("estimates/estimate_sent_statistics_widget/index", $view_data);
+
+        return $template->view('estimates/estimate_sent_statistics_widget/index', $view_data);
     }
 }
 
-
-/**
+/*
  * get last announcement widget
  * @return html
  */
 if (!function_exists('last_announcement_widget')) {
-
-    function last_announcement_widget() {
+    function last_announcement_widget()
+    {
         $ci = new Security_Controller(false);
 
-        $options["user_type"] = $ci->login_user->user_type;
+        $options['user_type'] = $ci->login_user->user_type;
 
-        if ($ci->login_user->user_type === "client") {
+        if ($ci->login_user->user_type === 'client') {
             $group_ids = $ci->Clients_model->get_one($ci->login_user->client_id)->group_ids;
             if ($group_ids) {
-                $options["client_group_ids"] = $group_ids;
+                $options['client_group_ids'] = $group_ids;
             }
         } else {
-            $options["user_id"] = $ci->login_user->id;
-            $options["team_ids"] = $ci->login_user->team_ids;
+            $options['user_id'] = $ci->login_user->id;
+            $options['team_ids'] = $ci->login_user->team_ids;
         }
 
         $Announcements_model = model("App\Models\Announcements_model");
-        $view_data["last_announcement"] = $Announcements_model->get_last_announcement($options);
+        $view_data['last_announcement'] = $Announcements_model->get_last_announcement($options);
 
         $template = new Template();
-        return $template->view("announcements/last_announcement_widget", $view_data);
+
+        return $template->view('announcements/last_announcement_widget', $view_data);
     }
 }
 
-
-/**
+/*
  * get team members overview
- * 
+ *
  * @return html
  */
 if (!function_exists('team_members_overview_widget')) {
-
-    function team_members_overview_widget($data = array()) {
+    function team_members_overview_widget($data = [])
+    {
         $ci = new Security_Controller(false);
 
-        $view_data["total_team_members"] = $ci->Users_model->count_total_users();
+        $view_data['total_team_members'] = $ci->Users_model->count_total_users();
 
-        $leave_options = array(
-            "login_user_id" => $ci->login_user->id,
-            "access_type" => get_array_value($data, "leave_access_type"),
-            "allowed_members" => get_array_value($data, "leave_allowed_members"),
-            "status" => "approved",
-            "on_leave_today" => true
-        );
-        $view_data["on_leave_today"] = count($ci->Leave_applications_model->get_list($leave_options)->getResult());
+        $leave_options = [
+            'login_user_id' => $ci->login_user->id,
+            'access_type' => get_array_value($data, 'leave_access_type'),
+            'allowed_members' => get_array_value($data, 'leave_allowed_members'),
+            'status' => 'approved',
+            'on_leave_today' => true,
+        ];
+        $view_data['on_leave_today'] = count($ci->Leave_applications_model->get_list($leave_options)->getResult());
 
-        $attendance_options = array(
-            "login_user_id" => $ci->login_user->id,
-            "access_type" => get_array_value($data, "attendance_access_type"),
-            "allowed_members" => get_array_value($data, "attendance_allowed_members"),
-        );
+        $attendance_options = [
+            'login_user_id' => $ci->login_user->id,
+            'access_type' => get_array_value($data, 'attendance_access_type'),
+            'allowed_members' => get_array_value($data, 'attendance_allowed_members'),
+        ];
         $info = $ci->Attendance_model->count_clock_status($attendance_options);
-        $view_data["members_clocked_in"] = $info->members_clocked_in ? $info->members_clocked_in : 0;
-        $view_data["members_clocked_out"] = $info->members_clocked_out ? $info->members_clocked_out : 0;
+        $view_data['members_clocked_in'] = $info->members_clocked_in ? $info->members_clocked_in : 0;
+        $view_data['members_clocked_out'] = $info->members_clocked_out ? $info->members_clocked_out : 0;
 
         $template = new Template();
-        return $template->view("team_members/team_members_overview_widget", $view_data);
+
+        return $template->view('team_members/team_members_overview_widget', $view_data);
     }
 }
 
-/**
+/*
  * get all task overview widget of loged in user
- * 
+ *
  * @return html
  */
 if (!function_exists('tasks_overview_widget')) {
-
-    function tasks_overview_widget($type = "") {
+    function tasks_overview_widget($type = '')
+    {
         $ci = new Security_Controller(false);
         $permissions = $ci->login_user->permissions;
 
-        if ($type == "all_tasks_overview") {
-            if ($ci->login_user->is_admin || get_array_value($permissions, "can_manage_all_projects") == "1") {
-                $options = array();
-            } else if (get_array_value($permissions, "show_assigned_tasks_only") == "1") {
-                $options["show_assigned_tasks_only_user_id"] = $ci->login_user->id;
+        if ($type == 'all_tasks_overview') {
+            if ($ci->login_user->is_admin || get_array_value($permissions, 'can_manage_all_projects') == '1') {
+                $options = [];
+            } elseif (get_array_value($permissions, 'show_assigned_tasks_only') == '1') {
+                $options['show_assigned_tasks_only_user_id'] = $ci->login_user->id;
             } else {
-                $options["project_member_id"] = $ci->login_user->id; //don't show all tasks to non-admin users
+                $options['project_member_id'] = $ci->login_user->id; // don't show all tasks to non-admin users
             }
         } else {
-            $options = array("show_assigned_tasks_only_user_id" => $ci->login_user->id);
+            $options = ['show_assigned_tasks_only_user_id' => $ci->login_user->id];
         }
 
-        $view_data["task_statuses"] = $ci->Tasks_model->get_task_statistics($options)->task_statuses;
-        $view_data["task_priorities"] = $ci->Tasks_model->get_task_statistics($options)->task_priorities;
-        $view_data["expired_tasks"] = $ci->Tasks_model->get_task_statistics($options)->expired_tasks;
-        $view_data["type"] = $type;
+        $view_data['task_statuses'] = $ci->Tasks_model->get_task_statistics($options)->task_statuses;
+        $view_data['task_priorities'] = $ci->Tasks_model->get_task_statistics($options)->task_priorities;
+        $view_data['expired_tasks'] = $ci->Tasks_model->get_task_statistics($options)->expired_tasks;
+        $view_data['type'] = $type;
 
         $template = new Template();
-        return $template->view("tasks/tasks_overview_widget", $view_data);
+
+        return $template->view('tasks/tasks_overview_widget', $view_data);
     }
 }
 
-/**
+/*
  * get total invoices overview widget
  * @param string $type
- * 
+ *
  * @return html
  */
 if (!function_exists('invoice_overview_widget')) {
-
-    function invoice_overview_widget($options = array()) {
+    function invoice_overview_widget($options = [])
+    {
         $ci = new Security_Controller(false);
 
-        $today = get_my_local_time("Y-m-d");
+        $today = get_my_local_time('Y-m-d');
         $last_day_of_month = date('t', strtotime($today));
-        $start_date = subtract_period_from_date(get_my_local_time("Y-m-01"), 11, "months");
+        $start_date = subtract_period_from_date(get_my_local_time('Y-m-01'), 11, 'months');
         $end_date = get_my_local_time("Y-m-$last_day_of_month");
 
-        $currency = get_array_value($options, "currency");
-        $currency = $currency ? $currency : get_setting("default_currency");
+        $currency = get_array_value($options, 'currency');
+        $currency = $currency ? $currency : get_setting('default_currency');
 
-        $currency_symbol = get_array_value($options, "currency_symbol");
-        $currency_symbol = $currency_symbol ? $currency_symbol : get_setting("currency_symbol");
+        $currency_symbol = get_array_value($options, 'currency_symbol');
+        $currency_symbol = $currency_symbol ? $currency_symbol : get_setting('currency_symbol');
 
-        $options["currency"] = $currency;
-        $options["start_date"] = $start_date;
-        $options["end_date"] = $end_date;
+        $options['currency'] = $currency;
+        $options['start_date'] = $start_date;
+        $options['end_date'] = $end_date;
         $info = $ci->Invoices_model->invoice_statistics($options);
 
-        $ticks = array();
-        $invoices_array = array();
+        $ticks = [];
+        $invoices_array = [];
 
-        $invoice_result_array = array();
+        $invoice_result_array = [];
         foreach ($info->invoices as $invoice) {
-            $invoice_result_array[sprintf("%02d", $invoice->month)] = $invoice->total;
+            $invoice_result_array[sprintf('%02d', $invoice->month)] = $invoice->total;
         }
 
-        for ($i = 11; $i >= 0; $i--) {
-            $date_index = subtract_period_from_date($today, $i, "months", "Y-m-d");
+        for ($i = 11; $i >= 0; --$i) {
+            $date_index = subtract_period_from_date($today, $i, 'months', 'Y-m-d');
 
-            $month = explode("-", $date_index)[1];
+            $month = explode('-', $date_index)[1];
 
             $index_value = get_array_value($invoice_result_array, $month);
             if (!$index_value) {
                 $index_value = 0;
             }
 
-            //for ticks
+            // for ticks
             $dateObj = DateTime::createFromFormat('!m', $month);
             $month_name = strtolower($dateObj->format('F')); // Month
             $ticks[] = app_lang("short_$month_name");
@@ -1671,114 +1688,263 @@ if (!function_exists('invoice_overview_widget')) {
             $invoices_array[] = $index_value;
         }
 
-        $view_data["ticks"] = json_encode($ticks);
-        $view_data["invoices"] = json_encode($invoices_array);
-        $view_data["currencies"] = $info->currencies;
-        $view_data["currency_symbol"] = clean_data($currency_symbol);
+        $view_data['ticks'] = json_encode($ticks);
+        $view_data['invoices'] = json_encode($invoices_array);
+        $view_data['currencies'] = $info->currencies;
+        $view_data['currency_symbol'] = clean_data($currency_symbol);
 
-        $client_id = get_array_value($options, "client_id");
+        $client_id = get_array_value($options, 'client_id');
 
-        $invoice_info = $ci->Invoices_model->get_invoices_total_and_paymnts(array("currency" => $currency, "client_id" => $client_id));
+        $invoice_info = $ci->Invoices_model->get_invoices_total_and_paymnts(['currency' => $currency, 'client_id' => $client_id]);
 
-        $view_data["total_invoices"] = $invoice_info->invoices_count;
-        $view_data["overdue_invoices"] = $invoice_info->overdue_count;
-        $view_data["not_paid_invoices"] = $invoice_info->not_paid_count;
-        $view_data["partially_paid_invoices"] = $invoice_info->partially_paid_count;
-        $view_data["fully_paid_invoices"] = $invoice_info->fully_paid_count;
-        $view_data["draft_invoices"] = $invoice_info->draft_count;
+        $view_data['total_invoices'] = $invoice_info->invoices_count;
+        $view_data['overdue_invoices'] = $invoice_info->overdue_count;
+        $view_data['not_paid_invoices'] = $invoice_info->not_paid_count;
+        $view_data['partially_paid_invoices'] = $invoice_info->partially_paid_count;
+        $view_data['fully_paid_invoices'] = $invoice_info->fully_paid_count;
+        $view_data['draft_invoices'] = $invoice_info->draft_count;
 
-        $view_data["invoices_info"] = $invoice_info;
-        $view_data["invoice_currency"] = $currency;
-        $view_data["client_id"] = $client_id;
+        $view_data['invoices_info'] = $invoice_info;
+        $view_data['invoice_currency'] = $currency;
+        $view_data['client_id'] = $client_id;
 
-        $view_data["client_wallet_summary"] = array();
+        $view_data['client_wallet_summary'] = [];
         if ($client_id) {
             $Client_wallet_model = model("App\Models\Client_wallet_model");
-            $view_data["client_wallet_summary"] = $Client_wallet_model->get_client_wallet_summary($client_id);
+            $view_data['client_wallet_summary'] = $Client_wallet_model->get_client_wallet_summary($client_id);
         }
 
         $template = new Template();
-        return $template->view("invoices/invoice_overview_widget", $view_data);
+
+        return $template->view('invoices/invoice_overview_widget', $view_data);
     }
 }
 
-/**
+/*
  * get next reminder widget
- * 
+ *
  * @return html
  */
 if (!function_exists('next_reminder_widget')) {
-
-    function next_reminder_widget() {
+    function next_reminder_widget()
+    {
         $ci = new Security_Controller();
 
         $Events_model = model('App\Models\Events_model');
-        $options = array(
-            "user_id" => $ci->login_user->id,
-            "type" => "reminder",
-            "reminder_status" => "new",
-            "reminder_start_date_time" => get_my_local_time("Y-m-d H:i") . ":00",
-        );
+        $options = [
+            'user_id' => $ci->login_user->id,
+            'type' => 'reminder',
+            'reminder_status' => 'new',
+            'reminder_start_date_time' => get_my_local_time('Y-m-d H:i').':00',
+        ];
 
-        $reminders_of_today = $Events_model->get_details(array_merge($options, array(
-            "reminder_end_date_time" => get_my_local_time("Y-m-d") . " 23:59:00" //get reminders of today means from now to 23:59:00
-        )))->getResult();
-        $view_data["reminders_of_today"] = count($reminders_of_today);
+        $reminders_of_today = $Events_model->get_details(array_merge($options, [
+            'reminder_end_date_time' => get_my_local_time('Y-m-d').' 23:59:00', // get reminders of today means from now to 23:59:00
+        ]))->getResult();
+        $view_data['reminders_of_today'] = count($reminders_of_today);
 
-        $next_reminder = $Events_model->get_details(array_merge($options, array(
-            "limit" => 1, //get next reminder only
-            "get_future_events_only" => true,
-        )))->getRow();
-        $view_data["next_reminder"] = $next_reminder;
+        $next_reminder = $Events_model->get_details(array_merge($options, [
+            'limit' => 1, // get next reminder only
+            'get_future_events_only' => true,
+        ]))->getRow();
+        $view_data['next_reminder'] = $next_reminder;
 
         $template = new Template();
-        return $template->view("reminders/next_reminder_widget", $view_data);
+
+        return $template->view('reminders/next_reminder_widget', $view_data);
     }
 }
 
-/**
+/*
  * get total leads overview widget
  * @param string $type
- * 
+ *
  * @return html
  */
 if (!function_exists('leads_overview_widget')) {
-
-    function leads_overview_widget() {
+    function leads_overview_widget()
+    {
         $ci = new Security_Controller(false);
         $permissions = $ci->login_user->permissions;
 
-        if ($ci->login_user->is_admin || get_array_value($permissions, "lead") == "all") {
-            $options = array();
-        } else if (get_array_value($permissions, "lead") == "own") {
-            $options["show_own_leads_only_user_id"] = $ci->login_user->id;
+        if ($ci->login_user->is_admin || get_array_value($permissions, 'lead') == 'all') {
+            $options = [];
+        } elseif (get_array_value($permissions, 'lead') == 'own') {
+            $options['show_own_leads_only_user_id'] = $ci->login_user->id;
         }
 
-        $view_data["lead_statuses"] = $ci->Clients_model->get_lead_statistics($options)->lead_statuses;
-        $view_data["total_leads"] = $ci->Clients_model->count_total_leads($options);
-        $view_data["converted_to_client"] = $ci->Clients_model->get_lead_statistics($options)->converted_to_client;
+        $view_data['lead_statuses'] = $ci->Clients_model->get_lead_statistics($options)->lead_statuses;
+        $view_data['total_leads'] = $ci->Clients_model->count_total_leads($options);
+        $view_data['converted_to_client'] = $ci->Clients_model->get_lead_statistics($options)->converted_to_client;
 
         $template = new Template();
-        return $template->view("leads/leads_overview_widget", $view_data);
+
+        return $template->view('leads/leads_overview_widget', $view_data);
     }
 }
 
-/**
+/*
  * get projects widget for clients
- * 
+ *
  * @return html
  */
 if (!function_exists('projects_widget')) {
-
-    function projects_widget() {
+    function projects_widget()
+    {
         $ci = new Security_Controller(false);
-        $view_data["custom_field_headers"] = $ci->Custom_fields_model->get_custom_field_headers_for_table("projects", $ci->login_user->is_admin, $ci->login_user->user_type);
-        $view_data["custom_field_filters"] = $ci->Custom_fields_model->get_custom_field_filters("projects", $ci->login_user->is_admin, $ci->login_user->user_type);
+        $view_data['custom_field_headers'] = $ci->Custom_fields_model->get_custom_field_headers_for_table('projects', $ci->login_user->is_admin, $ci->login_user->user_type);
+        $view_data['custom_field_filters'] = $ci->Custom_fields_model->get_custom_field_filters('projects', $ci->login_user->is_admin, $ci->login_user->user_type);
 
         $view_data['project_statuses'] = $ci->Project_status_model->get_details()->getResult();
         $view_data['client_id'] = $ci->login_user->client_id;
-        $view_data['page_type'] = "dashboard";
+        $view_data['page_type'] = 'dashboard';
         $template = new Template();
-        return $template->view("clients/projects/index", $view_data);
+
+        return $template->view('clients/projects/index', $view_data);
+    }
+}
+
+// -------------------------------
+// POD: Gate Pass / PTW Dashboards
+// -------------------------------
+
+if (!function_exists('pod_gate_pass_kpis_widget')) {
+      function pod_gate_pass_kpis_widget() {
+        $ci = new Security_Controller(false);
+        $template = new Template();
+
+        // NON-ADMIN: show empty
+       if (empty($ci->login_user->is_admin)) {
+            return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+        }
+
+        // ADMIN: show real data
+        $Stats = model("App\\Models\\Pod_dashboard_stats_model");
+        $view_data = [
+            "kpis" => $Stats->gate_pass_kpis([]),
+            "scope_label" => "All companies"
+        ];
+
+        return $template->view("dashboards/pod_widgets/gate_pass_kpis_widget", $view_data);
+    }
+}
+
+if (!function_exists('pod_ptw_kpis_widget')) {
+    function pod_ptw_kpis_widget()
+    {
+        $ci = new Security_Controller(false);
+        $template = new Template();
+
+        // NON-ADMIN: empty widget
+      if (empty($ci->login_user->is_admin)) {
+            return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+        }
+
+        // ADMIN: real data (global)
+        $Stats = model('App\\Models\\Pod_dashboard_stats_model');
+
+        $view_data = [
+            'kpis' => $Stats->ptw_kpis([]),
+            'scope_label' => app_lang('all_companies'),
+        ];
+
+        return $template->view('dashboards/pod_widgets/ptw_kpis_widget', $view_data);
+    }
+}
+
+if (!function_exists('pod_gate_pass_processing_times_widget')) {
+    function pod_gate_pass_processing_times_widget()
+    {
+        $ci = new Security_Controller(false);
+        $template = new Template();
+
+        // NON-ADMIN: empty widget
+       if (empty($ci->login_user->is_admin)) {
+            return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+        }
+
+        // ADMIN: real data (global)
+        $Stats = model('App\\Models\\Pod_dashboard_stats_model');
+
+        $options = ['days' => 30];
+
+        return $template->view('dashboards/pod_widgets/gate_pass_processing_times_widget', [
+            'stats' => $Stats->gate_pass_avg_processing_times($options),
+        ]);
+    }
+}
+
+if (!function_exists('pod_ptw_processing_times_widget')) {
+    function pod_ptw_processing_times_widget()
+    {
+        $ci = new Security_Controller(false);
+        $template = new Template();
+
+        // NON-ADMIN: empty widget
+      if (empty($ci->login_user->is_admin)) {
+            return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+        }
+
+        // ADMIN: real data (global)
+        $Stats = model('App\\Models\\Pod_dashboard_stats_model');
+
+        $options = ['days' => 30];
+
+        return $template->view('dashboards/pod_widgets/ptw_processing_times_widget', [
+            'stats' => $Stats->ptw_avg_processing_times($options),
+        ]);
+    }
+}
+
+if (!function_exists('pod_gate_pass_rejection_reasons_widget')) {
+    function pod_gate_pass_rejection_reasons_widget()
+    {
+        $ci = new Security_Controller(false);
+        $template = new Template();
+
+        // NON-ADMIN: empty widget
+       if (empty($ci->login_user->is_admin)) {
+            return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+        }
+
+        // ADMIN: real data (global)
+        $Stats = model('App\\Models\\Pod_dashboard_stats_model');
+
+        $options = ['days' => 90, 'limit' => 5];
+
+        return $template->view('dashboards/pod_widgets/gate_pass_rejection_reasons_widget', [
+            'stats' => $Stats->gate_pass_top_rejection_reasons($options),
+        ]);
+    }
+}
+
+if (!function_exists('pod_ptw_rejection_reasons_widget')) {
+    function pod_ptw_rejection_reasons_widget()
+    {
+        $ci = new Security_Controller(false);
+        $template = new Template();
+
+        // NON-ADMIN: empty widget
+       if (empty($ci->login_user->is_admin)) {
+            return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+        }
+
+        // ADMIN: real data (global)
+        $Stats = model('App\\Models\\Pod_dashboard_stats_model');
+
+        $options = ['days' => 90, 'limit' => 5];
+
+        return $template->view('dashboards/pod_widgets/ptw_rejection_reasons_widget', [
+            'stats' => $Stats->ptw_top_rejection_reasons($options),
+        ]);
+    }
+}
+
+if (!function_exists('pod_test_widget')) {
+    function pod_test_widget()
+    {
+        $template = new Template();
+
+        return $template->view('dashboards/pod_widgets/test_widget', []);
     }
 }

@@ -16,7 +16,7 @@ class Signin extends App_Controller {
 
     function index() {
         if ($this->Users_model->login_user_id()) {
-            app_redirect('dashboard/view');
+            app_redirect('dashboard');
         } else {
 
             $view_data["redirect"] = "";
@@ -94,10 +94,10 @@ class Signin extends App_Controller {
             if ($allowed_host === $redirect_host) {
                 return redirect()->to($redirect);
             } else {
-                app_redirect('dashboard/view');
+                app_redirect('dashboard');
             }
         } else {
-            app_redirect('dashboard/view');
+            app_redirect('dashboard');
         }
     }
 

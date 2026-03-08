@@ -1,5 +1,5 @@
-<div id="page-content" class="page-wrapper clearfix">
-    <div class="card">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+    <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("gate_pass_departments"); ?></h1>
 
@@ -7,12 +7,12 @@
                 <?php echo modal_anchor(
                     get_uri("gate_pass_departments/modal_form"),
                     "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang("add_department"),
-                    ["class" => "btn btn-default", "title" => app_lang("add_department")]
+                    ["class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang("add_department")]
                 ); ?>
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive gp-pro-table-shell">
             <table id="gate-pass-departments-table" class="display" width="100%"></table>
         </div>
     </div>

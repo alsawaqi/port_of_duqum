@@ -63,6 +63,38 @@ class Security_Controller extends App_Controller {
         $this->module_group = $info->module_group;
     }
 
+
+
+
+    // ---------------------------------------------------------
+// Tender Master (granular: view/create/update/delete per section)
+// Sections: requests, finance_inbox, procurement, committee, technical_eval, commercial_eval, reports, portal
+// ---------------------------------------------------------
+protected function can_tender(string $section, string $action): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+    $key = "can_{$action}_tender_{$section}";
+    return get_array_value($this->login_user->permissions, $key) == "1";
+}
+
+protected function access_only_tender(string $section, string $action)
+{
+    if (!$this->can_tender($section, $action)) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+protected function can_tender_3key_opening(): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+    return get_array_value($this->login_user->permissions, "can_tender_open_bids_3key") == "1";
+}
+
     //prepear the login user's permissions
     protected function get_access_info($group) {
         $info = new \stdClass();

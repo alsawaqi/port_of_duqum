@@ -1,5 +1,5 @@
-<div id="page-content" class="page-wrapper clearfix">
-    <div class="card">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+    <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("ptw_filter_requests"); ?></h1>
         </div>
@@ -59,10 +59,10 @@
 
                 <div class="row mt-3">
                     <div class="col-12">
-                        <button type="button" id="ptw-filter-btn" class="btn btn-primary">
+                        <button type="button" id="ptw-filter-btn" class="btn btn-primary gp-pro-btn">
                             <i data-feather="filter" class="icon-16"></i> <?php echo app_lang("filter"); ?>
                         </button>
-                        <button type="button" id="ptw-reset-btn" class="btn btn-default">
+                        <button type="button" id="ptw-reset-btn" class="btn gp-pro-btn-secondary">
                             <?php echo app_lang("reset"); ?>
                         </button>
                     </div>
@@ -70,7 +70,7 @@
             </form>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive gp-pro-table-shell">
             <table id="ptw-request-list-table" class="display" width="100%"></table>
         </div>
     </div>

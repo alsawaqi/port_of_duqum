@@ -1,46 +1,42 @@
 <?php
-echo view("dashboards/install_pwa");
+echo view('dashboards/install_pwa');
 ?>
 
 <div id="page-content" class="page-wrapper clearfix dashboard-view">
 
 
 
-    <div class="clearfix row">
-        <div class="col-md-12">
-            Coming soon
-        </div>
-    </div>
+  
 
     <?php
-    // if (count($dashboards)) {
-    //     echo view("dashboards/dashboard_header");
-    // }
-    ?>
+    if (count($dashboards)) {
+        echo view('dashboards/dashboard_header');
+    }
+?>
 
     <div class="clearfix row">
         <div class="col-md-12 widget-container">
             <?php
-            // echo announcements_alert_widget();
+        // echo announcements_alert_widget();
 
-            // app_hooks()->do_action('app_hook_dashboard_announcement_extension');
-            ?>
+        // app_hooks()->do_action('app_hook_dashboard_announcement_extension');
+?>
         </div>
     </div>
 
     <?php
-    // if ($widget_columns) {
-    //     echo $widget_columns;
-    // } else {
-    //     echo view("dashboards/custom_dashboards/no_widgets");
-    // }
+    if ($widget_columns) {
+        echo $widget_columns;
+    } else {
+        echo view('dashboards/custom_dashboards/no_widgets');
+    }
 
-    // $dashboard_id = isset($dashboard_id) ? $dashboard_id : 0;
-    ?>
+$dashboard_id = isset($dashboard_id) ? $dashboard_id : 0;
+?>
 
 </div>
 
-<?php // echo view("dashboards/helper_js"); 
+<?php echo view('dashboards/helper_js');
 ?>
 
 <script>
@@ -54,7 +50,7 @@ echo view("dashboards/install_pwa");
         $(".dashboard-menu, .dashboard-image").closest("a").attr("href", window.location.href);
 
         onDashboardDeleteSuccess = function(result, $selector) {
-            window.location.href = "<?php echo get_uri("dashboard"); ?>";
+            window.location.href = "<?php echo get_uri('dashboard'); ?>";
         };
 
         if (!isMobile()) {
@@ -71,7 +67,7 @@ echo view("dashboards/install_pwa");
             });
         }
 
-        <?php if ($dashboard_id && $dashboard_id === get_setting("staff_default_dashboard") && $login_user->user_type === "staff") { ?>
+        <?php if ($dashboard_id && $dashboard_id === get_setting('staff_default_dashboard') && $login_user->user_type === 'staff') { ?>
             $(".dashboards-row").each(function() { //each widgets row
                 var $rowInstance = $(this),
                     totalColumns = $rowInstance.find(".widget-container").length,
@@ -109,10 +105,10 @@ echo view("dashboards/install_pwa");
         <?php } ?>
     });
 
-    <?php if ($login_user->user_type === "client" && get_setting("client_can_access_store") && !get_setting('accept_order_before_login')) { ?>
+    <?php if ($login_user->user_type === 'client' && get_setting('client_can_access_store') && !get_setting('accept_order_before_login')) { ?>
         if (getCookie("show_cart_after_login") == "1") {
             setCookie("show_cart_after_login", "0");
-            window.location.href = "<?php echo get_uri("store/process_order"); ?>";
+            window.location.href = "<?php echo get_uri('store/process_order'); ?>";
         }
     <?php } ?>
 </script>

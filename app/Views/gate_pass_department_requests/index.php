@@ -1,10 +1,10 @@
-<div id="page-content" class="page-wrapper clearfix">
-    <div class="card">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+    <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("gate_pass_department_requests"); ?></h1>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive gp-pro-table-shell">
             <table id="gate-pass-dept-requests-table" class="display" cellspacing="0" width="100%">
             </table>
         </div>

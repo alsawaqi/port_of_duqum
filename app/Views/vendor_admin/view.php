@@ -1,5 +1,5 @@
-<div id="page-content" class="page-wrapper clearfix">
-    <div class="card">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+    <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo esc($vendor->vendor_name); ?> <span class="text-muted">(#<?php echo (int)$vendor->id; ?>)</span></h1>
         </div>

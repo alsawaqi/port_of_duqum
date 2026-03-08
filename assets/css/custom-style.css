@@ -654,16 +654,16 @@ table[id^="gp-"] .btn.btn-sm {
 
 /* ── Sidebar container ──────────────────────────────────────────── */
 .sidebar {
-    background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
-    box-shadow: 4px 0 28px rgba(0, 0, 0, 0.22) !important;
-    -webkit-box-shadow: 4px 0 28px rgba(0, 0, 0, 0.22) !important;
-    border-right: none !important;
+    background: linear-gradient(175deg, #f9fbff 0%, #eef2f7 100%) !important;
+    box-shadow: 2px 0 18px rgba(31, 41, 64, 0.12) !important;
+    -webkit-box-shadow: 2px 0 18px rgba(31, 41, 64, 0.12) !important;
+    border-right: 1px solid #e1e7f2 !important;
 }
 
 /* ── Brand / logo area ──────────────────────────────────────────── */
 .sidebar-brand {
-    background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    background: linear-gradient(175deg, #f9fbff 0%, #eef2f7 100%) !important;
+    border-bottom: 1px solid #dfe6f3 !important;
     padding: 14px 20px !important;
     display: flex !important;
     align-items: center !important;
@@ -701,7 +701,7 @@ table[id^="gp-"] .btn.btn-sm {
 
 /* ── Menu links ─────────────────────────────────────────────────── */
 .sidebar-menu li a {
-    color: #9baac4 !important;
+    color: #2f3a4c !important;
     background: transparent !important;
     margin: 2px 10px !important;
     padding: 10px 14px !important;
@@ -734,8 +734,8 @@ table[id^="gp-"] .btn.btn-sm {
 /* ── Hover state ────────────────────────────────────────────────── */
 .sidebar-menu li a:hover,
 .sidebar-menu li a:focus {
-    color: #ffffff !important;
-    background: rgba(102, 144, 244, 0.13) !important;
+    color: #1f2f50 !important;
+    background: rgba(79, 123, 247, 0.12) !important;
     transform: translateX(3px) !important;
 }
 
@@ -746,16 +746,16 @@ table[id^="gp-"] .btn.btn-sm {
 
 /* ── Active state ───────────────────────────────────────────────── */
 .sidebar-menu li.active > a {
-    color: #ffffff !important;
-    background: linear-gradient(135deg, #6690F4 0%, #4f7bf7 100%) !important;
-    box-shadow: 0 6px 18px rgba(102, 144, 244, 0.40) !important;
+    color: #1a2b48 !important;
+    background: linear-gradient(135deg, #e5ecff 0%, #cdd9ff 100%) !important;
+    box-shadow: 0 8px 18px rgba(79, 123, 247, 0.22) !important;
     font-weight: 600 !important;
     transform: translateX(0) !important;
 }
 
 .sidebar-menu li.active > a svg {
     opacity: 1 !important;
-    stroke: #ffffff !important;
+    stroke: #1f2f50 !important;
 }
 
 /* ── Badge in sidebar ───────────────────────────────────────────── */
@@ -771,7 +771,7 @@ table[id^="gp-"] .btn.btn-sm {
 
 /* ── Expand/collapse chevron ────────────────────────────────────── */
 #sidebar-menu li.expand > a::before {
-    border-color: #6b7fa0 !important;
+    border-color: #5f7193 !important;
     border-width: 0 1.5px 1.5px 0 !important;
     padding: 2.5px !important;
     right: 1.2rem !important;
@@ -780,17 +780,17 @@ table[id^="gp-"] .btn.btn-sm {
 }
 
 #sidebar-menu li.expand.open > a::before {
-    border-color: #ffffff !important;
+    border-color: #1f2f50 !important;
     top: 1.45rem !important;
 }
 
 /* ── Submenu container ──────────────────────────────────────────── */
 .sidebar-menu li ul {
-    background: rgba(0, 0, 0, 0.18) !important;
+    background: rgba(230, 236, 247, 0.65) !important;
     margin: 0 10px !important;
     border-radius: 0 0 10px 10px !important;
     padding: 4px 0 6px !important;
-    border-left: 2px solid rgba(102, 144, 244, 0.30) !important;
+    border-left: 2px solid rgba(79, 123, 247, 0.35) !important;
     margin-left: 22px !important;
     transition: max-height .3s ease !important;
 }
@@ -800,7 +800,7 @@ table[id^="gp-"] .btn.btn-sm {
     padding: 8px 14px 8px 20px !important;
     margin: 1px 6px !important;
     font-size: 12.5px !important;
-    color: #7b8fad !important;
+    color: #51607b !important;
     border-radius: 8px !important;
     display: flex !important;
     align-items: center !important;
@@ -819,7 +819,7 @@ table[id^="gp-"] .btn.btn-sm {
     display: inline-block;
     width: 5px;
     height: 5px;
-    background: #3d5070;
+    background: #6b7fa5;
     border-radius: 50%;
     flex-shrink: 0;
     transition: background .18s ease, transform .18s ease;
@@ -827,37 +827,37 @@ table[id^="gp-"] .btn.btn-sm {
 
 .sidebar-menu li ul li a:hover,
 .sidebar-menu li ul li a:focus {
-    color: #ffffff !important;
-    background: rgba(102, 144, 244, 0.12) !important;
+    color: #1f2f50 !important;
+    background: rgba(79, 123, 247, 0.12) !important;
     transform: translateX(3px) !important;
 }
 
 .sidebar-menu li ul li a:hover::before,
 .sidebar-menu li ul li a:focus::before {
-    background: #6690F4;
+    background: #4f7bf7;
     transform: scale(1.5);
 }
 
 /* ── Mobile sidebar (< 990px) ───────────────────────────────────── */
 @media (max-width: 990px) {
     .sidebar .sidebar-brand {
-        background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+        background: linear-gradient(175deg, #f9fbff 0%, #eef2f7 100%) !important;
+        border-bottom: 1px solid #dfe6f3 !important;
     }
 
     .sidebar .sidebar-scroll {
-        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+        border-top: 1px solid #e3e9f3 !important;
     }
 }
 
 /* ── Collapsed/toggled sidebar (> 991px) ────────────────────────── */
 @media (min-width: 991px) {
     .sidebar-toggled .sidebar {
-        background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+        background: linear-gradient(175deg, #f9fbff 0%, #eef2f7 100%) !important;
     }
 
     .sidebar-toggled .sidebar-brand {
-        background: linear-gradient(175deg, #1a2035 0%, #111827 100%) !important;
+        background: linear-gradient(175deg, #f9fbff 0%, #eef2f7 100%) !important;
     }
 
     .sidebar-toggled .sidebar-menu li:hover {
@@ -871,19 +871,19 @@ table[id^="gp-"] .btn.btn-sm {
     }
 
     .sidebar-toggled .sidebar-menu li ul {
-        background: linear-gradient(175deg, #1c2240 0%, #131929 100%) !important;
-        border-left: 2px solid rgba(102, 144, 244, 0.35) !important;
+        background: linear-gradient(175deg, #f5f7fb 0%, #e7edfa 100%) !important;
+        border-left: 2px solid rgba(79, 123, 247, 0.35) !important;
         margin-left: 0 !important;
         border-radius: 0 8px 8px 0 !important;
     }
 
     .sidebar-toggled .sidebar-menu li ul li a {
-        color: #9baac4 !important;
+        color: #51607b !important;
         background: transparent !important;
     }
 
     .sidebar-toggled .sidebar-menu li ul li a:hover {
-        color: #ffffff !important;
-        background: rgba(102, 144, 244, 0.12) !important;
+        color: #1f2f50 !important;
+        background: rgba(79, 123, 247, 0.12) !important;
     }
 }

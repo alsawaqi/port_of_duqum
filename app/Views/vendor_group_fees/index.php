@@ -1,5 +1,5 @@
-<div id="page-content" class="page-wrapper clearfix">
-    <div class="card">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+    <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang('vendor_group_fees'); ?></h1>
 
@@ -9,14 +9,14 @@
                     echo modal_anchor(
                         get_uri("vendor_group_fees/modal_form"),
                         "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_vendor_group_fee'),
-                        array("class" => "btn btn-default", "title" => app_lang('add_vendor_group_fee'))
+                        array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_vendor_group_fee'))
                     );
                     ?>
                 <?php } ?>
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive gp-pro-table-shell">
             <table id="vendor-group-fees-table" class="display" cellspacing="0" width="100%"></table>
         </div>
     </div>
