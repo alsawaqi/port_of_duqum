@@ -117,8 +117,7 @@ class Tender_technical_users extends Security_Controller
         $this->db->transStart();
         try {
                 $role_id = $this->_ensure_role("Tender Technical Evaluator", [
-                "can_view_tender_technical_eval",
-                 "can_update_tender_technical_eval"
+                
             ]);
 
             if (!$id) {

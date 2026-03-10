@@ -11,6 +11,7 @@ use App\Models\Tender_request_vendors_model;
  
 use App\Models\Tender_request_team_members_model;
 use App\Models\Tender_team_members_model;
+use CodeIgniter\I18n\Time;
 
 class Tender_procurement_inbox extends Security_Controller
 {
@@ -46,6 +47,8 @@ class Tender_procurement_inbox extends Security_Controller
     function list_data()
 {
     $this->access_only_tender("procurement", "view");
+
+    $this->Tenders_model->auto_progress_workflow();
 
     $req = $this->db->prefixTable("tender_requests");
     $tenders = $this->db->prefixTable("tenders");
@@ -374,7 +377,14 @@ function vendor_subcategories_suggestion()
 
     $reference = trim((string)$this->request->getPost("reference"));
     $title = trim((string)$this->request->getPost("title"));
-    $closing_at = $this->request->getPost("closing_at");
+    $closing_at = $this->_normalize_tender_datetime($this->request->getPost("closing_at"), "end");
+if (!$closing_at) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Invalid closing date."
+    ]);
+    return;
+}
 
     $tender_type = ($request->tender_type ?? "open") === "close" ? "close" : "open";
 
@@ -383,7 +393,8 @@ function vendor_subcategories_suggestion()
 
     $request_selected_vendors = $this->Tender_request_vendors_model->get_selected_vendors($tender_request_id);
     $has_request_selected_vendors = count($request_selected_vendors) > 0;
-    $has_specialty_target = ($vendor_category_id > 0 && $vendor_sub_category_id > 0);
+    // Category is sufficient for targeting; subcategory is optional.
+    $has_specialty_target = ($vendor_category_id > 0);
 
     if ($tender_type === "close" && !$has_request_selected_vendors && !$has_specialty_target) {
         echo json_encode([
@@ -398,7 +409,7 @@ function vendor_subcategories_suggestion()
         "reference" => $reference,
         "title" => $title,
         "tender_type" => $tender_type,
-        "closing_at" => date("Y-m-d H:i:s", strtotime($closing_at)),
+        "closing_at" => $closing_at,
     ];
 
     $this->db->transStart();
@@ -418,6 +429,9 @@ function vendor_subcategories_suggestion()
         echo json_encode(["success" => false, "message" => "Failed to save tender"]);
         return;
     }
+
+    // Always persist current targeting rule for this tender (audit + reload support).
+    $this->_save_target_specialty($tender_id, $vendor_category_id, $vendor_sub_category_id);
 
     // ---- Documents upload ----
     $doc_type = trim((string)$this->request->getPost("doc_type")) ?: "RFP";
@@ -467,34 +481,39 @@ function vendor_subcategories_suggestion()
         }
     }
 
-       // Auto-generate invited vendors snapshot on SAVE
-       $invited_count = 0;
+        
+             // Auto-generate invited vendors snapshot on SAVE
+             $invited_count = 0;
 
-       if ($tender_type === "close") {
-           if ($has_request_selected_vendors) {
-               // Request-level selected suppliers take priority
-               $invited_count = $this->_sync_invites_from_request($tender_id, $tender_request_id);
-           } elseif ($has_specialty_target) {
-               $invited_count = $this->_sync_invites_by_specialty($tender_id, $vendor_category_id, $vendor_sub_category_id);
-           }
-       } else {
-           $tts = $this->db->prefixTable("tender_target_specialties");
-           $tiv = $this->db->prefixTable("tender_invited_vendors");
-   
-           $this->db->query("UPDATE $tts SET deleted=1 WHERE tender_id=?", [$tender_id]);
-           $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
-       }
+             if ($has_request_selected_vendors) {
+                 // Request-level selected vendors take priority
+                 $invited_count = $this->_sync_invites_from_request($tender_id, $tender_request_id);
+             } elseif ($has_specialty_target) {
+                 // If procurement targeted a category/subcategory, build the vendor snapshot
+                 $invited_count = $this->_sync_invites_by_specialty($tender_id, $vendor_category_id, $vendor_sub_category_id);
+             } else {
+                 // No request-vendors and no specialty target => clear active invite snapshot
+                 $tiv = $this->db->prefixTable("tender_invited_vendors");
+                 $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
+             }
 
 
     // optional: publish on save
     $publish_now = $this->request->getPost("publish_now") ? 1 : 0;
     if ($publish_now) {
-        $publish_data = [
-            "status" => "published",
-            "published_at" => date("Y-m-d H:i:s"),
-            "updated_at" => date("Y-m-d H:i:s")
-        ];
-
+        $fresh_tender = $this->Tenders_model->get_by_request_id($tender_request_id);
+    
+        $publish_error = $this->_validate_tender_can_publish($fresh_tender, $closing_at);
+        if ($publish_error) {
+            $this->db->transComplete();
+            echo json_encode([
+                "success" => false,
+                "message" => $publish_error
+            ]);
+            return;
+        }
+    
+        $publish_data = $this->_build_publish_payload($fresh_tender);
         $this->Tenders_model->ci_save($publish_data, $tender_id);
     }
 
@@ -509,23 +528,43 @@ if ($this->db->transStatus() === false) {
     ]);
     return;
 }
-    echo json_encode([
-        "success" => true,
-        "message" => "Tender saved. Vendors matched: " . (int)$invited_count,
-        "tender_id" => $tender_id
-    ]);
+echo json_encode([
+    "success" => true,
+    "message" => ($publish_now ? "Tender published" : "Tender saved") . ". Vendors matched: " . (int) $invited_count,
+    "tender_id" => $tender_id
+]);
 }
 
+private function _save_target_specialty(int $tender_id, int $vendor_category_id = 0, int $vendor_sub_category_id = 0): void
+{
+    $tts = $this->db->prefixTable("tender_target_specialties");
 
+    // Replace existing active targeting with latest selection.
+    $this->db->query("UPDATE $tts SET deleted=1 WHERE tender_id=?", [$tender_id]);
+
+    if ($vendor_category_id <= 0) {
+        return;
+    }
+
+    $this->db->query(
+        "INSERT INTO $tts (tender_id, vendor_category_id, vendor_sub_category_id, created_by, created_at, deleted)
+         VALUES (?, ?, ?, ?, ?, 0)",
+        [
+            $tender_id,
+            $vendor_category_id,
+            $vendor_sub_category_id > 0 ? $vendor_sub_category_id : null,
+            $this->login_user->id,
+            date("Y-m-d H:i:s")
+        ]
+    );
+}
 
 private function _sync_invites_from_request(int $tender_id, int $tender_request_id): int
 {
     $trv = $this->db->prefixTable("tender_request_vendors");
     $tiv = $this->db->prefixTable("tender_invited_vendors");
-    $tts = $this->db->prefixTable("tender_target_specialties");
     $vendors = $this->db->prefixTable("vendors");
 
-    $this->db->query("UPDATE $tts SET deleted=1 WHERE tender_id=?", [$tender_id]);
     $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
 
     $rows = $this->db->query(
@@ -599,86 +638,122 @@ private function _sync_teams_from_request(int $tender_id, int $tender_request_id
         array_map(fn($u) => (int) $u->id, $grouped["itc_member"] ?? [])
     );
 }
-        private function _sync_invites_by_specialty(int $tender_id, int $vendor_category_id, int $vendor_sub_category_id): int
-        {
-            $tts = $this->db->prefixTable("tender_target_specialties");
-            $tiv = $this->db->prefixTable("tender_invited_vendors");
-            $vendors = $this->db->prefixTable("vendors");
-            $spec = $this->db->prefixTable("vendor_specialties");
+private function _sync_invites_by_specialty(int $tender_id, int $vendor_category_id, int $vendor_sub_category_id): int
+{
+    $tiv = $this->db->prefixTable("tender_invited_vendors");
+    $vendors = $this->db->prefixTable("vendors");
+    $spec = $this->db->prefixTable("vendor_specialties");
 
-            // clear previous targeting + invites (keep history via soft delete)
-            $this->db->query("UPDATE $tts SET deleted=1 WHERE tender_id=?", [$tender_id]);
-            $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
+    // Rebuild invite snapshot from targeting.
+    $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
 
-            // record targeting rule
-            $this->db->query(
-                "INSERT INTO $tts (tender_id, vendor_category_id, vendor_sub_category_id, created_by, created_at, deleted)
-                VALUES (?, ?, ?, ?, ?, 0)",
-                [$tender_id, $vendor_category_id, $vendor_sub_category_id, $this->login_user->id, date("Y-m-d H:i:s")]
-            );
+    $sql = "SELECT DISTINCT $vendors.id AS vendor_id
+            FROM $spec
+            JOIN $vendors ON $vendors.id=$spec.vendor_id
+            WHERE $spec.deleted=0
+              AND $spec.status='approved'
+              AND $vendors.deleted=0
+              AND $vendors.status='approved'
+              AND $spec.vendor_category_id=?";
+    $params = [$vendor_category_id];
 
-            // ✅ approved vendor + approved specialty
-            $rows = $this->db->query(
-                "SELECT DISTINCT $vendors.id AS vendor_id
-                FROM $spec
-                JOIN $vendors ON $vendors.id=$spec.vendor_id
-                WHERE $spec.deleted=0
-                AND $spec.status='approved'
-                AND $vendors.deleted=0
-                AND $vendors.status='approved'
-                AND $spec.vendor_category_id=?
-                AND $spec.vendor_sub_category_id=?",
-                [$vendor_category_id, $vendor_sub_category_id]
-            )->getResult();
-
-            if (!$rows) return 0;
-
-            $now = date("Y-m-d H:i:s");
-            $count = 0;
-
-            foreach ($rows as $r) {
-                $vendor_id = (int)$r->vendor_id;
-                if (!$vendor_id) continue;
-
-                $this->db->query(
-                    "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                    VALUES (?, ?, 'sent', ?, ?, 0)",
-                    [$tender_id, $vendor_id, $this->login_user->id, $now]
-                );
-                $count++;
-            }
-
-            return $count;
-        }
-
-    function publish()
-    {
-        $this->validate_submitted_data(["tender_request_id" => "required|numeric"]);
-        $this->access_only_tender("procurement", "update");
-
-        $tender_request_id = (int)$this->request->getPost("tender_request_id");
-
-        $tender = $this->Tenders_model->get_by_request_id($tender_request_id);
-        if (!$tender || !$tender->id) {
-            echo json_encode(["success" => false, "message" => "Create the tender first"]);
-            return;
-        }
-
-        if (empty($tender->closing_at)) {
-            echo json_encode(["success" => false, "message" => "Closing date is required"]);
-            return;
-        }
-
-        $publish_data = [
-            "status" => "published",
-            "published_at" => date("Y-m-d H:i:s"),
-            "updated_at" => date("Y-m-d H:i:s")
-        ];
-
-        $this->Tenders_model->ci_save($publish_data, (int)$tender->id);
-
-        echo json_encode(["success" => true, "message" => "Tender published"]);
+    if ($vendor_sub_category_id > 0) {
+        $sql .= " AND $spec.vendor_sub_category_id=?";
+        $params[] = $vendor_sub_category_id;
     }
+
+    $rows = $this->db->query($sql, $params)->getResult();
+    if (!$rows) {
+        return 0;
+    }
+
+    $now = date("Y-m-d H:i:s");
+    $count = 0;
+
+    foreach ($rows as $r) {
+        $vendor_id = (int) $r->vendor_id;
+        if (!$vendor_id) {
+            continue;
+        }
+
+        $this->db->query(
+            "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
+             VALUES (?, ?, 'sent', ?, ?, 0)",
+            [$tender_id, $vendor_id, $this->login_user->id, $now]
+        );
+        $count++;
+    }
+
+    return $count;
+}
+
+function publish()
+{
+    $this->validate_submitted_data(["tender_request_id" => "required|numeric"]);
+    $this->access_only_tender("procurement", "update");
+
+    $tender_request_id = (int) $this->request->getPost("tender_request_id");
+
+    $this->Tenders_model->auto_progress_workflow();
+
+    $tender = $this->Tenders_model->get_by_request_id($tender_request_id);
+    if (!$tender || !$tender->id) {
+        echo json_encode([
+            "success" => false,
+            "message" => "Create the tender first"
+        ]);
+        return;
+    }
+
+    $normalized_closing_at = $this->_normalize_tender_datetime($tender->closing_at, "end");
+    $publish_error = $this->_validate_tender_can_publish($tender, $normalized_closing_at);
+    if ($publish_error) {
+        echo json_encode([
+            "success" => false,
+            "message" => $publish_error
+        ]);
+        return;
+    }
+
+    $request_selected_vendors = $this->Tender_request_vendors_model->get_selected_vendors($tender_request_id);
+    $has_request_selected_vendors = count($request_selected_vendors) > 0;
+
+    $tts = $this->db->prefixTable("tender_target_specialties");
+    $target = $this->db->query(
+        "SELECT vendor_category_id, vendor_sub_category_id
+         FROM $tts
+         WHERE deleted=0 AND tender_id=?
+         ORDER BY id DESC
+         LIMIT 1",
+        [(int) $tender->id]
+    )->getRow();
+
+    $invited_count = 0;
+
+    if ($has_request_selected_vendors) {
+        $invited_count = $this->_sync_invites_from_request((int) $tender->id, $tender_request_id);
+    } elseif ($target && (int) ($target->vendor_category_id ?? 0) > 0) {
+        $invited_count = $this->_sync_invites_by_specialty(
+            (int) $tender->id,
+            (int) $target->vendor_category_id,
+            (int) ($target->vendor_sub_category_id ?? 0)
+        );
+    } else {
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $this->db->query(
+            "UPDATE $tiv SET deleted=1 WHERE tender_id=?",
+            [(int) $tender->id]
+        );
+    }
+
+    $publish_data = $this->_build_publish_payload($tender);
+    $this->Tenders_model->ci_save($publish_data, (int) $tender->id);
+
+    echo json_encode([
+        "success" => true,
+        "message" => "Tender published. Vendors invited: " . (int) $invited_count
+    ]);
+}
 
     function delete_document()
     {
@@ -691,6 +766,97 @@ private function _sync_teams_from_request(int $tender_id, int $tender_request_id
 
         echo json_encode(["success" => true, "message" => "Document deleted"]);
     }
+
+    private function _get_tender_business_now(): string
+{
+    return Time::now('Asia/Muscat')->toDateTimeString();
+}
+
+private function _normalize_tender_datetime($value, $edge = "end")
+{
+    $value = trim((string) $value);
+    if ($value === "") {
+        return null;
+    }
+
+    // HTML datetime-local: YYYY-MM-DDTHH:MM
+    if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/', $value)) {
+        $value = str_replace("T", " ", $value);
+        if (strlen($value) === 16) {
+            return $value . ":00";
+        }
+        return $value;
+    }
+
+    // MySQL datetime: YYYY-MM-DD HH:MM:SS
+    if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/', $value)) {
+        return $value;
+    }
+
+    // Date only: YYYY-MM-DD
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return $value . ($edge === "end" ? " 23:59:59" : " 00:00:00");
+    }
+
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return null;
+    }
+
+    return date("Y-m-d H:i:s", $ts);
+}
+
+private function _build_publish_payload($tender): array
+{
+    $now = $this->_get_tender_business_now();
+
+    return [
+        "status" => "published",
+        "workflow_stage" => "bidding",
+        "published_at" => $now,
+
+        // Reset downstream workflow dates so publish always starts clean.
+        "technical_start_at" => null,
+        "technical_end_at" => null,
+        "technical_locked_at" => null,
+        "committee_3key_start_at" => null,
+        "committee_3key_end_at" => null,
+        "commercial_start_at" => null,
+        "commercial_end_at" => null,
+        "commercial_unlocked_at" => null,
+        "award_ready_at" => null,
+
+        "updated_at" => $now
+    ];
+}
+
+private function _validate_tender_can_publish($tender, $normalized_closing_at): ?string
+{
+    if (!$tender || empty($tender->id)) {
+        return "Create the tender first";
+    }
+
+    if (!$normalized_closing_at) {
+        return "Closing date is required";
+    }
+
+    $closingAt = Time::parse($normalized_closing_at, 'Asia/Muscat');
+    $now = Time::now('Asia/Muscat');
+
+    if ($closingAt->getTimestamp() <= $now->getTimestamp()) {
+        return "Closing date must be in the future.";
+    }
+
+    if (($tender->status ?? "") === "closed") {
+        return "Closed tenders cannot be published again.";
+    }
+
+    if (in_array(($tender->workflow_stage ?? "bidding"), ["technical", "committee_3key", "commercial", "award_decision"], true)) {
+        return "This tender has already moved beyond bidding stage and cannot be republished.";
+    }
+
+    return null;
+}
 
     private function _make_row($row)
     {
@@ -709,7 +875,7 @@ private function _sync_teams_from_request(int $tender_id, int $tender_request_id
         );
 
         $publish = "";
-        if ($row->tender_id && ($row->tender_status ?? "") !== "published") {
+        if ($row->tender_id && in_array(($row->tender_status ?? ""), ["draft", ""], true)) {
             $publish = js_anchor(
                 "<i data-feather='send' class='icon-16'></i>",
                 [

@@ -3335,4 +3335,9 @@ $lang["add_tender_commercial_user"] = "إضافة مستخدم تقييم تجا
 $lang["tender_department_manager_inbox"] = "وارد مدير قسم المزايدة";
 
 
+
+$lang["tender_technical_inbox"] = "وارد التقييم الفني للمزايدة";
+$lang["tender_commercial_inbox"] = "وارد التقييم التجاري للمزايدة";
+
+
 return $lang;

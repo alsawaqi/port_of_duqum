@@ -1,11 +1,30 @@
-<?php echo form_open(get_uri("tender_requests/save"), ["id" => "tender-request-form", "class" => "general-form"]); ?>
-<input type="hidden" name="id" value="<?php echo $model_info->id ?? ""; ?>" />
+<?php
+$selected_technical_ids = [];
+foreach (($selected_technical_users ?? []) as $u) {
+    $selected_technical_ids[] = (int) $u->id;
+}
+
+$selected_commercial_ids = [];
+foreach (($selected_commercial_users ?? []) as $u) {
+    $selected_commercial_ids[] = (int) $u->id;
+}
+
+$selected_itc_member_ids = [];
+foreach (($selected_itc_members ?? []) as $u) {
+    $selected_itc_member_ids[] = (int) $u->id;
+}
+
+$selected_chairman_id = (int) ($selected_chairman->id ?? 0);
+$selected_secretary_id = (int) ($selected_secretary->id ?? 0);
+?>
+<?php echo form_open(get_uri('tender_requests/save'), ['id' => 'tender-request-form', 'class' => 'general-form']); ?>
+<input type="hidden" name="id" value="<?php echo $model_info->id ?? ''; ?>" />
 
 <div class="modal-body">
 
     <div class="form-group">
         <label>Requester Name</label>
-        <input type="text" class="form-control" value="<?php echo esc($requester_display->full_name ?? ($this->login_user->first_name . ' ' . $this->login_user->last_name)); ?>" readonly>
+        <input type="text" class="form-control" value="<?php echo esc($requester_display->full_name ?? ($this->login_user->first_name.' '.$this->login_user->last_name)); ?>" readonly>
         <small class="text-muted">Auto-filled from the logged-in Tender Requester.</small>
     </div>
 
@@ -28,9 +47,9 @@
         <div class="form-group">
             <label>Company <span class="text-danger">*</span></label>
             <?php echo form_dropdown(
-                "company_id",
-                $company_dropdown ?? ["" => "- " . app_lang("select") . " -"],
-                $model_info->company_id ?? "",
+                'company_id',
+                $company_dropdown ?? ['' => '- '.app_lang('select').' -'],
+                $model_info->company_id ?? '',
                 "class='form-control' id='tender-company' required"
             ); ?>
         </div>
@@ -38,7 +57,7 @@
         <div class="form-group">
             <label>Department</label>
             <select name="department_id" id="tender-department" class="form-control">
-                <option value="">- <?php echo app_lang("select"); ?> -</option>
+                <option value="">- <?php echo app_lang('select'); ?> -</option>
             </select>
         </div>
 
@@ -64,62 +83,62 @@
 
     <div class="form-group">
         <label>Reference <span class="text-danger">*</span></label>
-        <?php echo form_input(["name" => "reference", "value" => $model_info->reference ?? "", "class" => "form-control", "required" => true]); ?>
+        <?php echo form_input(['name' => 'reference', 'value' => $model_info->reference ?? '', 'class' => 'form-control', 'required' => true]); ?>
     </div>
 
     <div class="form-group">
         <label>Request Date</label>
-        <?php echo form_input(["name" => "request_date", "type" => "date", "value" => $model_info->request_date ?? date("Y-m-d"), "class" => "form-control"]); ?>
+        <?php echo form_input(['name' => 'request_date', 'type' => 'date', 'value' => $model_info->request_date ?? date('Y-m-d'), 'class' => 'form-control']); ?>
     </div>
 
     <div class="form-group">
         <label>Budget Assigned (OMR) <span class="text-danger">*</span></label>
-        <?php echo form_input(["name" => "budget_omr", "type" => "number", "step" => "0.001", "value" => $model_info->budget_omr ?? "0.000", "class" => "form-control", "required" => true]); ?>
+        <?php echo form_input(['name' => 'budget_omr', 'type' => 'number', 'step' => '0.001', 'value' => $model_info->budget_omr ?? '0.000', 'class' => 'form-control', 'required' => true]); ?>
         <small class="text-muted">Fee auto-calculates as Budget × 0.05%</small>
     </div>
 
     <div class="form-group">
         <label>Estimated Previous Amount (optional)</label>
-        <?php echo form_input(["name" => "estimated_previous_amount", "type" => "number", "step" => "0.001", "value" => $model_info->estimated_previous_amount ?? "", "class" => "form-control"]); ?>
+        <?php echo form_input(['name' => 'estimated_previous_amount', 'type' => 'number', 'step' => '0.001', 'value' => $model_info->estimated_previous_amount ?? '', 'class' => 'form-control']); ?>
     </div>
 
     <div class="form-group">
         <label>Estimated Previous Notes</label>
-        <?php echo form_textarea(["name" => "estimated_previous_notes", "value" => $model_info->estimated_previous_notes ?? "", "class" => "form-control"]); ?>
+        <?php echo form_textarea(['name' => 'estimated_previous_notes', 'value' => $model_info->estimated_previous_notes ?? '', 'class' => 'form-control']); ?>
     </div>
 
     <div class="form-group">
         <label>Subject <span class="text-danger">*</span></label>
-        <?php echo form_input(["name" => "subject", "value" => $model_info->subject ?? "", "class" => "form-control", "required" => true]); ?>
+        <?php echo form_input(['name' => 'subject', 'value' => $model_info->subject ?? '', 'class' => 'form-control', 'required' => true]); ?>
     </div>
 
     <div class="form-group">
         <label>Brief Description <span class="text-danger">*</span></label>
-        <?php echo form_textarea(["name" => "brief_description", "value" => $model_info->brief_description ?? "", "class" => "form-control", "required" => true]); ?>
+        <?php echo form_textarea(['name' => 'brief_description', 'value' => $model_info->brief_description ?? '', 'class' => 'form-control', 'required' => true]); ?>
     </div>
 
     <div class="form-group">
         <label>Announcement</label>
         <?php
         echo form_dropdown(
-            "announcement",
-            ["local" => "Local", "international" => "International"],
-            $model_info->announcement ?? "local",
+            'announcement',
+            ['local' => 'Local', 'international' => 'International'],
+            $model_info->announcement ?? 'local',
             "class='form-control' required"
         );
-        ?>
+?>
     </div>
 
     <div class="form-group">
         <label>Tender Type</label>
         <?php
-        echo form_dropdown(
-            "tender_type",
-            ["open" => "Open", "close" => "Close"],
-            $model_info->tender_type ?? "open",
-            "class='form-control' required"
-        );
-        ?>
+echo form_dropdown(
+    'tender_type',
+    ['open' => 'Open', 'close' => 'Close'],
+    $model_info->tender_type ?? 'open',
+    "class='form-control' required"
+);
+?>
     </div>
 
     <div class="form-group" id="close-vendors-wrap" style="display:none;">
@@ -139,13 +158,13 @@
     <div class="form-group">
         <label>Evaluation Method</label>
         <?php
-        echo form_dropdown(
-            "evaluation_method",
-            ["separate" => "Technical & Commercial Separate", "combined" => "Combined"],
-            $model_info->evaluation_method ?? "separate",
-            "class='form-control' required"
-        );
-        ?>
+echo form_dropdown(
+    'evaluation_method',
+    ['separate' => 'Technical & Commercial Separate', 'combined' => 'Combined'],
+    $model_info->evaluation_method ?? 'separate',
+    "class='form-control' required"
+);
+?>
     </div>
 
     <div class="form-group">
@@ -153,41 +172,41 @@
         <div class="row">
             <div class="col-md-6">
                 <label class="text-muted">Technical Weight</label>
-                <?php echo form_input(["name" => "technical_weight", "type" => "number", "value" => $model_info->technical_weight ?? 70, "class" => "form-control", "required" => true]); ?>
+                <?php echo form_input(['name' => 'technical_weight', 'type' => 'number', 'value' => $model_info->technical_weight ?? 70, 'class' => 'form-control', 'required' => true]); ?>
             </div>
             <div class="col-md-6">
                 <label class="text-muted">Commercial Weight</label>
-                <?php echo form_input(["name" => "commercial_weight", "type" => "number", "value" => $model_info->commercial_weight ?? 30, "class" => "form-control", "required" => true]); ?>
+                <?php echo form_input(['name' => 'commercial_weight', 'type' => 'number', 'value' => $model_info->commercial_weight ?? 30, 'class' => 'form-control', 'required' => true]); ?>
             </div>
         </div>
     </div>
 
-    <hr>
-    <h6>Technical Evaluation Team</h6>
-    <div class="form-group">
-        <select name="technical_user_ids[]" id="technical_user_ids" class="form-control" multiple="multiple">
-            <?php foreach (($selected_technical_users ?? []) as $u) { ?>
-                <option value="<?php echo (int) $u->id; ?>" selected="selected">
-                    <?php echo esc(trim($u->full_name . (!empty($u->email) ? " (" . $u->email . ")" : ""))); ?>
-                </option>
-            <?php } ?>
-        </select>
-        <small class="text-muted">Select from Tender Technical Users.</small>
-    </div>
+     <hr>
+<h6>Technical Evaluation Team</h6>
+<div class="form-group">
+    <select name="technical_user_ids[]" id="technical_user_ids" class="form-control" multiple="multiple">
+        <?php foreach (($technical_pool_users ?? []) as $u) { ?>
+            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_technical_ids, true) ? 'selected="selected"' : ''; ?>>
+                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+            </option>
+        <?php } ?>
+    </select>
+    <small class="text-muted">Select from Tender Technical Users.</small>
+</div>
 
-    <h6>Commercial Evaluation Team</h6>
-    <div class="form-group">
-        <select name="commercial_user_ids[]" id="commercial_user_ids" class="form-control" multiple="multiple">
-            <?php foreach (($selected_commercial_users ?? []) as $u) { ?>
-                <option value="<?php echo (int) $u->id; ?>" selected="selected">
-                    <?php echo esc(trim($u->full_name . (!empty($u->email) ? " (" . $u->email . ")" : ""))); ?>
-                </option>
-            <?php } ?>
-        </select>
-        <small class="text-muted">Select from Tender Commercial Users.</small>
-    </div>
+<h6>Commercial Evaluation Team</h6>
+<div class="form-group">
+    <select name="commercial_user_ids[]" id="commercial_user_ids" class="form-control" multiple="multiple">
+        <?php foreach (($commercial_pool_users ?? []) as $u) { ?>
+            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_commercial_ids, true) ? 'selected="selected"' : ''; ?>>
+                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+            </option>
+        <?php } ?>
+    </select>
+    <small class="text-muted">Select from Tender Commercial Users.</small>
+</div>
 
-    <hr>
+<hr>
 <h6>Tender Committee / ITT</h6>
 
 <div class="alert alert-info">
@@ -201,10 +220,10 @@
 <div class="form-group">
     <label>Chairman</label>
     <select name="chairman_user_id" id="chairman_user_id" class="form-control">
-        <option value="">- <?php echo app_lang("select"); ?> -</option>
-        <?php if (!empty($selected_chairman)) { ?>
-            <option value="<?php echo (int) $selected_chairman->id; ?>" selected="selected">
-                <?php echo esc(trim($selected_chairman->full_name . (!empty($selected_chairman->email) ? " (" . $selected_chairman->email . ")" : ""))); ?>
+        <option value="">- <?php echo app_lang('select'); ?> -</option>
+        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
+            <option value="<?php echo (int) $u->id; ?>" <?php echo ((int) $u->id === $selected_chairman_id) ? 'selected="selected"' : ''; ?>>
+                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
             </option>
         <?php } ?>
     </select>
@@ -214,10 +233,10 @@
 <div class="form-group">
     <label>Secretary</label>
     <select name="secretary_user_id" id="secretary_user_id" class="form-control">
-        <option value="">- <?php echo app_lang("select"); ?> -</option>
-        <?php if (!empty($selected_secretary)) { ?>
-            <option value="<?php echo (int) $selected_secretary->id; ?>" selected="selected">
-                <?php echo esc(trim($selected_secretary->full_name . (!empty($selected_secretary->email) ? " (" . $selected_secretary->email . ")" : ""))); ?>
+        <option value="">- <?php echo app_lang('select'); ?> -</option>
+        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
+            <option value="<?php echo (int) $u->id; ?>" <?php echo ((int) $u->id === $selected_secretary_id) ? 'selected="selected"' : ''; ?>>
+                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
             </option>
         <?php } ?>
     </select>
@@ -227,9 +246,9 @@
 <div class="form-group">
     <label>ITT Members</label>
     <select name="itc_member_user_ids[]" id="itc_member_user_ids" class="form-control" multiple="multiple">
-        <?php foreach (($selected_itc_members ?? []) as $u) { ?>
-            <option value="<?php echo (int) $u->id; ?>" selected="selected">
-                <?php echo esc(trim($u->full_name . (!empty($u->email) ? " (" . $u->email . ")" : ""))); ?>
+        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
+            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_itc_member_ids, true) ? 'selected="selected"' : ''; ?>>
+                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
             </option>
         <?php } ?>
     </select>
@@ -237,7 +256,8 @@
         Select separate committee members only. Chairman and Secretary are selected above.
     </small>
 </div>
-
+     
+    
 
 </div>
 
@@ -267,34 +287,40 @@
     });
 }
 
-        function rebuildOptions(selector, items, selectedValues, includeBlank) {
-            const $el = $(selector);
-            const isMultiple = $el.prop("multiple");
+      function rebuildOptions(selector, items, selectedValues, includeBlank) {
+    const $el = $(selector);
+    const isMultiple = $el.prop("multiple");
 
-            if (!Array.isArray(selectedValues)) {
-                selectedValues = selectedValues ? [String(selectedValues)] : [];
-            } else {
-                selectedValues = selectedValues.map(v => String(v));
-            }
+    if (!Array.isArray(selectedValues)) {
+        selectedValues = selectedValues ? [String(selectedValues)] : [];
+    } else {
+        selectedValues = selectedValues.map(v => String(v));
+    }
 
-            let html = "";
-            if (includeBlank) {
-                html += "<option value=''>- <?php echo app_lang('select'); ?> -</option>";
-            }
+    let html = "";
+    if (includeBlank) {
+        html += "<option value=''>- <?php echo app_lang('select'); ?> -</option>";
+    }
 
-            (items || []).forEach(function (item) {
-                const id = String(item.id);
-                const text = item.text || "";
-                const selected = selectedValues.includes(id) ? "selected" : "";
-                html += "<option value='" + id + "' " + selected + ">" + text + "</option>";
-            });
+    (items || []).forEach(function (item) {
+        const id = String(item.id);
+        const text = item.text || "";
+        const selected = selectedValues.includes(id) ? "selected='selected'" : "";
+        html += "<option value='" + id + "' " + selected + ">" + text + "</option>";
+    });
 
-            $el.html(html);
+    $el.html(html);
 
-            if ($el.hasClass("select2-hidden-accessible")) {
-                $el.trigger("change.select2");
-            }
-        }
+    if (isMultiple) {
+        $el.val(selectedValues);
+    } else {
+        $el.val(selectedValues.length ? selectedValues[0] : "");
+    }
+
+    if ($el.hasClass("select2-hidden-accessible")) {
+        $el.trigger("change");
+    }
+}
 
         function fetchOptions(url, payload, callback) {
             $.ajax({
@@ -456,25 +482,31 @@
         }
 
         const initialCompany = $("#tender-company").val();
-        const initialDept = "<?php echo esc($model_info->department_id ?? ""); ?>";
+const initialDept = "<?php echo esc($model_info->department_id ?? ""); ?>";
+const companyFieldLocked = $("#tender-company").is("input[type='hidden']");
 
-        if (initialCompany) {
-            loadDepartments(initialCompany, initialDept);
-            loadDepartmentManagerContext();
-        }
+if (initialCompany) {
+    loadDepartments(initialCompany, initialDept);
+    loadDepartmentManagerContext();
+}
 
-        $("#tender-company").on("change", function () {
-            loadDepartments($(this).val(), "");
+// Only auto-fetch pools on load for admin / visible company dropdown.
+// For locked Tender Department User context, use the server-rendered options first.
+if (!companyFieldLocked) {
+    loadTenderPools();
+}
 
-            // clear current selections when company changes
-            $("#technical_user_ids").val([]);
-            $("#commercial_user_ids").val([]);
-            $("#chairman_user_id").val("");
-            $("#secretary_user_id").val("");
-            $("#itc_member_user_ids").val([]);
+$("#tender-company").on("change", function () {
+    loadDepartments($(this).val(), "");
 
-            loadTenderPools();
-        });
+    $("#technical_user_ids").val([]).trigger("change");
+    $("#commercial_user_ids").val([]).trigger("change");
+    $("#chairman_user_id").val("").trigger("change");
+    $("#secretary_user_id").val("").trigger("change");
+    $("#itc_member_user_ids").val([]).trigger("change");
+
+    loadTenderPools();
+});
 
         $("#tender-department").on("change", function () {
             loadDepartmentManagerContext();

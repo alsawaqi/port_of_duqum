@@ -205,10 +205,15 @@ class Left_menu
             if ($tender_view("procurement")) {
                 $tender_submenu[] = array("name" => "tender_procurement_inbox", "url" => "tender_procurement_inbox", "class" => "briefcase");
             }
-            if ($tender_view("technical")) {
+            if ($tender_view("technical_eval")) {
                 $tender_submenu[] = array("name" => "tender_technical_inbox", "url" => "tender_technical_inbox", "class" => "tool");
             }
-            if ($tender_view("commercial")) {
+            
+            if ($tender_view("committee") && ($this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_tender_open_bids_3key"))) {
+                $tender_submenu[] = array("name" => "tender_committee_opening_inbox", "url" => "tender_committee_opening_inbox", "class" => "unlock");
+            }
+            
+            if ($tender_view("commercial_eval")) {
                 $tender_submenu[] = array("name" => "tender_commercial_inbox", "url" => "tender_commercial_inbox", "class" => "bar-chart-2");
             }
             if (count($tender_submenu)) {
@@ -1157,10 +1162,18 @@ $submenu_names = [];
                         $tender_view = function ($key) use ($permissions) {
                             return $this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_view_tender_" . $key);
                         };
+                    
                         if ($tender_view("requests")) $tender_sub[] = array("name" => "tender_requests", "url" => "tender_requests", "class" => "file-text");
+                        if ($tender_view("manager_inbox")) $tender_sub[] = array("name" => "tender_department_manager_inbox", "url" => "tender_department_manager_inbox", "class" => "user-check");
                         if ($tender_view("finance_inbox")) $tender_sub[] = array("name" => "tender_finance_inbox", "url" => "tender_finance_inbox", "class" => "dollar-sign");
                         if ($tender_view("committee")) $tender_sub[] = array("name" => "tender_committee_inbox", "url" => "tender_committee_inbox", "class" => "users");
                         if ($tender_view("procurement")) $tender_sub[] = array("name" => "tender_procurement_inbox", "url" => "tender_procurement_inbox", "class" => "briefcase");
+                        if ($tender_view("technical_eval")) $tender_sub[] = array("name" => "tender_technical_inbox", "url" => "tender_technical_inbox", "class" => "tool");
+                        if ($tender_view("committee") && ($this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_tender_open_bids_3key"))) {
+                            $tender_sub[] = array("name" => "tender_committee_opening_inbox", "url" => "tender_committee_opening_inbox", "class" => "unlock");
+                        }
+                        if ($tender_view("commercial_eval")) $tender_sub[] = array("name" => "tender_commercial_inbox", "url" => "tender_commercial_inbox", "class" => "bar-chart-2");
+                    
                         $final_left_menu_items[$last_final_menu_item]["submenu"] = $tender_sub;
                         $final_left_menu_items[$last_final_menu_item]["url"] = "#";
 
@@ -1310,13 +1323,17 @@ $submenu_names = [];
                 $tender_view = function ($key) use ($tender_perms) {
                     return $this->ci->login_user->is_admin || (bool) get_array_value($tender_perms, "can_view_tender_" . $key);
                 };
+            
                 if ($tender_view("requests")) $tender_submenu[] = array("name" => "tender_requests", "url" => "tender_requests", "class" => "file-text");
+                if ($tender_view("manager_inbox")) $tender_submenu[] = array("name" => "tender_department_manager_inbox", "url" => "tender_department_manager_inbox", "class" => "user-plus");
                 if ($tender_view("finance_inbox")) $tender_submenu[] = array("name" => "tender_finance_inbox", "url" => "tender_finance_inbox", "class" => "dollar-sign");
                 if ($tender_view("committee")) $tender_submenu[] = array("name" => "tender_committee_inbox", "url" => "tender_committee_inbox", "class" => "users");
                 if ($tender_view("procurement")) $tender_submenu[] = array("name" => "tender_procurement_inbox", "url" => "tender_procurement_inbox", "class" => "briefcase");
-                if ($tender_view("manager_inbox")) {
-                    $tender_submenu[] = array("name" => "tender_department_manager_inbox", "url" => "tender_department_manager_inbox", "class" => "user-plus");
-                }               
+                if ($tender_view("technical_eval")) $tender_submenu[] = array("name" => "tender_technical_inbox", "url" => "tender_technical_inbox", "class" => "tool");
+                if ($tender_view("committee") && ($this->ci->login_user->is_admin || (bool) get_array_value($tender_perms, "can_tender_open_bids_3key"))) {
+                    $tender_submenu[] = array("name" => "tender_committee_opening_inbox", "url" => "tender_committee_opening_inbox", "class" => "unlock");
+                }
+                if ($tender_view("commercial_eval")) $tender_submenu[] = array("name" => "tender_commercial_inbox", "url" => "tender_commercial_inbox", "class" => "bar-chart-2");
             }
             $found_tender = false;
             foreach ($view_data["sidebar_menu"] as $k => $m) {

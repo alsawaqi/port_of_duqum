@@ -62,6 +62,15 @@
             Documents
         </a>
     </li>
+
+    <li class="nav-item">
+    <a class="nav-link"
+        data-bs-toggle="tab"
+        href="#vp-tenders"
+        data-load-url="<?= get_uri('vendor_portal/tenders'); ?>">
+        Tenders
+    </a>
+</li>
 </ul>
 
 
@@ -73,6 +82,7 @@
     <div class="tab-pane fade" id="vp-credentials" role="tabpanel"></div>
     <div class="tab-pane fade" id="vp-specialties" role="tabpanel"></div>
     <div class="tab-pane fade" id="vp-documents" role="tabpanel"></div>
+    <div class="tab-pane fade" id="vp-tenders" role="tabpanel"></div>
 </div>
 
 

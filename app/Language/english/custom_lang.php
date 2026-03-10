@@ -387,4 +387,8 @@ $lang["tender_commercial_users"] = "Tender Commercial Users";
 $lang["add_tender_commercial_user"] = "Add Commercial User";
 $lang["tender_department_manager_inbox"] = "Tender Department Manager Inbox";
 
+$lang["tender_technical_inbox"] = "Tender Technical Inbox";
+$lang["tender_commercial_inbox"] = "Tender Commercial Inbox";
+
+
 return $lang;
