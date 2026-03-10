@@ -98,6 +98,7 @@ class Ptw_portal extends Security_Controller
             "ptw_errors"          => $session->getFlashdata('ptw_errors') ?? [],
             "ptw_field_errors"    => $session->getFlashdata('ptw_field_errors') ?? [],
             "ptw_old_input"       => $session->getFlashdata('ptw_old_input') ?? [],
+            "submit_stage_label"  => $this->_get_submit_stage_label($app),
         ];
 
         return $this->template->rander("ptw_portal/applications/form", $view_data);
@@ -143,6 +144,12 @@ class Ptw_portal extends Security_Controller
             app_redirect("forbidden");
         }
         if ($existing && !$this->_can_edit_application($existing)) {
+            app_redirect("forbidden");
+        }
+
+        $existing_stage = strtolower(trim((string)($existing->stage ?? "")));
+        $existing_status = strtolower(trim((string)($existing->status ?? "")));
+        if ($existing && $submit_mode === "submit" && $existing_status === "rejected") {
             app_redirect("forbidden");
         }
 
@@ -195,23 +202,30 @@ class Ptw_portal extends Security_Controller
         $target_stage = "draft";
 
 if ($submit_mode === "draft") {
-    $data["stage"] = "draft";
-    $data["status"] = "draft";
+    // Keep revise requests in their current reviewer stage while contractor is editing.
+    if (
+        $existing &&
+        $existing_status === "revise" &&
+        in_array($existing_stage, ["hsse", "hmo", "terminal"], true)
+    ) {
+        $data["stage"] = $existing_stage;
+        $data["status"] = "revise";
+        $target_stage = $existing_stage;
+    } else {
+        $data["stage"] = "draft";
+        $data["status"] = "draft";
+        $target_stage = "draft";
+    }
     $data["completed_at"] = null;
-    $target_stage = "draft";
 } else {
     // Default first submission goes to HSSE
     $target_stage = "hsse";
 
-    // If contractor is re-submitting after revise/rejected,
-    // keep it in the SAME current stage (hsse/hmo/terminal)
+    // If contractor is re-submitting after revise, keep it in the same stage.
     if ($existing) {
-        $existing_stage = strtolower(trim((string)($existing->stage ?? "")));
-        $existing_status = strtolower(trim((string)($existing->status ?? "")));
-
         if (
             in_array($existing_stage, ["hsse", "hmo", "terminal"], true) &&
-            in_array($existing_status, ["revise", "rejected"], true)
+            $existing_status === "revise"
         ) {
             $target_stage = $existing_stage;
         }
@@ -249,7 +263,7 @@ if ($submit_mode === "draft") {
         if ($submit_mode === "submit") {
             $this->_ensure_stage_review_row($application_id, $target_stage);
         
-            $was_revision_cycle = $existing && in_array(strtolower((string)($existing->status ?? "")), ["revise", "rejected"], true);
+            $was_revision_cycle = $existing && strtolower((string)($existing->status ?? "")) === "revise";
         
             $this->_ptw_audit(
                 $application_id,
@@ -389,31 +403,30 @@ if ($submit_mode === "draft") {
 
     private function _can_edit_application($app)
     {
+        $stage = strtolower(trim((string)($app->stage ?? "")));
+        $status = strtolower(trim((string)($app->status ?? "")));
+
         if ((int)$app->applicant_user_id !== (int)$this->login_user->id && !$this->login_user->is_admin) {
             return false;
         }
-    
-        // Admin can always edit (optional, keep your current behavior)
-        if ($this->login_user->is_admin) {
-            return true;
+
+        // Portal edit is allowed only during revise cycle.
+        return $status === "revise" && in_array($stage, ["hsse", "hmo", "terminal"], true);
+    }
+
+    private function _get_submit_stage_label($app): string
+    {
+        if (!$app) {
+            return "HSSE";
         }
-    
+
         $stage = strtolower(trim((string)($app->stage ?? "")));
         $status = strtolower(trim((string)($app->status ?? "")));
-    
-        // Draft is editable
-        if ($status === "draft") {
-            return true;
+        if ($status === "revise" && in_array($stage, ["hsse", "hmo", "terminal"], true)) {
+            return strtoupper($stage);
         }
-    
-        // Contractor can edit ONLY when reviewer requested changes (revise/rejected),
-        // and only while request is still in a review stage (not completed)
-        if (in_array($status, ["revise", "rejected"], true) && in_array($stage, ["hsse", "hmo", "terminal"], true)) {
-            return true;
-        }
-    
-        // submitted / in_review / approved / completed => no edit
-        return false;
+
+        return "HSSE";
     }
 
     private function _validate_ptw_submission($existing, array $defs_index, string $submit_mode): array
@@ -723,6 +736,19 @@ if ($submit_mode === "draft") {
         if ($status === "rejected") $statusClass = "badge bg-danger";
         if ($status === "revise") $statusClass = "badge bg-warning text-dark";
 
+        $stage = strtolower(trim((string)($row->stage ?? "")));
+        $stageClass = "badge bg-secondary";
+        if ($stage === "draft") $stageClass = "badge bg-light text-dark border";
+        if ($stage === "hsse") $stageClass = "badge bg-info";
+        if ($stage === "hmo") $stageClass = "badge bg-primary";
+        if ($stage === "terminal") $stageClass = "badge bg-dark";
+        if ($stage === "completed") $stageClass = "badge bg-success";
+
+        $statusBadge = "<span class='" . $statusClass . "'>" . ucwords(str_replace("_", " ", $status)) . "</span>";
+        $stageLabel = $stage !== "" ? strtoupper(str_replace("_", " ", $stage)) : "-";
+        $stageBadge = "<span class='" . $stageClass . "'>" . esc($stageLabel) . "</span>";
+        $statusStage = "<div class='d-flex justify-content-center align-items-center gap-1 flex-wrap'>" . $statusBadge . $stageBadge . "</div>";
+
         $actions = anchor(get_uri("ptw_portal/application_details/" . $row->id), "<i data-feather='eye' class='icon-14'></i>", [
             "class" => "btn btn-default btn-sm",
             "title" => "View"
@@ -742,7 +768,7 @@ if ($submit_mode === "draft") {
             esc($row->work_supervisor_name),
             esc(substr((string) $row->work_from, 0, 16)),
             esc(substr((string) $row->work_to, 0, 16)),
-            "<span class='" . $statusClass . "'>" . ucwords(str_replace("_", " ", $status)) . "</span>",
+            $statusStage,
             $actions,
         ];
     }

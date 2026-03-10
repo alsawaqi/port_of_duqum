@@ -1,4 +1,21 @@
-<?php $app = $application; ?>
+<?php
+$app = $application;
+
+$format_audit_meta = static function ($meta): string {
+    $raw = trim((string) $meta);
+    if ($raw === "") {
+        return "-";
+    }
+
+    $decoded = json_decode($raw, true);
+    if (json_last_error() === JSON_ERROR_NONE && (is_array($decoded) || is_object($decoded))) {
+        $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return "<pre class='mb-0' style='max-width:420px; white-space:pre-wrap; word-break:break-word; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:8px;'>" . esc((string) $pretty) . "</pre>";
+    }
+
+    return "<span style='max-width:420px; white-space:pre-wrap; word-break:break-word; display:inline-block;'>" . esc($raw) . "</span>";
+};
+?>
 
 <div id="page-content" class="page-wrapper clearfix">
     <div class="card mb15">
@@ -160,7 +177,7 @@
                                     <td><?php echo !empty($log->created_at) ? format_to_datetime($log->created_at) : "-"; ?></td>
                                     <td><?php echo esc((string)($log->user_name ?? "-")); ?></td>
                                     <td><?php echo esc((string)($log->action ?? "-")); ?></td>
-                                    <td style="max-width:420px; white-space:pre-wrap;"><?php echo esc((string)($log->meta ?? "")); ?></td>
+                                    <td><?php echo $format_audit_meta($log->meta ?? ""); ?></td>
                                 </tr>
                             <?php endforeach; else: ?>
                                 <tr><td colspan="4" class="text-center text-off"><?php echo app_lang("no_records_found"); ?></td></tr>

@@ -1,6 +1,72 @@
 <?php
 $app = $app ?? null;
 $responses = $responses_index ?? [];
+
+$format_meta_value = static function ($value): string {
+    if ($value === null || $value === "") {
+        return "-";
+    }
+
+    if (is_bool($value)) {
+        return $value ? "Yes" : "No";
+    }
+
+    if (is_scalar($value)) {
+        return (string) $value;
+    }
+
+    if (is_array($value)) {
+        $items = [];
+        $all_scalar = true;
+        foreach ($value as $v) {
+            if (is_array($v) || is_object($v)) {
+                $all_scalar = false;
+                break;
+            }
+
+            if ($v === null || $v === "") {
+                $items[] = "-";
+            } elseif (is_bool($v)) {
+                $items[] = $v ? "Yes" : "No";
+            } else {
+                $items[] = (string) $v;
+            }
+        }
+
+        if ($all_scalar) {
+            return implode(", ", $items);
+        }
+    }
+
+    $encoded = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    return $encoded !== false ? $encoded : "-";
+};
+
+$format_audit_meta = static function ($meta) use ($format_meta_value): string {
+    $raw = trim((string) $meta);
+    if ($raw === "") {
+        return "-";
+    }
+
+    $decoded = json_decode($raw, true);
+    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        if (empty($decoded)) {
+            return "-";
+        }
+
+        $html = "<div class='mt-2' style='background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:8px;'>";
+        foreach ($decoded as $key => $value) {
+            $label = ucwords(str_replace("_", " ", (string) $key));
+            $text = $format_meta_value($value);
+            $html .= "<div style='margin-bottom:4px; white-space:pre-wrap; word-break:break-word;'><strong>" . esc($label) . ":</strong> " . esc($text) . "</div>";
+        }
+        $html .= "</div>";
+
+        return $html;
+    }
+
+    return "<div class='mt-2' style='white-space:pre-wrap; word-break:break-word;'>" . esc($raw) . "</div>";
+};
 ?>
 <div class="page-title clearfix">
     <h1>PTW Details - <?php echo esc($app->reference); ?></h1>
@@ -88,7 +154,7 @@ $responses = $responses_index ?? [];
                         <div class="list-group-item">
                             <div class="fw-semibold"><?php echo esc($log->action); ?></div>
                             <small class="text-muted"><?php echo esc($log->user_name ?: ('User #' . $log->user_id)); ?> • <?php echo esc($log->created_at); ?></small>
-                            <?php if (!empty($log->meta)) { ?><div><small><?php echo esc($log->meta); ?></small></div><?php } ?>
+                            <?php if (!empty($log->meta)) { echo $format_audit_meta($log->meta); } ?>
                         </div>
                     <?php } ?>
                 </div>

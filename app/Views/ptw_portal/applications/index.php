@@ -45,7 +45,7 @@ $(document).ready(function () {
             {title: 'Supervisor'},
             {title: 'Start'},
             {title: 'End'},
-            {title: 'Status', class: 'text-center w15p'},
+            {title: 'Status / Stage', class: 'text-center w15p'},
             {title: '<i data-feather="menu" class="icon-16"></i>', class: 'text-center option w120'}
         ],
         onDrawCallback: function () {

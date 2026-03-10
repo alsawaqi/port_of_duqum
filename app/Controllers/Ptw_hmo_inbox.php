@@ -62,7 +62,7 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
 
         $list = $this->Ptw_applications_model->get_details([
             "stage" => "hmo",
-            "statuses" => ["submitted", "in_review", "revise", "rejected"]
+            "statuses" => ["submitted", "in_review", "revise"]
         ])->getResult();
 
         $result = [];
@@ -250,6 +250,13 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
 
+        if (strtolower(trim((string)($application->status ?? ""))) === "rejected") {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Application is already rejected and cannot be reviewed again."
+            ]);
+        }
+
         // BRD: reason is mandatory for Reject/Revise
         if (in_array($decision, ["revise", "rejected"], true)) {
             if ($status_change_reason === "" && $reason_id < 1) {
@@ -318,8 +325,28 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
                 "status"       => "submitted",
                 "completed_at" => null,
             ];
+        } elseif ($decision === "rejected") {
+            // Reject is final for PTW workflow.
+            $review_update = [
+                "reviewer_id"          => $this->login_user->id,
+                "received_at"          => $received_at,
+                "completed_at"         => $now,
+                "decision"             => "rejected",
+                "remarks"              => $remarks ?: null,
+                "status_change_reason" => $status_change_reason ?: null,
+                "reviewed_at"          => $now,
+                "updated_at"           => $now,
+            ];
+            $this->Ptw_reviews_model->ci_save($review_update, $review_id);
+
+            $app_update = [
+                "updated_at"   => $now,
+                "stage"        => "hmo",
+                "status"       => "rejected",
+                "completed_at" => null,
+            ];
         } else {
-            // revise or rejected: keep review row open (no decision) so inbox retains it
+            // Revise: keep review row open for current stage revision cycle.
             $review_update = [
                 "reviewer_id"          => $this->login_user->id,
                 "received_at"          => $received_at,
@@ -330,11 +357,11 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
             ];
             $this->Ptw_reviews_model->ci_save($review_update, $review_id);
 
-            // Stay in HMO stage, status reflects the reviewer's action
+            // Stay in HMO stage and wait for contractor resubmission.
             $app_update = [
                 "updated_at"   => $now,
                 "stage"        => "hmo",
-                "status"       => $decision, // "revise" or "rejected"
+                "status"       => "revise",
                 "completed_at" => null,
             ];
         }

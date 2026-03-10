@@ -5,6 +5,7 @@ $duration_days = $duration_days ?? null;
 $errors       = $ptw_errors ?? [];
 $field_errors = $ptw_field_errors ?? [];
 $old          = $ptw_old_input ?? [];
+$submit_stage_label = $submit_stage_label ?? 'HSSE';
 
 // Helper: get old input value (falls back to model, then default)
 function ptw_old(string $field, $model_val = '', array $old = []): string {
@@ -657,7 +658,7 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                     <i data-feather="save" class="icon-14 me-1"></i> Save Draft
                 </button>
                 <button type="button" class="btn btn-success" id="submit_btn">
-                    <i data-feather="send" class="icon-14 me-1"></i> Submit to HSSE
+                    <i data-feather="send" class="icon-14 me-1"></i> Submit to <?php echo esc($submit_stage_label); ?>
                 </button>
             </div>
         </div>
