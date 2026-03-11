@@ -164,7 +164,10 @@ class Ptw_portal extends Security_Controller
             $session = \Config\Services::session();
             $session->setFlashdata('ptw_errors', $errors);
             $session->setFlashdata('ptw_field_errors', $field_errors);
-            $session->setFlashdata('ptw_old_input', $this->request->getPost());
+            $old_input = $this->request->getPost();
+            // Signature pad data URL can be large; avoid storing it in session flash.
+            unset($old_input["signature_data"]);
+            $session->setFlashdata('ptw_old_input', $old_input);
             app_redirect("ptw_portal/application_form/" . ($id ?: ""));
             return;
         }
@@ -490,10 +493,13 @@ if ($submit_mode === "draft") {
                 $addError("Declaration agreement checkbox is required", "declaration_agreed");
             }
 
-            $sig              = $this->request->getFile("signature_file");
+            $signature_data   = trim((string) $this->request->getPost("signature_data"));
+            $has_new_signature = $this->_parse_signature_data($signature_data) !== null;
             $has_existing_sig = $existing && !empty($existing->signature_file_path);
-            if ((!$sig || !$sig->isValid() || $sig->hasMoved()) && !$has_existing_sig) {
-                $addError("Signature file is required", "signature_file");
+            if ($signature_data !== "" && !$has_new_signature) {
+                $addError("Signature format is invalid. Please sign again.", "signature_file");
+            } elseif (!$has_new_signature && !$has_existing_sig) {
+                $addError("Signature is required", "signature_file");
             }
 
             foreach ($defs_index as $def_id => $def) {
@@ -585,16 +591,15 @@ if ($submit_mode === "draft") {
 
     private function _save_signature_file(int $application_id)
     {
-        $file = $this->request->getFile("signature_file");
-        if (!$file || !$file->isValid() || $file->hasMoved()) {
+        $signature_data = trim((string) $this->request->getPost("signature_data"));
+        $parsed = $this->_parse_signature_data($signature_data);
+        if (!$parsed) {
             return;
         }
 
-        $allowed = ["pdf", "docx", "jpg", "jpeg", "png", "webp"];
-        $ext = strtolower((string) $file->getClientExtension());
-        if (!in_array($ext, $allowed, true)) {
-            return;
-        }
+        $ext = (string) $parsed["ext"];
+        $mime = (string) $parsed["mime"];
+        $binary = (string) $parsed["binary"];
 
         $rel_dir = "ptw/app_{$application_id}/signature/";
         $dir = WRITEPATH . "uploads/" . $rel_dir;
@@ -603,15 +608,67 @@ if ($submit_mode === "draft") {
         }
 
         $new_name = "signature_" . uniqid("", true) . "." . $ext;
-        $file->move($dir, $new_name);
+        $full_path = $dir . $new_name;
+        if (@file_put_contents($full_path, $binary) === false) {
+            return;
+        }
 
         $sig_data = [
-            "signature_file_name" => $file->getClientName(),
+            "signature_file_name" => "signature." . $ext,
             "signature_file_path" => $rel_dir . $new_name,
-            "signature_file_type" => (string) $file->getClientMimeType(),
-            "signature_file_size" => (int) $file->getSize(),
+            "signature_file_type" => $mime,
+            "signature_file_size" => strlen($binary),
         ];
         $this->Ptw_applications_model->ci_save($sig_data, $application_id);
+    }
+
+    private function _parse_signature_data(string $signature_data): ?array
+    {
+        if ($signature_data === "") {
+            return null;
+        }
+
+        if (!preg_match('/^data:image\/(png|jpe?g|webp);base64,(.+)$/i', $signature_data, $m)) {
+            return null;
+        }
+
+        $type = strtolower((string) $m[1]);
+        if ($type === "jpg") {
+            $type = "jpeg";
+        }
+
+        $raw_base64 = str_replace(" ", "+", (string) $m[2]);
+        $binary = base64_decode($raw_base64, true);
+        if ($binary === false || strlen($binary) < 32 || strlen($binary) > (5 * 1024 * 1024)) {
+            return null;
+        }
+
+        $mime = "image/" . $type;
+        if (function_exists("getimagesizefromstring")) {
+            $info = @getimagesizefromstring($binary);
+            $allowed_mimes = ["image/png", "image/jpeg", "image/webp"];
+            $detected = strtolower((string)($info["mime"] ?? ""));
+            if ($detected === "" || !in_array($detected, $allowed_mimes, true)) {
+                return null;
+            }
+            $mime = $detected;
+        }
+
+        $ext_map = [
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/webp" => "webp",
+        ];
+        $ext = $ext_map[$mime] ?? null;
+        if (!$ext) {
+            return null;
+        }
+
+        return [
+            "binary" => $binary,
+            "mime"   => $mime,
+            "ext"    => $ext,
+        ];
     }
 
     private function _ensure_hsse_review_row(int $application_id)

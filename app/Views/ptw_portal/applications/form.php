@@ -149,6 +149,25 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
     border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
     font-size: 13px; color: #78350f; line-height: 1.7;
 }
+.ptw-signature-pad {
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    padding: 8px;
+}
+.ptw-signature-pad.is-invalid {
+    border-color: #ef4444;
+    background: #fff5f5;
+}
+.ptw-signature-canvas {
+    width: 100%;
+    height: 180px;
+    display: block;
+    border-radius: 8px;
+    background: #fff;
+    cursor: crosshair;
+    touch-action: none;
+}
 
 /* Step summary (review) */
 .ptw-review-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
@@ -420,7 +439,8 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                             </div>
                             <div class="col-md-3">
                                 <input type="file" name="req_<?php echo $def->id; ?>_file"
-                                       class="form-control form-control-sm<?php echo isset($field_errors["req_{$def->id}_file"]) ? ' is-invalid' : ''; ?>">
+                                       class="form-control form-control-sm ptw-auto-check-file<?php echo isset($field_errors["req_{$def->id}_file"]) ? ' is-invalid' : ''; ?>"
+                                       data-check-target="req_<?php echo $def->id; ?>_checked">
                                 <?php if (!empty($def->allowed_extensions)): ?>
                                     <small class="text-muted"><?php echo esc($def->allowed_extensions); ?></small>
                                 <?php endif; ?>
@@ -594,18 +614,25 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                                placeholder="e.g. Site Manager">
                         <?php echo ptw_field_err('declaration_function', $field_errors); ?>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-12">
                         <label class="form-label fw-semibold">
-                            Signature (file upload)
+                            Signature
                             <?php if (empty($app->signature_file_path ?? '')): ?><span class="text-danger">*</span><?php endif; ?>
                         </label>
-                        <input type="file" name="signature_file"
-                               class="form-control<?php echo ptw_input_class('signature_file', $field_errors); ?>">
-                        <small class="text-muted">Accepted: PDF, DOCX, JPG, PNG, WEBP</small>
+                        <input type="hidden" name="signature_data" id="signature_data" value="<?php echo esc((string)($old['signature_data'] ?? '')); ?>">
+                        <div id="signature_pad_wrapper" class="ptw-signature-pad<?php echo isset($field_errors['signature_file']) ? ' is-invalid' : ''; ?>">
+                            <canvas id="signature_canvas" class="ptw-signature-canvas"></canvas>
+                        </div>
+                        <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                            <button type="button" class="btn btn-default btn-sm" id="signature_clear_btn">
+                                <i data-feather="x-circle" class="icon-12"></i> Clear Signature
+                            </button>
+                            <small class="text-muted">Draw your signature above. It will be saved as an image.</small>
+                        </div>
                         <?php if (!empty($app->signature_file_path ?? '')): ?>
                             <div class="mt-1">
                                 <?php echo anchor(get_uri('ptw_portal/download_signature/' . $app->id), '<i data-feather="download" class="icon-12"></i> Current signature', ['class' => 'link']); ?>
-                                <small class="text-muted ms-1">(upload new to replace)</small>
+                                <small class="text-muted ms-1">(draw a new signature to replace)</small>
                             </div>
                         <?php endif; ?>
                         <?php echo ptw_field_err('signature_file', $field_errors); ?>
@@ -672,6 +699,13 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
     var TOTAL_STEPS = 7;
     var currentStep = <?php echo (int)$first_error_step; ?>;
     var hasErrors   = <?php echo !empty($errors) ? 'true' : 'false'; ?>;
+    var sigCanvas   = document.getElementById('signature_canvas');
+    var sigInput    = document.getElementById('signature_data');
+    var sigClearBtn = document.getElementById('signature_clear_btn');
+    var sigCtx      = null;
+    var sigPadReady = false;
+    var sigDrawing  = false;
+    var sigHasStroke = false;
 
     /* ── Step navigation ─────────────────────────────────────── */
     function ptwGoStep(n) {
@@ -691,8 +725,15 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
         if (step) { step.classList.remove('done'); step.classList.add('active'); }
         currentStep = n;
 
+        if (n === 6) {
+            initSignaturePad();
+        }
+
         // If going to review step, populate summary
-        if (n === 7) populateReview();
+        if (n === 7) {
+            syncSignatureData();
+            populateReview();
+        }
 
         // Scroll to top of wizard
         var wrap = document.querySelector('.ptw-wizard-wrap');
@@ -706,6 +747,131 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
         ptwGoStep(fromStep + 1);
     }
     window.ptwNext = ptwNext;
+
+    /* ── Signature pad ───────────────────────────────────────── */
+    function initSignaturePad() {
+        if (!sigCanvas || !sigInput) return;
+
+        if (!sigPadReady) {
+            sigCtx = sigCanvas.getContext('2d');
+            if (!sigCtx) return;
+
+            sigCanvas.addEventListener('pointerdown', startSignatureStroke);
+            sigCanvas.addEventListener('pointermove', moveSignatureStroke);
+            sigCanvas.addEventListener('pointerup', endSignatureStroke);
+            sigCanvas.addEventListener('pointerleave', endSignatureStroke);
+            sigCanvas.addEventListener('pointercancel', endSignatureStroke);
+
+            if (sigClearBtn) {
+                sigClearBtn.addEventListener('click', function () {
+                    clearSignaturePad();
+                    if (typeof feather !== 'undefined') feather.replace();
+                });
+            }
+
+            sigPadReady = true;
+        }
+
+        resizeSignaturePad();
+    }
+
+    function resizeSignaturePad() {
+        if (!sigPadReady || !sigCanvas || !sigCtx) return;
+
+        var width = sigCanvas.clientWidth || sigCanvas.offsetWidth || 0;
+        if (width < 1) return;
+
+        var height = 180;
+        var ratio = Math.max(window.devicePixelRatio || 1, 1);
+        var previousData = sigHasStroke ? sigCanvas.toDataURL('image/png') : null;
+
+        sigCanvas.width = Math.floor(width * ratio);
+        sigCanvas.height = Math.floor(height * ratio);
+
+        sigCtx.setTransform(1, 0, 0, 1, 0, 0);
+        sigCtx.scale(ratio, ratio);
+        sigCtx.lineWidth = 2;
+        sigCtx.lineCap = 'round';
+        sigCtx.lineJoin = 'round';
+        sigCtx.strokeStyle = '#0f172a';
+        sigCtx.fillStyle = '#ffffff';
+        sigCtx.fillRect(0, 0, width, height);
+
+        if (previousData) {
+            var img = new Image();
+            img.onload = function () {
+                sigCtx.drawImage(img, 0, 0, width, height);
+                syncSignatureData();
+            };
+            img.src = previousData;
+        } else {
+            sigHasStroke = false;
+            sigInput.value = '';
+        }
+    }
+
+    function getSignaturePoint(evt) {
+        var rect = sigCanvas.getBoundingClientRect();
+        return {
+            x: evt.clientX - rect.left,
+            y: evt.clientY - rect.top
+        };
+    }
+
+    function startSignatureStroke(evt) {
+        if (!sigPadReady || !sigCtx) return;
+        if (evt.button !== undefined && evt.button !== 0) return;
+
+        var p = getSignaturePoint(evt);
+        sigDrawing = true;
+        sigHasStroke = true;
+
+        sigCtx.beginPath();
+        sigCtx.moveTo(p.x, p.y);
+        sigCtx.lineTo(p.x, p.y);
+        sigCtx.stroke();
+
+        if (sigCanvas.setPointerCapture && evt.pointerId !== undefined) {
+            sigCanvas.setPointerCapture(evt.pointerId);
+        }
+
+        syncSignatureData();
+        evt.preventDefault();
+    }
+
+    function moveSignatureStroke(evt) {
+        if (!sigDrawing || !sigCtx) return;
+        var p = getSignaturePoint(evt);
+        sigCtx.lineTo(p.x, p.y);
+        sigCtx.stroke();
+        evt.preventDefault();
+    }
+
+    function endSignatureStroke(evt) {
+        if (!sigDrawing) return;
+        sigDrawing = false;
+        syncSignatureData();
+        evt.preventDefault();
+    }
+
+    function clearSignaturePad() {
+        if (!sigPadReady || !sigCtx || !sigCanvas) return;
+
+        var width = sigCanvas.clientWidth || sigCanvas.offsetWidth || 0;
+        var height = 180;
+        if (width < 1) return;
+
+        sigCtx.clearRect(0, 0, width, height);
+        sigCtx.fillStyle = '#ffffff';
+        sigCtx.fillRect(0, 0, width, height);
+        sigHasStroke = false;
+        sigInput.value = '';
+    }
+
+    function syncSignatureData() {
+        if (!sigPadReady || !sigCanvas || !sigInput) return;
+        sigInput.value = sigHasStroke ? sigCanvas.toDataURL('image/png') : '';
+    }
 
     /* ── Review panel population ─────────────────────────────── */
     function getVal(name) {
@@ -738,6 +904,30 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
         });
     });
 
+    // Auto-check hazard item when user selects a file.
+    document.querySelectorAll('.ptw-auto-check-file').forEach(function (fileInput) {
+        fileInput.addEventListener('change', function () {
+            if (!this.files || this.files.length === 0) {
+                return;
+            }
+
+            var targetId = this.dataset.checkTarget;
+            if (!targetId) {
+                return;
+            }
+
+            var checkbox = document.getElementById(targetId);
+            if (!checkbox) {
+                return;
+            }
+
+            if (!checkbox.checked) {
+                checkbox.checked = true;
+            }
+            checkbox.dispatchEvent(new Event('change'));
+        });
+    });
+
     /* ── Duration calculator ─────────────────────────────────── */
     function calcDays() {
         var from = document.getElementById('work_from');
@@ -754,13 +944,20 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
     if (wf) wf.addEventListener('change', calcDays);
     if (wt) wt.addEventListener('change', calcDays);
     calcDays();
+    window.addEventListener('resize', function () {
+        if (currentStep === 6) {
+            resizeSignaturePad();
+        }
+    });
 
     /* ── Submit buttons ──────────────────────────────────────── */
     document.getElementById('save_draft_btn').addEventListener('click', function () {
+        syncSignatureData();
         document.getElementById('submit_mode').value = 'draft';
         document.getElementById('ptw-form').submit();
     });
     document.getElementById('submit_btn').addEventListener('click', function () {
+        syncSignatureData();
         document.getElementById('submit_mode').value = 'submit';
         document.getElementById('ptw-form').submit();
     });
