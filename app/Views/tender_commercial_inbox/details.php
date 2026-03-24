@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
     <div class="mb15">
         <a href="<?php echo get_uri('tender_commercial_inbox'); ?>" class="btn btn-default">
             <i data-feather="arrow-left" class="icon-16"></i>
@@ -6,7 +6,7 @@
         </a>
     </div>
 
-    <div class="card mb15">
+    <div class="card gp-pro-card mb15">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h3 class="mb5">Commercial Evaluation - <?php echo esc($tender->reference ?? '-'); ?></h3>
@@ -42,27 +42,27 @@
         </div>
     </div>
 
-    <div class="card mb15">
+    <div class="card gp-pro-card mb15">
         <div class="card-header">
             <h4 class="mb0">Bids Pending Your Action</h4>
         </div>
         <div class="card-body p0">
-            <div class="table-responsive">
+            <div class="table-responsive gp-pro-table-shell">
                 <table class="table table-bordered table-striped mb0">
                     <thead>
                     <tr>
     <th>Vendor</th>
-    <th>Decision</th>
+    <th>Submitted At</th>
     <th>Price</th>
-    <th>Total Score</th>
-    <th>Finalized At</th>
+    <th>Commercial Proposal</th>
+    <th>Decision</th>
     <th class="text-center" style="width: 120px;">Action</th>
 </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($pending_bids)) { ?>
                             <tr>
-                                <td colspan="5" class="text-center text-off p20">No pending commercial bids for your action.</td>
+                                <td colspan="6" class="text-center text-off p20">No pending commercial bids for your action.</td>
                             </tr>
                         <?php } else { ?>
                             <?php foreach ($pending_bids as $bid) { ?>
@@ -78,7 +78,6 @@
                                         }
                                         ?>
                                     </td>
-                                    <td><?php echo $bid->decision_total_score !== null ? number_format((float) $bid->decision_total_score, 3) : '-'; ?></td>
                                     <td>
                                         <?php if (!empty($bid->commercial_doc_id)) { ?>
                                             <a href="<?php echo get_uri('tender_commercial_inbox/download_bid_document/' . $bid->commercial_doc_id); ?>" class="btn btn-default btn-sm">
@@ -89,6 +88,7 @@
                                             <span class="text-off">No commercial file</span>
                                         <?php } ?>
                                     </td>
+                                    <td><span class="badge bg-warning text-dark">Pending</span></td>
                                     <td class="text-center">
                                         <?php echo modal_anchor(
                                             get_uri('tender_commercial_inbox/bid_modal_form'),
@@ -110,12 +110,12 @@
         </div>
     </div>
 
-    <div class="card mb15">
+    <div class="card gp-pro-card mb15">
         <div class="card-header">
             <h4 class="mb0">My Finalized Decisions</h4>
         </div>
         <div class="card-body p0">
-            <div class="table-responsive">
+            <div class="table-responsive gp-pro-table-shell">
                 <table class="table table-bordered table-striped mb0">
                     <thead>
                         <tr>
@@ -169,12 +169,12 @@
         </div>
     </div>
 
-    <div class="card">
+    <div class="card gp-pro-card">
         <div class="card-header">
             <h4 class="mb0">Locked Decisions by Other Evaluators</h4>
         </div>
         <div class="card-body p0">
-            <div class="table-responsive">
+            <div class="table-responsive gp-pro-table-shell">
                 <table class="table table-bordered table-striped mb0">
                     <thead>
                     <tr>
@@ -189,7 +189,7 @@
                     <tbody>
                         <?php if (empty($locked_bids)) { ?>
                             <tr>
-                                <td colspan="5" class="text-center text-off p20">No bids are locked by other evaluators.</td>
+                                <td colspan="6" class="text-center text-off p20">No bids are locked by other evaluators.</td>
                             </tr>
                         <?php } else { ?>
                             <?php foreach ($locked_bids as $bid) {

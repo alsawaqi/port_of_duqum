@@ -368,6 +368,7 @@ class Tender_requests extends Security_Controller
             'evaluation_method' => 'required',
             'technical_weight' => 'required|numeric',
             'commercial_weight' => 'required|numeric',
+            'department_manager_user_id' => 'required|numeric',
         ]);
 
         $id = (int) $this->request->getPost('id');
@@ -436,7 +437,19 @@ class Tender_requests extends Security_Controller
             ]);
         }
 
-        $department_manager_assignment = $this->_get_department_manager_assignment((int) $company_id, (int) $department_id);
+        $department_manager_user_id = (int) $this->request->getPost('department_manager_user_id');
+        if (!$this->_is_valid_department_manager($department_manager_user_id, (int) $company_id, (int) $department_id)) {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Please select a valid Department Manager for the selected Company and Department.',
+            ]);
+        }
+
+        $department_manager_assignment = $this->_get_department_manager_assignment_by_user(
+            (int) $company_id,
+            (int) $department_id,
+            $department_manager_user_id
+        );
 
         $technical_user_ids = $this->_normalize_user_ids($this->request->getPost('technical_user_ids') ?? []);
         $commercial_user_ids = $this->_normalize_user_ids($this->request->getPost('commercial_user_ids') ?? []);
@@ -492,7 +505,7 @@ class Tender_requests extends Security_Controller
             'evaluation_method' => $this->request->getPost('evaluation_method'),
             'technical_weight' => $technical_weight,
             'commercial_weight' => $commercial_weight,
-            'department_manager_user_id' => $department_manager_assignment->user_id ?? null,
+            'department_manager_user_id' => $department_manager_user_id ?: null,
             'department_manager_title' => $department_manager_assignment->job_title ?? 'Department Manager',
         ];
 
@@ -867,6 +880,7 @@ class Tender_requests extends Security_Controller
             "SELECT DISTINCT
             $users.id,
             TRIM(CONCAT(COALESCE($users.first_name,''), ' ', COALESCE($users.last_name,''))) AS full_name,
+            $users.job_title,
             $users.email
          FROM $tdu
          LEFT JOIN $users ON $users.id = $tdu.user_id
@@ -885,6 +899,8 @@ class Tender_requests extends Security_Controller
             $result[] = [
                 'id' => (int) $r->id,
                 'text' => $text,
+                'title' => $r->job_title ?? 'Department Manager',
+                'email' => $r->email ?? '',
             ];
         }
 
@@ -974,6 +990,34 @@ class Tender_requests extends Security_Controller
             ORDER BY $tdmu.id DESC
             LIMIT 1",
             [$company_id, $department_id]
+        )->getRow();
+    }
+
+    private function _get_department_manager_assignment_by_user(int $company_id, int $department_id, int $user_id)
+    {
+        if (!$company_id || !$department_id || !$user_id) {
+            return null;
+        }
+
+        $tdmu = $this->db->prefixTable('tender_department_manager_users');
+        $users = $this->db->prefixTable('users');
+
+        return $this->db->query(
+            "SELECT
+                $tdmu.*,
+                $users.email,
+                $users.job_title,
+                TRIM(CONCAT(COALESCE($users.first_name,''), ' ', COALESCE($users.last_name,''))) AS full_name
+            FROM $tdmu
+            LEFT JOIN $users ON $users.id = $tdmu.user_id AND $users.deleted=0
+            WHERE $tdmu.deleted=0
+            AND $tdmu.status='active'
+            AND $tdmu.company_id=?
+            AND $tdmu.department_id=?
+            AND $tdmu.user_id=?
+            ORDER BY $tdmu.id DESC
+            LIMIT 1",
+            [$company_id, $department_id, $user_id]
         )->getRow();
     }
 

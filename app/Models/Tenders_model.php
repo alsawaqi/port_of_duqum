@@ -177,6 +177,7 @@ class Tenders_model extends Crud_model
         $tts = $this->db->prefixTable("tender_target_specialties");
         $vc = $this->db->prefixTable("vendor_categories");
         $vsc = $this->db->prefixTable("vendor_sub_categories");
+        $vs = $this->db->prefixTable("vendor_specialties");
 
         $sql = "SELECT
                     $t.*,
@@ -185,7 +186,7 @@ class Tenders_model extends Crud_model
                     $vc.name AS vendor_category_name,
                     $vsc.name AS vendor_sub_category_name
                 FROM $t
-                INNER JOIN $tiv
+                LEFT JOIN $tiv
                     ON $tiv.tender_id = $t.id
                    AND $tiv.vendor_id = ?
                    AND $tiv.deleted = 0
@@ -200,13 +201,43 @@ class Tenders_model extends Crud_model
                 LEFT JOIN $vsc ON $vsc.id = target.vendor_sub_category_id AND $vsc.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status IN ('published', 'closed', 'awarded')
+                  AND (
+                        (
+                            $t.tender_type = 'close'
+                            AND $tiv.id IS NOT NULL
+                        )
+                        OR
+                        (
+                            $t.tender_type = 'open'
+                            AND (
+                                $tiv.id IS NOT NULL
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM $vs
+                                    WHERE $vs.deleted = 0
+                                      AND $vs.status = 'approved'
+                                      AND $vs.vendor_id = ?
+                                      AND (
+                                            target.id IS NULL
+                                            OR (
+                                                $vs.vendor_category_id = target.vendor_category_id
+                                                AND (
+                                                    target.vendor_sub_category_id IS NULL
+                                                    OR $vs.vendor_sub_category_id = target.vendor_sub_category_id
+                                                )
+                                            )
+                                      )
+                                )
+                            )
+                        )
+                  )
                 ORDER BY
                     CASE WHEN $t.status = 'published' THEN 0 ELSE 1 END ASC,
                     CASE WHEN $t.closing_at IS NULL THEN 1 ELSE 0 END ASC,
                     $t.closing_at ASC,
                     $t.id DESC";
 
-        return $this->db->query($sql, [$vendor_id]);
+        return $this->db->query($sql, [$vendor_id, $vendor_id]);
     }
 
     public function get_vendor_visible_tender(int $tender_id, int $vendor_id)
@@ -218,6 +249,7 @@ class Tenders_model extends Crud_model
         $tts = $this->db->prefixTable("tender_target_specialties");
         $vc = $this->db->prefixTable("vendor_categories");
         $vsc = $this->db->prefixTable("vendor_sub_categories");
+        $vs = $this->db->prefixTable("vendor_specialties");
 
         $sql = "SELECT
                     $t.*,
@@ -226,7 +258,7 @@ class Tenders_model extends Crud_model
                     $vc.name AS vendor_category_name,
                     $vsc.name AS vendor_sub_category_name
                 FROM $t
-                INNER JOIN $tiv
+                LEFT JOIN $tiv
                     ON $tiv.tender_id = $t.id
                    AND $tiv.vendor_id = ?
                    AND $tiv.deleted = 0
@@ -242,9 +274,39 @@ class Tenders_model extends Crud_model
                 WHERE $t.deleted = 0
                   AND $t.status IN ('published', 'closed', 'awarded')
                   AND $t.id = ?
+                  AND (
+                        (
+                            $t.tender_type = 'close'
+                            AND $tiv.id IS NOT NULL
+                        )
+                        OR
+                        (
+                            $t.tender_type = 'open'
+                            AND (
+                                $tiv.id IS NOT NULL
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM $vs
+                                    WHERE $vs.deleted = 0
+                                      AND $vs.status = 'approved'
+                                      AND $vs.vendor_id = ?
+                                      AND (
+                                            target.id IS NULL
+                                            OR (
+                                                $vs.vendor_category_id = target.vendor_category_id
+                                                AND (
+                                                    target.vendor_sub_category_id IS NULL
+                                                    OR $vs.vendor_sub_category_id = target.vendor_sub_category_id
+                                                )
+                                            )
+                                      )
+                                )
+                            )
+                        )
+                  )
                 LIMIT 1";
 
-        return $this->db->query($sql, [$vendor_id, $tender_id])->getRow();
+        return $this->db->query($sql, [$vendor_id, $tender_id, $vendor_id])->getRow();
     }
 
 
