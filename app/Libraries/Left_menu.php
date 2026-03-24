@@ -16,6 +16,54 @@ class Left_menu
         $this->ci = new Security_Controller(false);
     }
 
+    private function _has_active_tender_assignment(string $table): bool
+    {
+        if ($this->ci->login_user->is_admin) {
+            return true;
+        }
+
+        if (($this->ci->login_user->user_type ?? "") !== "staff") {
+            return false;
+        }
+
+        $db = Database::connect();
+        $t = $db->prefixTable($table);
+        $users = $db->prefixTable("users");
+
+        $row = $db->query(
+            "SELECT $t.id
+             FROM $t
+             INNER JOIN $users ON $users.id = $t.user_id
+             WHERE $t.deleted=0
+               AND $t.status='active'
+               AND $users.deleted=0
+               AND $users.status='active'
+               AND $t.user_id=?
+             LIMIT 1",
+            [(int) $this->ci->login_user->id]
+        )->getRow();
+
+        return (bool) $row;
+    }
+
+    private function _can_view_tender_section(string $key, array $permissions): bool
+    {
+        if ($this->ci->login_user->is_admin) {
+            return true;
+        }
+
+        if ((bool) get_array_value($permissions, "can_view_tender_" . $key)) {
+            return true;
+        }
+
+        // Backward-compatible fallback for legacy production roles.
+        if ($key === "technical_eval") {
+            return $this->_has_active_tender_assignment("tender_technical_users");
+        }
+
+        return false;
+    }
+
     private function _get_sidebar_menu_items($type = "")
     {
         $dashboard_menu = array("name" => "dashboard", "url" => "dashboard", "class" => "monitor");
@@ -188,7 +236,7 @@ class Left_menu
 
             $tender_submenu = array();
             $tender_view = function ($key) use ($permissions) {
-                return $this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_view_tender_" . $key);
+                return $this->_can_view_tender_section($key, $permissions);
             };
             if ($tender_view("requests")) {
                 $tender_submenu[] = array("name" => "tender_requests", "url" => "tender_requests", "class" => "file-text");
@@ -1160,7 +1208,7 @@ $submenu_names = [];
                     if ($this->ci->login_user->user_type === "staff" && get_array_value($item_value_array, "name") === "tender") {
                         $tender_sub = array();
                         $tender_view = function ($key) use ($permissions) {
-                            return $this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_view_tender_" . $key);
+                            return $this->_can_view_tender_section($key, $permissions);
                         };
                     
                         if ($tender_view("requests")) $tender_sub[] = array("name" => "tender_requests", "url" => "tender_requests", "class" => "file-text");
@@ -1321,7 +1369,7 @@ $submenu_names = [];
             if (!count($tender_submenu)) {
                 $tender_perms = $this->ci->login_user->permissions;
                 $tender_view = function ($key) use ($tender_perms) {
-                    return $this->ci->login_user->is_admin || (bool) get_array_value($tender_perms, "can_view_tender_" . $key);
+                    return $this->_can_view_tender_section($key, $tender_perms);
                 };
             
                 if ($tender_view("requests")) $tender_submenu[] = array("name" => "tender_requests", "url" => "tender_requests", "class" => "file-text");

@@ -3340,4 +3340,7 @@ $lang["tender_technical_inbox"] = "وارد التقييم الفني للمزا
 $lang["tender_commercial_inbox"] = "وارد التقييم التجاري للمزايدة";
 
 
+$lang["tender_committee_opening_inbox"] = "وارد لجنة المزايدة المفتوحة";
+
+
 return $lang;
