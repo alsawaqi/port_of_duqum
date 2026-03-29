@@ -470,7 +470,6 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
                 minimumInputLength: 0,
                 showSearchBox: true,
                 width: "100%",
-                placeholder: $el.data("placeholder") || "",
                 allowClear: !multiple && !$el.prop("required"),
                 closeOnSelect: multiple ? false : true,
                 dropdownCssClass: "tender-request-select2-dropdown"
@@ -788,7 +787,6 @@ $("#tender-company").on("change", function () {
             minimumInputLength: 0,
             showSearchBox: true,
             width: "100%",
-            placeholder: $("#invited_vendor_ids").data("placeholder") || "",
             dropdownCssClass: "tender-request-select2-dropdown",
             ajax: {
                 url: "<?php echo get_uri('tender_requests/vendors_suggestion'); ?>",
