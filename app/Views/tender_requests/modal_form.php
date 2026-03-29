@@ -409,12 +409,19 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
     }
 
     #tender-request-form .select2-container .select2-selection--multiple {
-        min-height: 40px;
-        padding-top: 2px;
-        padding-bottom: 2px;
+        min-height: 52px;
+        padding-top: 6px;
+        padding-bottom: 6px;
         border-color: #c8d5e4;
         border-radius: 8px;
         transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    /* Extra height for team and ITT multi-selects for better visibility */
+    #tender-request-form #technical_user_ids + .select2-container .select2-selection--multiple,
+    #tender-request-form #commercial_user_ids + .select2-container .select2-selection--multiple,
+    #tender-request-form #itc_member_user_ids + .select2-container .select2-selection--multiple {
+        min-height: 56px;
     }
 
     #tender-request-form .select2-container.select2-container-active .select2-selection--single,
@@ -424,10 +431,10 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
     }
 
     #tender-request-form .select2-container--default .select2-selection--multiple .select2-selection__choice {
-        font-size: 12px;
-        line-height: 1.4;
-        padding: 3px 6px;
-        margin-top: 4px;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 4px 8px;
+        margin-top: 5px;
         background: #edf4ff;
         border-color: #bed6ff;
         color: #1849a9;
@@ -435,20 +442,52 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
     }
 
     #tender-request-form .select2-container--default .select2-selection--multiple .select2-search__field {
-        font-size: 13px;
-        margin-top: 5px;
+        font-size: 14px;
+        margin-top: 6px;
     }
 
     .tender-request-select2-dropdown .select2-results__option {
-        font-size: 13px;
-        line-height: 1.45;
-        padding: 8px 10px;
+        font-size: 14px;
+        line-height: 1.55;
+        padding: 10px 12px;
     }
 
     .tender-request-select2-dropdown .select2-search input {
         border-radius: 7px;
         border: 1px solid #c8d5e4;
         padding: 7px 9px;
+    }
+
+    /* Select2 v3 fallback (used in this project) */
+    #tender-request-form #s2id_technical_user_ids .select2-choices,
+    #tender-request-form #s2id_commercial_user_ids .select2-choices,
+    #tender-request-form #s2id_itc_member_user_ids .select2-choices {
+        min-height: 56px !important;
+        padding: 6px 8px !important;
+        border-radius: 8px !important;
+        border-color: #c8d5e4 !important;
+    }
+
+    #tender-request-form #s2id_technical_user_ids .select2-search-choice,
+    #tender-request-form #s2id_commercial_user_ids .select2-search-choice,
+    #tender-request-form #s2id_itc_member_user_ids .select2-search-choice {
+        font-size: 13px !important;
+        line-height: 1.5 !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+    }
+
+    #tender-request-form #s2id_technical_user_ids .select2-search-field input,
+    #tender-request-form #s2id_commercial_user_ids .select2-search-field input,
+    #tender-request-form #s2id_itc_member_user_ids .select2-search-field input {
+        height: 30px !important;
+        font-size: 14px !important;
+    }
+
+    .select2-drop.tender-request-select2-dropdown .select2-result-label {
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+        line-height: 1.55 !important;
     }
 </style>
 
