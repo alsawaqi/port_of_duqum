@@ -63,7 +63,7 @@
 $(document).ready(function () {
     $("#tender-finance-user-form").appForm({
         onSuccess: function () {
-            $("#tender-finance-users-table").appTable({ newData: true });
+            $("#tender-finance-users-table").appTable({reload: true});
         }
     });
     $(".select2").select2();

@@ -246,6 +246,7 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
                             <?php } ?>
                         <?php } ?>
                     </select>
+                    <input type="hidden" name="invited_vendor_ids" id="invited_vendor_ids_payload" value="" />
                     <small class="text-muted">Required when Tender Type = Close.</small>
                 </div>
             </div>
@@ -267,6 +268,7 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
                             </option>
                         <?php } ?>
                     </select>
+                    <input type="hidden" name="technical_user_ids" id="technical_user_ids_payload" value="" />
                     <small class="text-muted">Select from Tender Technical Users.</small>
                 </div>
             </div>
@@ -280,6 +282,7 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
                             </option>
                         <?php } ?>
                     </select>
+                    <input type="hidden" name="commercial_user_ids" id="commercial_user_ids_payload" value="" />
                     <small class="text-muted">Select from Tender Commercial Users.</small>
                 </div>
             </div>
@@ -341,6 +344,7 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
                             </option>
                         <?php } ?>
                     </select>
+                    <input type="hidden" name="itc_member_user_ids" id="itc_member_user_ids_payload" value="" />
                     <small id="committee-helper-text" class="text-muted">
                         Select separate committee members only. Chairman and Secretary are selected above.
                     </small>
@@ -690,6 +694,18 @@ $("#tender-company").on("change", function () {
             onSubmit: function () {
                 sanitizeCommitteeMembers();
 
+                function syncMultiSelectPayload(selectSelector, payloadSelector, originalName) {
+                    const values = $(selectSelector).val() || [];
+                    const normalized = Array.isArray(values) ? values : [values];
+                    $(payloadSelector).val(normalized.filter(Boolean).join(","));
+                    $(selectSelector).attr("data-original-name", originalName).removeAttr("name");
+                }
+
+                syncMultiSelectPayload("#technical_user_ids", "#technical_user_ids_payload", "technical_user_ids[]");
+                syncMultiSelectPayload("#commercial_user_ids", "#commercial_user_ids_payload", "commercial_user_ids[]");
+                syncMultiSelectPayload("#itc_member_user_ids", "#itc_member_user_ids_payload", "itc_member_user_ids[]");
+                syncMultiSelectPayload("#invited_vendor_ids", "#invited_vendor_ids_payload", "invited_vendor_ids[]");
+
                 const chairman = String($("#chairman_user_id").val() || "");
                 const secretary = String($("#secretary_user_id").val() || "");
 
@@ -706,8 +722,8 @@ $("#tender-company").on("change", function () {
 
                 return true;
             },
-            onSuccess: function (result) {
-                $("#tender-requests-table").appTable({newData: result.data, dataId: result.id});
+            onSuccess: function () {
+                $("#tender-requests-table").appTable({reload: true});
             }
         });
 

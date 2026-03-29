@@ -24,7 +24,7 @@ $(document).ready(function () {
   }
 
   function reloadTable() {
-    $("#tender-procurement-inbox-table").appTable({newData: true});
+    $("#tender-procurement-inbox-table").appTable({reload: true});
   }
 
   $("#tender-procurement-inbox-table").appTable({
@@ -69,7 +69,7 @@ $(document).ready(function () {
       appLoader.hide();
       var r = tryParseResponse(res);
       if (r.success) {
-        $(successReloadSelector).appTable({newData: true});
+        $(successReloadSelector).appTable({reload: true});
         appAlert.success(r.message || "Done", {duration: 3000});
       } else {
         appAlert.error(r.message || "Error", {duration: 3000});

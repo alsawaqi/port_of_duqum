@@ -47,7 +47,7 @@ $(document).ready(function () {
   }
 
   function reloadTable() {
-    $("#tender-finance-inbox-table").appTable({newData: true});
+    $("#tender-finance-inbox-table").appTable({reload: true});
   }
 
   $("#tender-finance-inbox-table").appTable({

@@ -76,7 +76,7 @@
 $(document).ready(function () {
     $("#tender-procurement-user-form").appForm({
         onSuccess: function () {
-            $("#tender-procurement-users-table").appTable({ newData: true });
+            $("#tender-procurement-users-table").appTable({reload: true});
         }
     });
     $(".select2").select2();

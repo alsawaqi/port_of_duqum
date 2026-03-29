@@ -349,7 +349,7 @@ $(document).ready(function () {
 
   $("#tender-procurement-form").appForm({
     onSuccess: function (result) {
-      $("#tender-procurement-inbox-table").appTable({newData: true});
+      $("#tender-procurement-inbox-table").appTable({reload: true});
       appAlert.success(result.message || "Saved", {duration: 3000});
     }
   });

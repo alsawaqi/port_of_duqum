@@ -46,7 +46,7 @@ $(document).ready(function () {
   }
 
   function reloadTable() {
-    $("#tender-committee-inbox-table").appTable({newData: true});
+    $("#tender-committee-inbox-table").appTable({reload: true});
   }
 
   $("#tender-committee-inbox-table").appTable({

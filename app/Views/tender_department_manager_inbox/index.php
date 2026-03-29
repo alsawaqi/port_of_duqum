@@ -47,7 +47,7 @@ $(document).ready(function () {
   }
 
   function reloadTable() {
-    $("#tender-department-manager-inbox-table").appTable({newData: true});
+    $("#tender-department-manager-inbox-table").appTable({reload: true});
   }
 
   $("#tender-department-manager-inbox-table").appTable({

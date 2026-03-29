@@ -34,7 +34,7 @@ $(document).ready(function () {
     }
 
     function reloadTable() {
-        $("#tender-requests-table").appTable({newData: true});
+        $("#tender-requests-table").appTable({reload: true});
     }
 
     $("#tender-requests-table").appTable({
