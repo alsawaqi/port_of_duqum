@@ -1,7 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-pro-scan-page">
-<div class="page-title clearfix gp-pro-title">
-    <h1><?php echo app_lang("gate_pass_security_inbox"); ?> - Scan QR</h1>
-</div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-pro-scan-page gp-sec-hub-page">
+    <div class="gp-sec-hub-page-inner p15">
+        <?php echo view("gate_pass_security_inbox/_hub_nav", ["active" => $security_nav_active ?? "scan"]); ?>
+
+        <div class="gp-sec-scan-head mb15">
+            <h1 class="gp-sec-page-title"><?php echo app_lang("gate_pass_security_scan_qr"); ?></h1>
+            <p class="gp-sec-page-desc text-off mb0"><?php echo app_lang("gate_pass_security_scan_page_hint"); ?></p>
+        </div>
 
 <div class="card mb15 gp-pro-card gp-pro-scan-shell">
     <div class="p15">
@@ -92,7 +96,12 @@
     <div class="card mb15 gp-pro-card">
         <div class="p15 clearfix gp-pro-section-head">
             <h4 class="pull-left mt0 mb0"><?php echo app_lang("visitors"); ?></h4>
-            <div class="pull-right">
+            <div class="pull-right gp-sec-scan-visitors-tools">
+                <?php echo modal_anchor(
+                    get_uri("gate_pass_security_inbox/visitor_block_modal_form"),
+                    "<i data-feather='slash' class='icon-16'></i> Block / Unblock visitor",
+                    ["class" => "btn btn-warning btn-sm gp-pro-btn gp-pro-btn-icon", "title" => "Block/Unblock Visitor", "id" => "btn_visitor_block_scan", "data-post-request_id" => 0]
+                ); ?>
                 <?php echo modal_anchor(
                     get_uri("gate_pass_security_inbox/visitor_modal_form"),
                     "<i data-feather='plus-circle' class='icon-16'></i> Add Visitor",
@@ -141,6 +150,7 @@ $(document).ready(function () {
         $("#btn_add_visitor").attr("data-post-gate_pass_request_id", requestId);
         $("#btn_add_vehicle").attr("data-post-gate_pass_request_id", requestId);
         $("#btn_edit_request").attr("data-post-request_id", requestId);
+        $("#btn_visitor_block_scan").attr("data-post-request_id", requestId);
 
         const $v = $("#gp-scan-visitors-table");
         const $c = $("#gp-scan-vehicles-table");
@@ -157,10 +167,14 @@ $(document).ready(function () {
                 { title: "<?php echo app_lang('nationality'); ?>" },
                 { title: "<?php echo app_lang('phone'); ?>" },
                 { title: "<?php echo app_lang('role'); ?>" },
+                { title: "<?php echo app_lang('attachments'); ?>", class: "w220" },
                 { title: "<?php echo app_lang('blocked'); ?>" },
                 { title: "<?php echo app_lang('reason'); ?>" },
-                { title: "<i data-feather='menu' class='icon-16'></i>", class: "text-center option w120" }
-            ]
+                { title: "<i data-feather='menu' class='icon-16'></i>", class: "text-end option w200 gp-sec-scan-vis-opts" }
+            ],
+            onDrawCallback: function () {
+                if (window.feather) feather.replace();
+            }
         });
 
         $c.appTable({
@@ -168,15 +182,26 @@ $(document).ready(function () {
             columns: [
                 { title: "<?php echo app_lang('plate_no'); ?>" },
                 { title: "Type" },
-                { title: "<?php echo app_lang('make'); ?>" },
-                { title: "<?php echo app_lang('model'); ?>" },
-                { title: "<?php echo app_lang('color'); ?>" },
+                { title: "<?php echo app_lang('gate_pass_mulkiyah_attachment'); ?>", class: "text-center w100" },
                 { title: "<i data-feather='menu' class='icon-16'></i>", class: "text-center option w120" }
-            ]
+            ],
+            onDrawCallback: function () {
+                if (window.feather) feather.replace();
+            }
         });
 
         if (typeof feather !== "undefined") feather.replace();
     }
+
+    $(document).on("gp-security-visitor-block-saved", function () {
+        if (!currentRequestId) return;
+        const qrText = $("#qr_text").val().trim();
+        if (qrText) {
+            lookup(true);
+        } else if ($.fn.DataTable && $.fn.DataTable.isDataTable($("#gp-scan-visitors-table"))) {
+            $("#gp-scan-visitors-table").DataTable().ajax.reload(null, false);
+        }
+    });
 
     function fillInfo(d){
         $("#scan_info").show();
@@ -213,7 +238,7 @@ $(document).ready(function () {
         $("#btn_save_action").prop("disabled", false);
     }
 
-    function lookup(){
+    function lookup(silent){
         const qrText = $("#qr_text").val().trim();
         if (!qrText) {
             appAlert.error("Please scan/paste QR text first.");
@@ -246,7 +271,9 @@ $(document).ready(function () {
                 fillInfo(d);
                 initTables(currentRequestId);
 
-                appAlert.success("Gate pass loaded.");
+                if (!silent) {
+                    appAlert.success("Gate pass loaded.");
+                }
             },
             error: function(){
                 appLoader.hide();
@@ -296,4 +323,5 @@ $(document).ready(function () {
     if (typeof feather !== "undefined") feather.replace();
 });
 </script>
+    </div>
 </div>

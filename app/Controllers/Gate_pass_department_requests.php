@@ -44,8 +44,61 @@ class Gate_pass_department_requests extends Security_Controller
 
     public function index()
     {
+        $Stats = new \App\Models\Pod_dashboard_stats_model();
         $view_data = [];
+        $view_data["kpis"] = $Stats->gate_pass_kpis([
+            "department_ids" => $this->my_department_ids,
+            "stages" => ["department"],
+        ]);
+
         return $this->template->rander("gate_pass_department_requests/index", $view_data);
+    }
+
+    /**
+     * CSV export for the same scope as the department inbox list (submitted, department stage).
+     */
+    public function export_list_csv()
+    {
+        $options = [
+            "department_ids" => $this->my_department_ids,
+            "stage" => "department",
+            "statuses" => ["submitted"],
+        ];
+
+        $list = $this->Gate_pass_requests_model->get_details($options)->getResult();
+
+        $filename = "gate_pass_department_" . date("Y-m-d") . ".csv";
+        $this->response->setHeader("Content-Type", "text/csv; charset=UTF-8");
+        $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
+
+        $fh = fopen("php://temp", "r+");
+        fputcsv($fh, ["reference", "created_at", "company", "department", "requester", "phone", "purpose", "status", "stage", "visit_from", "visit_to", "fee_amount", "currency"]);
+        foreach ($list as $r) {
+            $requester_name = trim(($r->requester_first_name ?? "") . " " . ($r->requester_last_name ?? ""));
+            if ($requester_name === "") {
+                $requester_name = $r->requester_name ?? "";
+            }
+            fputcsv($fh, [
+                $r->reference ?? "",
+                gate_pass_request_created_at_pick($r) ?? "",
+                $r->company_name ?? "",
+                $r->department_name ?? "",
+                $requester_name,
+                ($r->requester_phone ?? "") ?: "",
+                $r->purpose_name ?? "",
+                $r->status ?? "",
+                $r->stage ?? "",
+                $r->visit_from ?? "",
+                $r->visit_to ?? "",
+                (string)($r->fee_amount ?? ""),
+                (string)($r->currency ?? ""),
+            ]);
+        }
+        rewind($fh);
+        $body = stream_get_contents($fh);
+        fclose($fh);
+
+        return $this->response->setBody($body);
     }
 
     public function list_data()
@@ -55,7 +108,8 @@ class Gate_pass_department_requests extends Security_Controller
         $options = [
             "department_ids" => $this->my_department_ids,
             "stage" => "department",
-            "statuses" => ["submitted", "returned"] // you can add more if needed
+            // Returned requests are fixed in the portal; list only active department queue (feedback PDF).
+            "statuses" => ["submitted"],
         ];
 
         $list_data = $this->Gate_pass_requests_model->get_details($options)->getResult();
@@ -70,7 +124,7 @@ class Gate_pass_department_requests extends Security_Controller
 
     private function _make_row($row)
     {
-        $status_label = $this->_status_label($row->status);
+        $status_label = $this->_status_label($row);
 
         $view_url = anchor(
             get_uri("gate_pass_department_requests/details/" . $row->id),
@@ -83,31 +137,45 @@ class Gate_pass_department_requests extends Security_Controller
             $requester_name = $row->requester_name ?? '-';
         }
 
+        $created_disp = gate_pass_request_created_display($row);
+
         return [
             $row->reference,
+            $created_disp,
             $row->company_name,
             $row->department_name,
             $requester_name,
             ($row->requester_phone ?? '') ?: '-',
             $row->purpose_name,
-            $row->visit_from,
-            $row->visit_to,
+            $row->visit_from ? format_to_datetime($row->visit_from) : "-",
+            $row->visit_to ? format_to_datetime($row->visit_to) : "-",
             $status_label,
             $view_url
         ];
     }
 
-    private function _status_label($status): string
+    private function _status_label($row): string
     {
+        $status = $row->status ?? "";
         $class = "bg-secondary";
 
-        if ($status === "submitted") $class = "bg-warning";
-        if ($status === "returned")  $class = "bg-danger";
-        if ($status === "approved")  $class = "bg-success";
-        if ($status === "rejected")  $class = "bg-danger";
-        if ($status === "issued")    $class = "bg-success";
+        if ($status === "submitted") {
+            $class = "bg-warning";
+        }
+        if ($status === "returned") {
+            $class = "bg-danger";
+        }
+        if ($status === "approved") {
+            $class = "bg-success";
+        }
+        if ($status === "rejected") {
+            $class = "bg-danger";
+        }
+        if ($status === "issued") {
+            $class = "bg-success";
+        }
 
-        return "<span class='badge $class'>" . esc($this->_format_gate_pass_status($status)) . "</span>";
+        return "<span class='badge $class'>" . esc(gate_pass_request_status_display($row)) . "</span>";
     }
 
     public function details($id = 0)
@@ -131,13 +199,16 @@ class Gate_pass_department_requests extends Security_Controller
         if ($request->stage !== "department") {
             app_redirect("forbidden");
         }
+        if (($request->status ?? "") === "returned") {
+            app_redirect("forbidden");
+        }
 
         $view_data["request"] = $request;
         $view_data["approval_history"] = $this->Gate_pass_request_approvals_model
             ->get_details(["gate_pass_request_id" => $request->id])
             ->getResult();
 
-        $view_data["status_label"] = $this->_format_gate_pass_status($request->status ?? "");
+        $view_data["status_label"] = gate_pass_request_status_display($request);
 
         return $this->template->rander("gate_pass_department_requests/details", $view_data);
     }
@@ -160,7 +231,7 @@ class Gate_pass_department_requests extends Security_Controller
         if ($request->stage !== "department") {
             app_redirect("forbidden");
         }
-        if ($request->status !== "submitted" && $request->status !== "returned") {
+        if ($request->status !== "submitted") {
             return $this->template->view("errors/html/error_general", ["heading" => app_lang("error"), "message" => app_lang("request_not_awaiting_department")]);
         }
 
@@ -218,10 +289,9 @@ class Gate_pass_department_requests extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
 
-        if ($request->status !== "submitted" && $request->status !== "returned") {
+        if ($request->status !== "submitted") {
             return $this->response->setJSON(["success" => false, "message" => app_lang("request_not_awaiting_department")]);
         }
-
 
         $fee_amount = (float)($request->fee_amount ?? 0);
 $waive_flag = (int)($this->request->getPost("fee_is_waived") ? 1 : 0);
@@ -265,22 +335,30 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
             if ($fee_amount > 0) {
                 $waive_flag = (int)($this->request->getPost("fee_is_waived") ? 1 : 0);
                 $waive_reason = trim((string)$this->request->getPost("fee_waived_reason"));
-        
+
                 if ($waive_flag === 1) {
-                    $request_data["fee_is_waived"] = 1;
-                    $request_data["fee_waived_by"] = $this->login_user->id;
-                    $request_data["fee_waived_reason"] = $waive_reason;
+                    // Request waiver only — commercial must approve before fee is waived / request advances without payment.
+                    $request_data["fee_waiver_requested"] = 1;
+                    $request_data["fee_waiver_commercial_status"] = "pending";
+                    $request_data["fee_is_waived"] = 0;
+                    $request_data["fee_waived_by"] = null;
+                    $request_data["fee_waived_at"] = null;
+                    $request_data["fee_waived_reason"] = $waive_reason !== "" ? $waive_reason : null;
                 } else {
-                    // Explicitly clear waiver if not waived
+                    $request_data["fee_waiver_requested"] = 0;
+                    $request_data["fee_waiver_commercial_status"] = null;
                     $request_data["fee_is_waived"] = 0;
                     $request_data["fee_waived_by"] = null;
                     $request_data["fee_waived_reason"] = null;
+                    $request_data["fee_waived_at"] = null;
                 }
             } else {
-                // No fee => keep waiver clean
+                $request_data["fee_waiver_requested"] = 0;
+                $request_data["fee_waiver_commercial_status"] = null;
                 $request_data["fee_is_waived"] = 0;
                 $request_data["fee_waived_by"] = null;
                 $request_data["fee_waived_reason"] = null;
+                $request_data["fee_waived_at"] = null;
             }
         }
 
@@ -448,28 +526,12 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
 
     private function _make_vehicle_row($row)
     {
+        $mul = !empty($row->mulkiyah_attachment_path)
+            ? "<span class='badge bg-success'>" . app_lang("yes") . "</span>"
+            : "<span class='badge bg-secondary'>" . app_lang("no") . "</span>";
         return [
             $row->plate_no ?? "-",
-            $row->make ?? "-",
-            $row->model ?? "-",
-            $row->color ?? "-"
+            $mul,
         ];
-    }
-
-    private function _format_gate_pass_status($status, $empty_value = "-")
-    {
-        $status = strtolower(trim((string) $status));
-        if ($status === "" || $status === "-") {
-            return $empty_value;
-        }
-        $lang_key = "gate_pass_status_" . $status;
-        $translated = app_lang($lang_key);
-        if ($translated && $translated !== $lang_key) {
-            return $translated;
-        }
-        if ($status === "rop_approved") {
-            return "ROP Approved";
-        }
-        return ucwords(str_replace("_", " ", $status));
     }
 }

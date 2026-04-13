@@ -28,7 +28,7 @@ $waive_reason = $request->fee_waived_reason ?? "";
         <?php endif; ?>
 
         <small class="text-muted d-block mt-2">
-            Department may waive the fee if applicable. Commercial will review waiver details.
+            <?php echo app_lang("gate_pass_dept_approval_fee_info"); ?>
         </small>
     </div>
 
@@ -52,15 +52,15 @@ $waive_reason = $request->fee_waived_reason ?? "";
                        name="fee_is_waived" value="1"
                        <?php echo $is_waived ? "checked" : ""; ?>>
                 <label class="form-check-label" for="gp-waive-fee">
-                    Waive fee
+                    <?php echo app_lang("gate_pass_dept_request_fee_waiver"); ?>
                 </label>
             </div>
 
             <div class="mt-2" id="gp-waive-reason-wrap" style="display:none;">
-                <label class="form-label">Waive reason <span class="text-danger">*</span></label>
+                <label class="form-label"><?php echo app_lang("gate_pass_dept_fee_waiver_reason_label"); ?> <span class="text-danger">*</span></label>
                 <textarea name="fee_waived_reason" id="gp-waive-reason" class="form-control" rows="3"
-                          placeholder="Explain why fee is waived..."><?php echo esc($waive_reason); ?></textarea>
-                <small class="text-muted">Required if fee is waived.</small>
+                          placeholder="<?php echo app_lang("gate_pass_dept_fee_waiver_reason_label"); ?>"><?php echo esc($waive_reason); ?></textarea>
+                <small class="text-muted"><?php echo app_lang("gate_pass_dept_fee_waiver_reason_hint"); ?></small>
             </div>
         </div>
     <?php endif; ?>
@@ -112,7 +112,7 @@ $(document).ready(function () {
             if (decision === "approved" && waiveChecked) {
                 const r = ($("#gp-waive-reason").val() || "").trim();
                 if (!r) {
-                    appAlert.error("Waive reason is required.");
+                    appAlert.error("<?php echo app_lang('field_required'); ?>");
                     return false;
                 }
             }

@@ -121,7 +121,7 @@
     $(document).ready(function () {
         $("#gate-pass-department-user-form").appForm({
             onSuccess: function () {
-                $("#gate-pass-department-users-table").appTable({newData: true});
+                $("#gate-pass-department-users-table").appTable({ reload: true });
             }
         });
 

@@ -1,11 +1,20 @@
 <?php
 // NOTE: This file must be a VIEW. Your zip currently has controller code here by mistake.
 
-$id = $model_info->id ?? "";
+$raw_request_id = $model_info->id ?? null;
+$is_new_request = ($raw_request_id === null || $raw_request_id === "" || (int) $raw_request_id === 0);
+$id = $is_new_request ? "" : (string) (int) $raw_request_id;
+$today_ymd = date("Y-m-d");
 $visit_from_val = !empty($model_info->visit_from) ? substr((string)$model_info->visit_from, 0, 10) : "";
 $visit_to_val   = !empty($model_info->visit_to) ? substr((string)$model_info->visit_to, 0, 10) : "";
+if ($is_new_request && $visit_from_val === "") {
+    $visit_from_val = $today_ymd;
+}
 $currency_val   = $model_info->currency ?? "OMR";
 $request_type_val = $model_info->request_type ?? "both";
+if ($request_type_val === "vehicle") {
+    $request_type_val = "both";
+}
 $vehicle_type_val = $model_info->vehicle_type ?? "none";
 $visit_type_val   = $model_info->visit_type ?? "visitor";
 
@@ -112,8 +121,16 @@ $vehicle_row_type_options_html = $render_options($vehicle_row_type_options);
       <div class="row">
         <label class="col-md-3">Visit From <span class="text-danger">*</span></label>
         <div class="col-md-9">
-          <input type="date" name="visit_from" id="gp-visit-from" class="form-control"
-                 value="<?php echo esc($visit_from_val); ?>" required>
+          <?php
+          $from_attrs = "type=\"date\" name=\"visit_from\" id=\"gp-visit-from\" class=\"form-control\" required";
+          if ($is_new_request) {
+              $from_attrs .= " min=\"" . esc($today_ymd) . "\"";
+          }
+          ?>
+          <input <?php echo $from_attrs; ?> value="<?php echo esc($visit_from_val); ?>">
+          <?php if ($is_new_request): ?>
+            <small class="text-muted"><?php echo app_lang("gate_pass_visit_from_starts_today_or_later"); ?></small>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -122,8 +139,21 @@ $vehicle_row_type_options_html = $render_options($vehicle_row_type_options);
       <div class="row">
         <label class="col-md-3">Visit To <span class="text-danger">*</span></label>
         <div class="col-md-9">
-          <input type="date" name="visit_to" id="gp-visit-to" class="form-control"
-                 value="<?php echo esc($visit_to_val); ?>" required>
+          <?php
+          $to_disabled = $visit_from_val === "";
+          $to_min = $visit_from_val !== "" ? $visit_from_val : "";
+          $to_attrs = "type=\"date\" name=\"visit_to\" id=\"gp-visit-to\" class=\"form-control\"";
+          if ($to_min !== "") {
+              $to_attrs .= " min=\"" . esc($to_min) . "\"";
+          }
+          if ($to_disabled) {
+              $to_attrs .= " disabled";
+          } else {
+              $to_attrs .= " required";
+          }
+          ?>
+          <input <?php echo $to_attrs; ?> value="<?php echo esc($visit_to_val); ?>">
+          <small class="text-muted" id="gp-visit-to-hint"><?php echo app_lang("gate_pass_visit_to_after_from_hint"); ?></small>
         </div>
       </div>
     </div>
@@ -148,8 +178,8 @@ $vehicle_row_type_options_html = $render_options($vehicle_row_type_options);
           <select name="request_type" class="form-control" id="gp-request-type">
             <option value="both" <?php echo $request_type_val==="both"?"selected":""; ?>>Person + Vehicle</option>
             <option value="person" <?php echo $request_type_val==="person"?"selected":""; ?>>Person Only</option>
-            <option value="vehicle" <?php echo $request_type_val==="vehicle"?"selected":""; ?>>Vehicle Only</option>
           </select>
+          <small class="text-muted d-block mt8" id="gp-request-type-hint" role="note"></small>
         </div>
       </div>
     </div>
@@ -185,87 +215,12 @@ $vehicle_row_type_options_html = $render_options($vehicle_row_type_options);
     </div>
 
     <?php if (!$id): ?>
-      <!-- Visitors section (inline on CREATE) -->
-      <div class="mb15">
-        <h4 class="mt0">Visitors</h4>
-        <div class="table-responsive">
-          <table class="table table-bordered" id="gp-visitors-inline">
-            <thead>
-              <tr>
-                <th style="min-width:180px;">Full Name</th>
-                <th style="min-width:120px;">ID Type</th>
-                <th style="min-width:140px;">ID Number</th>
-                <th style="min-width:120px;">Nationality</th>
-                <th style="min-width:140px;">Phone</th>
-                <th style="min-width:120px;">Role</th>
-                <th style="width:60px;"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="gp-visitor-row">
-                <td><input class="form-control" name="visitors[0][full_name]" placeholder="Full name"></td>
-                <td>
-                  <select class="form-control" name="visitors[0][id_type]">
-                    <?php echo $id_type_options_html; ?>
-                  </select>
-                </td>
-                <td><input class="form-control" name="visitors[0][id_number]" placeholder="ID number"></td>
-                <td>
-                  <select class="form-control" name="visitors[0][nationality]">
-                    <?php echo $nationality_options_html; ?>
-                  </select>
-                </td>
-                <td><input class="form-control" name="visitors[0][phone]" placeholder="Phone"></td>
-                <td><input class="form-control" name="visitors[0][role]" placeholder="visitor"></td>
-                <td class="text-center">
-                  <button type="button" class="btn btn-default btn-sm gp-remove-row" title="Remove">&times;</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <button type="button" class="btn btn-default" id="gp-add-visitor">+ Add Visitor</button>
-        <small class="text-muted d-block mt5">Attachments can be added later from the request details page.</small>
-      </div>
-
-      <!-- Vehicles section (inline on CREATE) -->
-      <div class="mb15" id="gp-vehicles-inline-wrap">
-        <h4 class="mt0">Vehicles</h4>
-        <div class="table-responsive">
-          <table class="table table-bordered" id="gp-vehicles-inline">
-            <thead>
-              <tr>
-                <th style="min-width:140px;">Plate No</th>
-                <th style="min-width:140px;">Type</th>
-                <th style="min-width:140px;">Make</th>
-                <th style="min-width:140px;">Model</th>
-                <th style="min-width:120px;">Color</th>
-                <th style="width:60px;"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="gp-vehicle-row">
-                <td><input class="form-control" name="vehicles[0][plate_no]" placeholder="Plate"></td>
-                <td>
-                  <select class="form-control" name="vehicles[0][type]">
-                    <?php echo $vehicle_row_type_options_html; ?>
-                  </select>
-                </td>
-                <td><input class="form-control" name="vehicles[0][make]" placeholder="Make"></td>
-                <td><input class="form-control" name="vehicles[0][model]" placeholder="Model"></td>
-                <td><input class="form-control" name="vehicles[0][color]" placeholder="Color"></td>
-                <td class="text-center">
-                  <button type="button" class="btn btn-default btn-sm gp-remove-row" title="Remove">&times;</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <button type="button" class="btn btn-default" id="gp-add-vehicle">+ Add Vehicle</button>
+      <div class="alert alert-info gp-pro-inline-alert">
+        <?php echo app_lang("gate_pass_create_then_add_visitors"); ?>
       </div>
     <?php else: ?>
       <div class="alert alert-warning gp-pro-inline-alert">
-        This modal edits the request info only. To add/update visitors & vehicles, open the request details page after saving.
+        <?php echo app_lang("gate_pass_modal_edit_request_only"); ?>
       </div>
     <?php endif; ?>
 
@@ -316,64 +271,19 @@ $(document).ready(function () {
   });
 
   // ---------- Request type toggles ----------
+  var gpRequestTypeHints = {
+    both: <?php echo json_encode(app_lang("gate_pass_request_type_hint_both")); ?>,
+    person: <?php echo json_encode(app_lang("gate_pass_request_type_hint_person")); ?>
+  };
   function syncRequestTypeUI(){
     const t = $("#gp-request-type").val();
-    const showVehicles = (t === "both" || t === "vehicle");
-    $("#gp-vehicles-inline-wrap").toggle(showVehicles);
-    $("#gp-vehicle-type-wrap").toggle(showVehicles);
-    if (!showVehicles) $("#gp-vehicle-type").val("none");
+    const showVehicleType = (t === "both");
+    $("#gp-vehicle-type-wrap").toggle(showVehicleType);
+    if (!showVehicleType) $("#gp-vehicle-type").val("none");
+    $("#gp-request-type-hint").text(gpRequestTypeHints[t] || gpRequestTypeHints.both);
   }
   $("#gp-request-type").on("change", syncRequestTypeUI);
   syncRequestTypeUI();
-
-  // ---------- Inline dynamic rows ----------
-  function nextIndex(tableId, rowClass) {
-    return $("#" + tableId + " tbody tr." + rowClass).length;
-  }
-
-  const idTypeOptionsHtml = <?php echo json_encode($id_type_options_html); ?>;
-  const nationalityOptionsHtml = <?php echo json_encode($nationality_options_html); ?>;
-  const vehicleTypeOptionsHtml = <?php echo json_encode($vehicle_row_type_options_html); ?>;
-
-  $("#gp-add-visitor").on("click", function(){
-    const i = nextIndex("gp-visitors-inline", "gp-visitor-row");
-    const tr = `
-      <tr class="gp-visitor-row">
-        <td><input class="form-control" name="visitors[${i}][full_name]" placeholder="Full name"></td>
-        <td><select class="form-control" name="visitors[${i}][id_type]">${idTypeOptionsHtml}</select></td>
-        <td><input class="form-control" name="visitors[${i}][id_number]" placeholder="ID number"></td>
-        <td><select class="form-control" name="visitors[${i}][nationality]">${nationalityOptionsHtml}</select></td>
-        <td><input class="form-control" name="visitors[${i}][phone]" placeholder="Phone"></td>
-        <td><input class="form-control" name="visitors[${i}][role]" placeholder="visitor"></td>
-        <td class="text-center"><button type="button" class="btn btn-default btn-sm gp-remove-row">&times;</button></td>
-      </tr>`;
-    $("#gp-visitors-inline tbody").append(tr);
-  });
-
-  $("#gp-add-vehicle").on("click", function(){
-    const i = nextIndex("gp-vehicles-inline", "gp-vehicle-row");
-    const tr = `
-      <tr class="gp-vehicle-row">
-        <td><input class="form-control" name="vehicles[${i}][plate_no]" placeholder="Plate"></td>
-        <td><select class="form-control" name="vehicles[${i}][type]">${vehicleTypeOptionsHtml}</select></td>
-        <td><input class="form-control" name="vehicles[${i}][make]" placeholder="Make"></td>
-        <td><input class="form-control" name="vehicles[${i}][model]" placeholder="Model"></td>
-        <td><input class="form-control" name="vehicles[${i}][color]" placeholder="Color"></td>
-        <td class="text-center"><button type="button" class="btn btn-default btn-sm gp-remove-row">&times;</button></td>
-      </tr>`;
-    $("#gp-vehicles-inline tbody").append(tr);
-  });
-
-  $(document).on("click", ".gp-remove-row", function(){
-    const $tr = $(this).closest("tr");
-    const $tbody = $tr.closest("tbody");
-    if ($tbody.find("tr").length <= 1) {
-      $tr.find("input").val("");
-      $tr.find("select").prop("selectedIndex", 0);
-      return;
-    }
-    $tr.remove();
-  });
 
   // ---------- Fee preview ----------
   function calcFeePreview(){
@@ -401,13 +311,51 @@ $(document).ready(function () {
       });
   }
 
-  $("#gp-visit-from, #gp-visit-to, #gp-currency").on("change", calcFeePreview);
+  // ---------- Visit dates: "to" only after "from"; to >= from ----------
+  var hintToAfterFrom = <?php echo json_encode(app_lang("gate_pass_visit_to_after_from_hint")); ?>;
+  var hintPickFromFirst = <?php echo json_encode(app_lang("gate_pass_visit_to_pick_from_first")); ?>;
+
+  function syncVisitDateRange() {
+    var $from = $("#gp-visit-from");
+    var $to = $("#gp-visit-to");
+    var $hint = $("#gp-visit-to-hint");
+    var fromVal = $from.val() || "";
+
+    if (!fromVal) {
+      $to.prop("disabled", true).removeAttr("required").removeAttr("min").val("");
+      if ($hint.length) $hint.text(hintPickFromFirst);
+      return;
+    }
+
+    $to.prop("disabled", false).attr("required", "required").attr("min", fromVal);
+    if ($hint.length) $hint.text(hintToAfterFrom);
+
+    var toVal = $to.val() || "";
+    if (toVal && toVal < fromVal) {
+      $to.val(fromVal);
+    }
+  }
+
+  $("#gp-visit-from").on("change input", function () {
+    syncVisitDateRange();
+    calcFeePreview();
+  });
+  $("#gp-visit-to, #gp-currency").on("change", calcFeePreview);
+  syncVisitDateRange();
   calcFeePreview();
 
   // ---------- Submit ----------
   $("#gp-request-form").appForm({
+    onSubmit: function () {
+      // Disabled inputs are not posted; re-enable so visit_to is saved when set.
+      $("#gp-visit-to").prop("disabled", false);
+    },
     onSuccess: function (result) {
-      $("#gp-requests-table").appTable({newData: result.data, dataId: result.id});
+      if ($("#gp-requests-table").length) {
+        $("#gp-requests-table").appTable({newData: result.data, dataId: result.id});
+      } else {
+        window.location.reload();
+      }
     }
   });
 

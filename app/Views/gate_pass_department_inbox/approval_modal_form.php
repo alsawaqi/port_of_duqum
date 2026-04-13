@@ -52,7 +52,7 @@ $(document).ready(function () {
 
     $("#gp-approval-form").appForm({
         onSuccess: function () {
-            $("#gate-pass-dept-requests-table").appTable({ newData: true });
+            window.location.href = "<?php echo get_uri('gate_pass_department_inbox'); ?>";
         }
     });
 });

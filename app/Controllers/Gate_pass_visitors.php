@@ -41,7 +41,7 @@ class Gate_pass_visitors extends Security_Controller
     {
         $this->validate_submitted_data([
             "id" => "numeric",
-            "username" => "required|regex_match[/^[A-Za-z0-9]+$/]",
+            "username" => "permit_empty|regex_match[/^[A-Za-z0-9]+$/]",
             "first_name" => "required",
             "last_name" => "permit_empty",
             "email" => "required|valid_email",
@@ -61,13 +61,39 @@ class Gate_pass_visitors extends Security_Controller
             ]);
         }
 
-        $username = trim($this->request->getPost("username"));
         $email = strtolower(trim($this->request->getPost("email")));
+        $username = trim((string)$this->request->getPost("username"));
         $portal_status = $this->request->getPost("portal_status");
         $otp_channel = $this->request->getPost("otp_channel");
 
         $users_table = $this->db->prefixTable("users");
         $gp_table = $this->db->prefixTable("gate_pass_users");
+
+        if ($username === "") {
+            $local = preg_replace('/[^A-Za-z0-9]/', '', strstr($email, "@", true) ?: "");
+            if ($local === "") {
+                $local = "gatepass";
+            }
+            $base = substr($local, 0, 40);
+            $username = $base;
+            $suffix = 0;
+            while (true) {
+                $try = $suffix === 0 ? $username : ($base . $suffix);
+                $taken = $this->db->query(
+                    "SELECT id FROM $gp_table WHERE username=? AND deleted=0 " . ($id ? "AND id<>?" : ""),
+                    $id ? [$try, $id] : [$try]
+                )->getRow();
+                if (!$taken) {
+                    $username = $try;
+                    break;
+                }
+                $suffix++;
+                if ($suffix > 9999) {
+                    echo json_encode(["success" => false, "message" => "Could not allocate username. Please enter a username."]);
+                    return;
+                }
+            }
+        }
 
         // Check username uniqueness
         $q = $this->db->query(

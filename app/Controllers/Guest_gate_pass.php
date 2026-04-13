@@ -2,7 +2,7 @@
 
 namespace App\Controllers;
 
-use App\Models\Gate_pass_users_model;
+use App\Libraries\ReCAPTCHA;
 
 class Guest_gate_pass extends App_Controller
 {
@@ -21,6 +21,7 @@ class Guest_gate_pass extends App_Controller
         $view_data = [];
         $view_data["topbar"] = "includes/public/topbar";
         $view_data["left_menu"] = false;
+        $view_data["intl_dial_codes"] = require APPPATH . "Config/intl_phone_dial_codes.php";
         return $this->template->rander("guest_gate_pass/index", $view_data);
     }
 
@@ -28,12 +29,13 @@ class Guest_gate_pass extends App_Controller
     {
         // Public create-only (same create flow as Gate_pass_visitors::save)
         $this->validate_submitted_data([
-            "username" => "required|regex_match[/^[A-Za-z0-9]+$/]",
             "first_name" => "required",
             "last_name" => "permit_empty",
             "email" => "required|valid_email",
-            "phone" => "permit_empty",
-            "emergency_number" => "permit_empty",
+            "phone_country_code" => "required|max_length[12]",
+            "phone_local" => "required|regex_match[/^\d{4,15}$/]",
+            "emergency_country_code" => "required|max_length[12]",
+            "emergency_local" => "required|regex_match[/^\d{4,15}$/]",
             "otp_channel" => "required|in_list[email,phone]",
             "password" => "permit_empty"
         ]);
@@ -41,8 +43,51 @@ class Guest_gate_pass extends App_Controller
         $users_table = $this->db->prefixTable("users");
         $gp_users_table = $this->db->prefixTable("gate_pass_users");
 
-        $username = trim($this->request->getPost("username"));
         $email = strtolower(trim($this->request->getPost("email")));
+
+        $phoneDial = $this->_normalize_dial_code($this->request->getPost("phone_country_code"));
+        $emergencyDial = $this->_normalize_dial_code($this->request->getPost("emergency_country_code"));
+        if (!$this->_is_allowed_dial($phoneDial) || !$this->_is_allowed_dial($emergencyDial)) {
+            echo json_encode([
+                "success" => false,
+                "message" => "Invalid country code selected.",
+            ]);
+            return;
+        }
+
+        $phone = $this->_merge_e164($phoneDial, (string) $this->request->getPost("phone_local"));
+        $emergencyNumber = $this->_merge_e164($emergencyDial, (string) $this->request->getPost("emergency_local"));
+        if ($phone === "" || $emergencyNumber === "") {
+            echo json_encode([
+                "success" => false,
+                "message" => "Please enter a valid phone number and emergency number.",
+            ]);
+            return;
+        }
+
+        $local = preg_replace('/[^A-Za-z0-9]/', '', strstr($email, "@", true) ?: "");
+        if ($local === "") {
+            $local = "gatepass";
+        }
+        $base = substr($local, 0, 40);
+        $username = $base;
+        $suffix = 0;
+        while (true) {
+            $try = $suffix === 0 ? $username : ($base . $suffix);
+            $taken = $this->db->query(
+                "SELECT id FROM $gp_users_table WHERE username=? LIMIT 1",
+                [$try]
+            )->getRow();
+            if (!$taken) {
+                $username = $try;
+                break;
+            }
+            $suffix++;
+            if ($suffix > 9999) {
+                echo json_encode(["success" => false, "message" => "Could not allocate a login username from your email. Please contact support."]);
+                return;
+            }
+        }
         $otp_channel = $this->request->getPost("otp_channel");
 
         // Guest default portal status (matches Gate_pass_visitors statuses)
@@ -69,6 +114,11 @@ class Guest_gate_pass extends App_Controller
             $this->validate_submitted_data([
                 "password" => "required",
             ]);
+        }
+
+        if (get_setting("re_captcha_secret_key")) {
+            $ReCAPTCHA = new ReCAPTCHA();
+            $ReCAPTCHA->validate_recaptcha(true);
         }
 
         $this->db->transBegin();
@@ -102,8 +152,8 @@ class Guest_gate_pass extends App_Controller
                     "email"      => $email,
                     "password"   => password_hash($password, PASSWORD_DEFAULT),
 
-                    "phone" => $this->request->getPost("phone"),
-                    "alternative_phone" => $this->request->getPost("emergency_number"),
+                    "phone" => $phone,
+                    "alternative_phone" => $emergencyNumber,
 
                     "job_title" => "Gate Pass Visitor",
                     "user_type" => "staff",
@@ -190,5 +240,46 @@ class Guest_gate_pass extends App_Controller
             $this->db->transRollback();
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
+    }
+
+    /** @var list<string>|null */
+    private static $allowedDialCache = null;
+
+    private function _dial_code_whitelist(): array
+    {
+        if (self::$allowedDialCache === null) {
+            $list = require APPPATH . "Config/intl_phone_dial_codes.php";
+            self::$allowedDialCache = array_values(array_unique(array_column($list, "code")));
+        }
+
+        return self::$allowedDialCache;
+    }
+
+    private function _normalize_dial_code(?string $dial): string
+    {
+        $dial = trim((string) $dial);
+        if ($dial === "") {
+            return "";
+        }
+        if ($dial[0] !== "+") {
+            $dial = "+" . ltrim($dial, "+");
+        }
+
+        return $dial;
+    }
+
+    private function _is_allowed_dial(string $dial): bool
+    {
+        return in_array($dial, $this->_dial_code_whitelist(), true);
+    }
+
+    private function _merge_e164(string $dial, string $localDigits): string
+    {
+        $localDigits = preg_replace('/\D+/', "", $localDigits) ?? "";
+        if ($dial === "" || $localDigits === "") {
+            return "";
+        }
+
+        return $dial . $localDigits;
     }
 }

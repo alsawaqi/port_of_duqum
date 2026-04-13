@@ -40,28 +40,60 @@ class Gate_pass_rop_inbox extends Security_Controller
 
     public function index()
     {
-        return $this->template->rander("gate_pass_rop_inbox/index");
+        $Stats = new \App\Models\Pod_dashboard_stats_model();
+        // ROP stage is port-wide: KPIs cover all companies (no per-company filter).
+        $view_data["kpis"] = $Stats->gate_pass_kpis(["stages" => ["rop"]]);
+
+        return $this->template->rander("gate_pass_rop_inbox/index", $view_data);
+    }
+
+    public function export_list_csv()
+    {
+        $options = [
+            "stage" => "rop",
+            "exclude_statuses" => ["returned"],
+        ];
+
+        $list = $this->Gate_pass_requests_model->get_details($options)->getResult();
+
+        $filename = "gate_pass_rop_" . date("Y-m-d") . ".csv";
+        $this->response->setHeader("Content-Type", "text/csv; charset=UTF-8");
+        $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
+
+        $fh = fopen("php://temp", "r+");
+        fputcsv($fh, ["reference", "created_at", "company", "department", "requester", "phone", "status", "stage", "visit_from", "visit_to"]);
+        foreach ($list as $r) {
+            $requester_name = trim(($r->requester_first_name ?? "") . " " . ($r->requester_last_name ?? ""));
+            if ($requester_name === "") {
+                $requester_name = $r->requester_name ?? "";
+            }
+            fputcsv($fh, [
+                $r->reference ?? "",
+                gate_pass_request_created_at_pick($r) ?? "",
+                $r->company_name ?? "",
+                $r->department_name ?? "",
+                $requester_name,
+                ($r->requester_phone ?? "") ?: "",
+                $r->status ?? "",
+                $r->stage ?? "",
+                $r->visit_from ?? "",
+                $r->visit_to ?? "",
+            ]);
+        }
+        rewind($fh);
+        $body = stream_get_contents($fh);
+        fclose($fh);
+
+        return $this->response->setBody($body);
     }
 
     public function list_data()
     {
-        // Show all requests in rop stage regardless of status
+        // All requests currently in the ROP stage (any company). Access is limited to admins and ROP users.
         $options = [
             "stage" => "rop",
+            "exclude_statuses" => ["returned"],
         ];
-
-        if (!$this->login_user->is_admin) {
-            $assignments = $this->Gate_pass_rop_users_model->get_user_assignments($this->login_user->id)->getResult();
-            $company_ids = [];
-            foreach ($assignments as $a) {
-                $company_ids[] = (int)$a->company_id;
-            }
-            if (empty($company_ids)) {
-                echo json_encode(["data" => []]);
-                return;
-            }
-            $options["company_ids"] = $company_ids;
-        }
 
         $list = $this->Gate_pass_requests_model->get_details($options)->getResult();
         $result = [];
@@ -104,16 +136,19 @@ class Gate_pass_rop_inbox extends Security_Controller
             $requester_name = $data->requester_name ?? '-';
         }
 
+        $created_disp = gate_pass_request_created_display($data);
+
         return [
             $data->reference ?? "-",
+            $created_disp,
             $data->company_name ?? "-",
             $data->department_name ?? "-",
             $requester_name,
             ($data->requester_phone ?? '') ?: '-',
             $data->visit_from ? format_to_datetime($data->visit_from) : "-",
             $data->visit_to ? format_to_datetime($data->visit_to) : "-",
-            $this->_format_gate_pass_status($data->status ?? ""),
-            $view_btn . " " . $review_btn . " " . $visitor_block_btn,
+            gate_pass_request_status_display($data),
+            '<div class="gp-rop-action-btns">' . $view_btn . $review_btn . $visitor_block_btn . '</div>',
         ];
     }
 
@@ -132,13 +167,16 @@ class Gate_pass_rop_inbox extends Security_Controller
         if ($request->stage !== "rop") {
             app_redirect("forbidden");
         }
+        if (($request->status ?? "") === "returned") {
+            app_redirect("forbidden");
+        }
 
         $view_data["request"] = $request;
         $view_data["approval_history"] = $this->Gate_pass_request_approvals_model
             ->get_details(["gate_pass_request_id" => $request->id])
             ->getResult();
 
-        $view_data["status_label"] = $this->_format_gate_pass_status($request->status ?? "");
+        $view_data["status_label"] = gate_pass_request_status_display($request);
 
         return $this->template->rander("gate_pass_rop_inbox/details", $view_data);
     }
@@ -207,6 +245,11 @@ class Gate_pass_rop_inbox extends Security_Controller
             : "<span class='badge bg-success'>Clear</span>";
         $block_reason = trim((string)($row->block_reason ?? ""));
         $primary = !empty($row->is_primary) ? "<span class='badge bg-success'>" . app_lang("primary") . "</span>" : "";
+        $attachments_btn = modal_anchor(
+            get_uri("gate_pass_rop_inbox/visitor_attachments_modal"),
+            "<i data-feather='paperclip' class='icon-16'></i> " . app_lang("attachments"),
+            ["class" => "btn btn-default btn-sm", "title" => app_lang("visitor_attachments"), "data-modal-title" => app_lang("visitor_attachments"), "data-post-id" => $row->id]
+        );
         return [
             $row->full_name ?? "-",
             $row->id_type ?? "-",
@@ -216,17 +259,19 @@ class Gate_pass_rop_inbox extends Security_Controller
             $row->role ?? "-",
             $blocked_badge,
             $block_reason !== "" ? esc($block_reason) : "-",
-            $primary
+            $primary,
+            $attachments_btn,
         ];
     }
 
     private function _make_vehicle_row_readonly($row)
     {
+        $mul = !empty($row->mulkiyah_attachment_path)
+            ? "<span class='badge bg-success'>" . app_lang("yes") . "</span>"
+            : "<span class='badge bg-secondary'>" . app_lang("no") . "</span>";
         return [
             $row->plate_no ?? "-",
-            $row->make ?? "-",
-            $row->model ?? "-",
-            $row->color ?? "-"
+            $mul,
         ];
     }
 
@@ -246,6 +291,9 @@ class Gate_pass_rop_inbox extends Security_Controller
 
         if ($request->stage !== "rop") {
             return $this->template->view("errors/html/error_general", ["heading" => app_lang("error"), "message" => "Request is not in ROP stage."]);
+        }
+        if (($request->status ?? "") === "returned") {
+            return $this->template->view("errors/html/error_general", ["heading" => app_lang("error"), "message" => app_lang("error_occurred")]);
         }
 
         $view_data["request"] = $request;
@@ -308,6 +356,11 @@ class Gate_pass_rop_inbox extends Security_Controller
             return;
         }
 
+        if (($request->status ?? "") === "returned") {
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            return;
+        }
+
         $approval_data = [
             "gate_pass_request_id" => $request_id,
             "stage" => "rop",
@@ -342,7 +395,8 @@ class Gate_pass_rop_inbox extends Security_Controller
                     "gate_pass_no" => $gate_pass_no,
                     "qr_token" => $qr_token,
                     "status" => "active",
-                    "valid_from" => $request->visit_from ?? $now,
+                    // Scannable immediately after issue; visit window still shown from the request on scan UI
+                    "valid_from" => $now,
                     "valid_to" => $request->visit_to ?? null,
                     "issued_by" => $this->login_user->id,
                     "issued_at" => $now,
@@ -358,6 +412,74 @@ class Gate_pass_rop_inbox extends Security_Controller
         }
 
         echo json_encode(["success" => true, "message" => app_lang("record_saved"), "id" => $request_id]);
+    }
+
+    public function visitor_attachments_modal()
+    {
+        $this->validate_submitted_data(["id" => "required|numeric"]);
+        $visitor_id = (int)$this->request->getPost("id");
+
+        $visitor = $this->Gate_pass_request_visitors_model->get_details(["id" => $visitor_id])->getRow();
+        if (!$visitor || !empty($visitor->deleted)) {
+            return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
+        }
+
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
+        if (!$request || !empty($request->deleted)) {
+            return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
+        }
+        if (!$this->_can_act_on_request($request)) {
+            app_redirect("forbidden");
+        }
+        if (($request->stage ?? "") !== "rop") {
+            return $this->template->view("errors/html/error_general", ["heading" => app_lang("error"), "message" => "Request is not in ROP stage."]);
+        }
+
+        $view_data["visitor"] = $visitor;
+        return $this->template->view("gate_pass_rop_inbox/visitor_attachments_modal", $view_data);
+    }
+
+    public function visitor_attachment_download($visitor_id = 0, $field = "")
+    {
+        $visitor_id = (int)$visitor_id;
+        $allowed_fields = ["id_attachment_path", "visa_attachment_path", "photo_attachment_path", "driving_license_attachment_path"];
+        if (!$visitor_id || !in_array($field, $allowed_fields, true)) {
+            show_404();
+        }
+
+        $visitor = $this->Gate_pass_request_visitors_model->get_details(["id" => $visitor_id])->getRow();
+        if (!$visitor || empty($visitor->{$field})) {
+            show_404();
+        }
+
+        $relPath = $visitor->{$field};
+        $relPath = preg_replace("#\.\.+#", "", $relPath);
+        $relPath = ltrim($relPath, "/");
+        $fullPath = WRITEPATH . "uploads/" . $relPath;
+        if (!is_file($fullPath)) {
+            show_404();
+        }
+
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
+        if (!$request || $request->deleted) {
+            show_404();
+        }
+        if (!$this->_can_act_on_request($request)) {
+            app_redirect("forbidden");
+        }
+        if (($request->stage ?? "") !== "rop") {
+            show_404();
+        }
+
+        $mime = function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream";
+        $name = basename($relPath);
+        $download = (int)($this->request->getGet("download") ?? 0) === 1;
+        $inline = !$download && (str_starts_with($mime, "image/") || $mime === "application/pdf");
+
+        return $this->response
+            ->setHeader("Content-Type", $mime)
+            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
+            ->setBody(file_get_contents($fullPath));
     }
 
     public function visitor_block_modal_form()
@@ -440,6 +562,15 @@ class Gate_pass_rop_inbox extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
         }
 
+        gate_pass_audit_log_visitor_block(
+            (int)$this->login_user->id,
+            $request,
+            $visitor,
+            $block_action,
+            $block_reason,
+            "rop"
+        );
+
         return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);
     }
 
@@ -458,29 +589,10 @@ class Gate_pass_rop_inbox extends Security_Controller
         if ($this->login_user->is_admin) {
             return true;
         }
-        $assignments = $this->Gate_pass_rop_users_model->get_user_assignments($this->login_user->id)->getResult();
-        foreach ($assignments as $a) {
-            if ((int)$a->company_id === (int)$request->company_id) {
-                return true;
-            }
+        if ((string)($request->stage ?? "") !== "rop") {
+            return false;
         }
-        return false;
-    }
 
-    private function _format_gate_pass_status($status, $empty_value = "-")
-    {
-        $status = strtolower(trim((string) $status));
-        if ($status === "" || $status === "-") {
-            return $empty_value;
-        }
-        $lang_key = "gate_pass_status_" . $status;
-        $translated = app_lang($lang_key);
-        if ($translated && $translated !== $lang_key) {
-            return $translated;
-        }
-        if ($status === "rop_approved") {
-            return "ROP Approved";
-        }
-        return ucwords(str_replace("_", " ", $status));
+        return $this->Gate_pass_rop_users_model->is_rop_user((int)$this->login_user->id);
     }
 }

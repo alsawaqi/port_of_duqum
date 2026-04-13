@@ -75,6 +75,10 @@
             border-color: rgba(99,102,241,.55) !important;
             box-shadow: 0 0 0 4px rgba(99,102,241,.15) !important;
         }
+        .gv-phone-split select.form-control {
+            font-size: 13px;
+            padding-right: 28px;
+        }
 
         .gv-footer {
             padding: 14px 26px;
@@ -112,6 +116,7 @@
             <div class="gv-hero">
                 <h1>Gate Pass Account Application</h1>
                 <p>Apply for a visitor account to request Gate Pass access. Your account will be reviewed and activated by our team.</p>
+                <p class="gv-help" style="margin-top:10px;"><?php echo app_lang("gate_pass_signup_vs_gate_pass_account"); ?></p>
 
                 <div class="gv-badges">
                     <span class="gv-badge"><i data-feather="shield"></i> Secure submission</span>
@@ -138,22 +143,14 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-lg-4">
-                            <div class="form-group">
-                                <label>Username <span class="text-danger">*</span></label>
-                                <input name="username" id="username" class="form-control" required placeholder="No special characters">
-                                <div id="username-error" class="alert alert-danger mt10 d-none"></div>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-4">
+                        <div class="col-lg-6">
                             <div class="form-group">
                                 <label>First Name <span class="text-danger">*</span></label>
                                 <input name="first_name" class="form-control" required>
                             </div>
                         </div>
 
-                        <div class="col-lg-4">
+                        <div class="col-lg-6">
                             <div class="form-group">
                                 <label>Last Name</label>
                                 <input name="last_name" class="form-control">
@@ -177,17 +174,46 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-lg-4">
+                        <?php
+                        $intl_dial_codes = $intl_dial_codes ?? [];
+                        $default_dial = "+968";
+                        ?>
+                        <div class="col-lg-12">
                             <div class="form-group">
                                 <label>Phone Number <span class="text-danger">*</span></label>
-                                <input name="phone" class="form-control" required placeholder="+968 ....">
+                                <div class="row gv-phone-split">
+                                    <div class="col-sm-5 col-md-4 mb10 mb-sm-0">
+                                        <select name="phone_country_code" id="phone_country_code" class="form-control" required title="Country code">
+                                            <?php foreach ($intl_dial_codes as $d) {
+                                                $sel = ($d["code"] === $default_dial) ? " selected" : "";
+                                                echo "<option value=\"" . esc($d["code"]) . "\"{$sel}>" . esc($d["country"] . " (" . $d["code"] . ")") . "</option>\n";
+                                            } ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-7 col-md-8">
+                                        <input name="phone_local" id="phone_local" class="form-control gv-digits-only" required type="text" inputmode="numeric" pattern="[0-9]{4,15}" maxlength="15" autocomplete="tel-national" placeholder="71234567" title="Numbers only (no spaces or symbols)">
+                                    </div>
+                                </div>
+                                <small class="text-muted">Choose your country code, then enter your mobile number using digits only (no spaces or symbols), without the leading zero.</small>
                             </div>
                         </div>
 
-                        <div class="col-lg-4">
+                        <div class="col-lg-12">
                             <div class="form-group">
                                 <label>Emergency Number <span class="text-danger">*</span></label>
-                                <input name="emergency_number" class="form-control" required placeholder="+968 ....">
+                                <div class="row gv-phone-split">
+                                    <div class="col-sm-5 col-md-4 mb10 mb-sm-0">
+                                        <select name="emergency_country_code" id="emergency_country_code" class="form-control" required title="Country code">
+                                            <?php foreach ($intl_dial_codes as $d) {
+                                                $sel = ($d["code"] === $default_dial) ? " selected" : "";
+                                                echo "<option value=\"" . esc($d["code"]) . "\"{$sel}>" . esc($d["country"] . " (" . $d["code"] . ")") . "</option>\n";
+                                            } ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-7 col-md-8">
+                                        <input name="emergency_local" id="emergency_local" class="form-control gv-digits-only" required type="text" inputmode="numeric" pattern="[0-9]{4,15}" maxlength="15" autocomplete="tel-national" placeholder="71234567" title="Numbers only (no spaces or symbols)">
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -216,6 +242,16 @@
                     </div>
                 </div>
 
+                <?php if (get_setting("re_captcha_secret_key")) { ?>
+                <div class="gv-section">
+                    <div class="gv-section-title">
+                        <h5><span class="dot"></span> Verification</h5>
+                        <p class="gv-help"><?php echo app_lang("gate_pass_signup_recaptcha_hint"); ?></p>
+                    </div>
+                    <?php echo view("signin/re_captcha"); ?>
+                </div>
+                <?php } ?>
+
             </div>
 
             <div class="gv-footer">
@@ -243,6 +279,23 @@ $(document).ready(function () {
         if (window.feather) feather.replace();
     }, 60);
 
+    function bindDigitsOnly($el) {
+        var strip = function () {
+            var v = $el.val().replace(/\D/g, "");
+            if (v !== $el.val()) {
+                $el.val(v);
+            }
+        };
+        $el.on("input change blur", strip);
+        $el.on("paste", function (e) {
+            e.preventDefault();
+            var t = (e.originalEvent || e).clipboardData.getData("text") || "";
+            $el.val(t.replace(/\D/g, "").slice(0, 15));
+        });
+    }
+    bindDigitsOnly($("#phone_local"));
+    bindDigitsOnly($("#emergency_local"));
+
     $("#toggle-password").on("click", function() {
         const $pw = $("#password");
         const isText = $pw.attr("type") === "text";
@@ -253,8 +306,8 @@ $(document).ready(function () {
     });
 
     function clearErrors() {
-        $("#email-error, #username-error").addClass("d-none").text("");
-        $("#email, #username").removeClass("is-invalid");
+        $("#email-error").addClass("d-none").text("");
+        $("#email").removeClass("is-invalid");
     }
 
     function showError(field, message) {
@@ -262,15 +315,15 @@ $(document).ready(function () {
             $("#email").addClass("is-invalid");
             $("#email-error").removeClass("d-none").text(message);
         }
-        if (field === "username") {
-            $("#username").addClass("is-invalid");
-            $("#username-error").removeClass("d-none").text(message);
-        }
     }
 
     $("#guest-gp-form").appForm({
         isModal: false,
         onSubmit: function () {
+            $("#phone_local, #emergency_local").each(function () {
+                var $i = $(this);
+                $i.val(String($i.val() || "").replace(/\D/g, "").slice(0, 15));
+            });
             clearErrors();
             $(".gv-card").addClass("gv-submitting");
             appLoader.show();
@@ -290,7 +343,6 @@ $(document).ready(function () {
 
             if (res && res.errors) {
                 if (res.errors.email) showError("email", res.errors.email);
-                if (res.errors.username) showError("username", res.errors.username);
                 return false;
             }
 

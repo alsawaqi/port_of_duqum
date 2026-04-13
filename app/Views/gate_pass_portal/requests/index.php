@@ -217,11 +217,17 @@
                     </div>
                 </div>
 
-                <div class="gpr-add-btn">
+                <div class="gpr-add-btn d-flex flex-wrap gap-8 align-items-center">
+                    <a href="<?php echo get_uri('gate_pass_portal/export_my_requests_csv'); ?>" class="btn btn-default" title="<?php echo app_lang('gate_pass_export_csv'); ?>">
+                        <i data-feather="download" class="icon-16"></i> <?php echo app_lang("gate_pass_export_csv"); ?>
+                    </a>
                     <?php echo modal_anchor(
                         get_uri("gate_pass_portal/request_modal_form"),
                         "<i data-feather='plus-circle' class='icon-16'></i> Create Request",
-                        ["class" => "btn btn-default"]
+                        [
+                            "class" => "btn btn-default",
+                            "data-modal-title" => app_lang("gate_pass_portal_browser_title"),
+                        ]
                     ); ?>
                 </div>
             </div>
@@ -253,15 +259,17 @@ $(document).ready(function() {
     $t.appTable({
         source: '<?php echo_uri("gate_pass_portal/requests_list_data"); ?>',
         columns: [
-            { title: "Reference" },
-            { title: "Company" },
-            { title: "Department" },
-            { title: "Purpose" },
-            { title: "Visit From" },
-            { title: "Visit To" },
-            { title: "Status", class: "text-center w10p" },
+            { title: "<?php echo app_lang('reference'); ?>" },
+            { title: "<?php echo app_lang('created_at'); ?>" },
+            { title: "<?php echo app_lang('company'); ?>" },
+            { title: "<?php echo app_lang('department'); ?>" },
+            { title: "<?php echo app_lang('purpose'); ?>" },
+            { title: "<?php echo app_lang('visit_from'); ?>" },
+            { title: "<?php echo app_lang('visit_to'); ?>" },
+            { title: "<?php echo app_lang('status'); ?>", class: "text-center w10p" },
             { title: '<i data-feather="menu" class="icon-16"></i>', class: "text-center option w100" }
         ],
+        order: [[1, "desc"]],
         onDrawCallback: function() {
             if (typeof PortalUI !== "undefined") {
                 PortalUI.animateRows("#gp-requests-table");

@@ -82,7 +82,7 @@
 $(document).ready(function () {
     $("#gate-pass-rop-user-form").appForm({
         onSuccess: function () {
-            $("#gate-pass-rop-users-table").appTable({ newData: true });
+            $("#gate-pass-rop-users-table").appTable({ reload: true });
         }
     });
     $(".select2").select2();

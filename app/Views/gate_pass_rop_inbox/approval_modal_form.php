@@ -57,7 +57,7 @@ $(document).ready(function () {
 
     $("#gp-rop-approval-form").appForm({
         onSuccess: function () {
-            $("#gate-pass-rop-inbox-table").DataTable().ajax.reload(null, false);
+            window.location.href = "<?php echo get_uri('gate_pass_rop_inbox'); ?>";
         }
     });
 });

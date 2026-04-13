@@ -98,29 +98,10 @@ class Gate_pass_request_list extends Security_Controller
             $row->purpose_name ?? "-",
             $row->visit_from ? format_to_datetime($row->visit_from) : "-",
             $row->visit_to ? format_to_datetime($row->visit_to) : "-",
-            $this->_format_gate_pass_status($row->status ?? ""),
+            gate_pass_request_status_display($row),
             $row->stage ?? "-",
             $view_btn,
         ];
     }
 
-    /**
-     * Format gate pass status for display (avoids dependency on general_helper on production).
-     */
-    private function _format_gate_pass_status($status, $empty_value = "-")
-    {
-        $status = strtolower(trim((string) $status));
-        if ($status === "" || $status === "-") {
-            return $empty_value;
-        }
-        $lang_key = "gate_pass_status_" . $status;
-        $translated = app_lang($lang_key);
-        if ($translated && $translated !== $lang_key) {
-            return $translated;
-        }
-        if ($status === "rop_approved") {
-            return "ROP Approved";
-        }
-        return ucwords(str_replace("_", " ", $status));
-    }
 }

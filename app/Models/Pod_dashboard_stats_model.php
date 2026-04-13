@@ -28,6 +28,27 @@ class Pod_dashboard_stats_model extends Crud_model
             $where .= " AND $requests.company_id=$company_id";
         }
 
+        $company_ids = get_array_value($options, 'company_ids');
+        if ($company_ids && is_array($company_ids) && count($company_ids)) {
+            $company_ids = array_map('intval', $company_ids);
+            $where .= " AND $requests.company_id IN (" . implode(',', $company_ids) . ")";
+        }
+
+        $department_ids = get_array_value($options, 'department_ids');
+        if ($department_ids && is_array($department_ids) && count($department_ids)) {
+            $department_ids = array_map('intval', $department_ids);
+            $where .= " AND $requests.department_id IN (" . implode(',', $department_ids) . ")";
+        }
+
+        $stages = get_array_value($options, 'stages');
+        if ($stages && is_array($stages) && count($stages)) {
+            $esc = [];
+            foreach ($stages as $s) {
+                $esc[] = $this->db->escape((string) $s);
+            }
+            $where .= " AND $requests.stage IN (" . implode(',', $esc) . ")";
+        }
+
         $from_utc = get_array_value($options, 'from_utc');
         if ($from_utc) {
             $where .= " AND COALESCE($requests.submitted_at,$requests.created_at,$requests.updated_at) >= ".$this->db->escape($from_utc);
@@ -39,7 +60,8 @@ class Pod_dashboard_stats_model extends Crud_model
             $status_map[(string) $r->status] = (int) $r->total;
         }
 
-        $active_statuses = ['submitted', 'department_approved', 'commercial_approved', 'security_approved', 'rop_approved', 'returned'];
+        // Exclude "returned": those requests are with the requester for amendment, not in the stage queue.
+        $active_statuses = ['draft', 'submitted', 'department_approved', 'commercial_approved', 'security_approved', 'rop_approved'];
         $active_in = implode(',', array_map([$this->db, 'escape'], $active_statuses));
 
         $stage_rows = $this->db->query(

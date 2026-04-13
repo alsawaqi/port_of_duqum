@@ -62,6 +62,16 @@ class Gate_pass_requests_model extends Crud_model
             $where .= " AND $requests.status IN (" . implode(",", $escaped) . ")";
         }
 
+        // exclude statuses (e.g. hide "returned" from stage inboxes while requester amends)
+        $exclude_statuses = get_array_value($options, "exclude_statuses");
+        if ($exclude_statuses && is_array($exclude_statuses) && count($exclude_statuses) > 0) {
+            $escaped_ex = [];
+            foreach ($exclude_statuses as $s) {
+                $escaped_ex[] = $this->db->escape((string) $s);
+            }
+            $where .= " AND $requests.status NOT IN (" . implode(",", $escaped_ex) . ")";
+        }
+
         // filter by single status (for request list filter page)
         $status = get_array_value($options, "status");
         if ($status !== "" && $status !== null) {
@@ -111,8 +121,102 @@ class Gate_pass_requests_model extends Crud_model
                 LEFT JOIN $purposes ON $purposes.id = $requests.gate_pass_purpose_id
                 LEFT JOIN $users ON $users.id = $requests.requester_id
                 $where
-                ORDER BY $requests.id DESC";
+                ORDER BY COALESCE(
+                    IF($requests.created_at IS NOT NULL AND $requests.created_at <> '0000-00-00 00:00:00', $requests.created_at, NULL),
+                    IF($requests.submitted_at IS NOT NULL AND $requests.submitted_at <> '0000-00-00 00:00:00', $requests.submitted_at, NULL),
+                    '1970-01-01 00:00:00'
+                ) DESC, $requests.id DESC";
 
         return $this->db->query($sql);
+    }
+
+    /**
+     * BRD / commercial: block approving a waiver when the same company already has an active
+     * overlapping pass for the same visitor ID number or vehicle plate.
+     *
+     * @param list<string> $id_numbers Visitor civil / ID numbers (trimmed, non-empty).
+     * @param list<string> $plate_nos    Normalized plate strings (uppercase, no spaces).
+     */
+    public function has_overlapping_active_pass(
+        int $exclude_request_id,
+        ?string $visit_from,
+        ?string $visit_to,
+        int $company_id,
+        array $id_numbers,
+        array $plate_nos
+    ): bool {
+        $visit_from = trim((string) $visit_from);
+        $visit_to = trim((string) $visit_to);
+        if ($visit_from === "" || $visit_to === "") {
+            return false;
+        }
+
+        $id_numbers = array_values(array_unique(array_filter(array_map(static function ($v) {
+            return trim((string) $v);
+        }, $id_numbers))));
+
+        $plate_nos = array_values(array_unique(array_filter(array_map(static function ($p) {
+            $p = strtoupper(str_replace("-", "", preg_replace('/\s+/', "", trim((string) $p))));
+
+            return $p;
+        }, $plate_nos))));
+
+        if (!$id_numbers && !$plate_nos) {
+            return false;
+        }
+
+        $requests = $this->db->prefixTable("gate_pass_requests");
+        $visitors = $this->db->prefixTable("gate_pass_request_visitors");
+        $vehicles = $this->db->prefixTable("gate_pass_request_vehicles");
+
+        $active = ["submitted", "department_approved", "commercial_approved", "security_approved", "rop_approved", "issued"];
+        $statusIn = implode(",", array_map(function ($s) {
+            return $this->db->escape($s);
+        }, $active));
+
+        $overlap = "NOT (DATE($requests.visit_to) < DATE(" . $this->db->escape($visit_from) . ") OR DATE($requests.visit_from) > DATE(" . $this->db->escape($visit_to) . "))";
+
+        if ($id_numbers) {
+            $idIn = implode(",", array_map(function ($s) {
+                return $this->db->escape($s);
+            }, $id_numbers));
+            $sql = "SELECT $requests.id
+                    FROM $requests
+                    INNER JOIN $visitors ON $visitors.gate_pass_request_id = $requests.id AND $visitors.deleted = 0
+                    WHERE $requests.deleted = 0
+                      AND $requests.id != " . (int) $exclude_request_id . "
+                      AND $requests.company_id = " . (int) $company_id . "
+                      AND $requests.status IN ($statusIn)
+                      AND $requests.visit_from IS NOT NULL AND $requests.visit_to IS NOT NULL
+                      AND $overlap
+                      AND TRIM($visitors.id_number) IN ($idIn)
+                    LIMIT 1";
+            if ($this->db->query($sql)->getRow()) {
+                return true;
+            }
+        }
+
+        if ($plate_nos) {
+            $plateExpr = "UPPER(REPLACE(REPLACE(TRIM($vehicles.plate_no),'-',''),' ',''))";
+            $plateIn = implode(",", array_map(function ($s) {
+                return $this->db->escape($s);
+            }, $plate_nos));
+            $sql = "SELECT $requests.id
+                    FROM $requests
+                    INNER JOIN $vehicles ON $vehicles.gate_pass_request_id = $requests.id AND $vehicles.deleted = 0
+                    WHERE $requests.deleted = 0
+                      AND $requests.id != " . (int) $exclude_request_id . "
+                      AND $requests.company_id = " . (int) $company_id . "
+                      AND $requests.status IN ($statusIn)
+                      AND $requests.visit_from IS NOT NULL AND $requests.visit_to IS NOT NULL
+                      AND $overlap
+                      AND $plateExpr IN ($plateIn)
+                    LIMIT 1";
+            if ($this->db->query($sql)->getRow()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

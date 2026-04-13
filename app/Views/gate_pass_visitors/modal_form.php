@@ -13,11 +13,9 @@
                         "name" => "username",
                         "value" => $model_info->username ?? "",
                         "class" => "form-control",
-                        "placeholder" => app_lang("username"),
-                        "data-rule-required" => true,
-                        "data-msg-required" => app_lang("field_required")
+                        "placeholder" => app_lang("gate_pass_username_optional_placeholder"),
                     ]); ?>
-                    <small class="text-muted">Only letters & numbers (no spaces/special chars).</small>
+                    <small class="text-muted"><?php echo app_lang("gate_pass_username_optional_hint"); ?></small>
                 </div>
             </div>
         </div>

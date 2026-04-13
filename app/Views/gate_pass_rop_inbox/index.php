@@ -16,11 +16,9 @@
             padding: 18px 18px 14px;
             position: relative;
             overflow: hidden;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: opacity .35s ease, transform .35s ease;
+            opacity: 1;
+            transform: none;
         }
-        .gp-rop-inbox-ready .gpro-shell { opacity: 1; transform: translateY(0); }
         .gpro-shell::before {
             content: "";
             position: absolute;
@@ -78,7 +76,6 @@
             transform: translateY(-1px);
         }
 
-        /* Action buttons – clear visibility */
         .gpro-table-wrap .btn {
             font-weight: 600;
             border-radius: 8px;
@@ -120,10 +117,31 @@
             border-color: #b45309;
             color: #fff;
         }
+        .gpro-table-wrap table.dataTable thead th.gp-rop-col-options,
+        .gpro-table-wrap table.dataTable tbody td.gp-rop-col-options {
+            vertical-align: middle;
+        }
+        .gpro-table-wrap .gp-rop-action-btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            justify-content: flex-end;
+        }
+        .gpro-table-wrap .gp-rop-action-btns .btn {
+            margin: 0;
+        }
     </style>
 
     <div class="gpro-shell">
         <div class="gpro-inner">
+            <?php $kpis = $kpis ?? []; ?>
+            <?php echo view("gate_pass_includes/dashboard_kpis_widget", ["kpis" => $kpis]); ?>
+            <div class="mb15">
+                <a class="btn btn-default btn-sm" href="<?php echo get_uri("gate_pass_rop_inbox/export_list_csv"); ?>">
+                    <i data-feather="download" class="icon-16"></i> <?php echo app_lang("gate_pass_export_csv"); ?>
+                </a>
+            </div>
             <div class="gpro-header">
                 <div class="gpro-header-title">
                     <div class="gpro-header-icon">
@@ -131,7 +149,7 @@
                     </div>
                     <div>
                         <h4><?php echo app_lang("gate_pass_rop_requests"); ?></h4>
-                        <p class="gpro-header-sub">Approve gate pass requests and issue passes for the gate.</p>
+                        <p class="gpro-header-sub"><?php echo app_lang("gate_pass_rop_inbox_subtitle"); ?></p>
                     </div>
                 </div>
             </div>
@@ -140,26 +158,23 @@
                     <table id="gate-pass-rop-inbox-table" class="display" cellspacing="0" width="100%"></table>
                 </div>
             </div>
+        </div>
     </div>
-</div>
-</div>
-</div>
 
 <script type="text/javascript">
 $(document).ready(function() {
+    if (typeof feather !== "undefined") feather.replace();
     var $t = $("#gate-pass-rop-inbox-table");
     if ($.fn.DataTable.isDataTable($t)) {
         $t.DataTable().clear().destroy();
         $t.empty();
     }
-    setTimeout(function() {
-        $(".gp-rop-inbox").addClass("gp-rop-inbox-ready");
-        if (window.feather) feather.replace();
-    }, 40);
     $t.appTable({
         source: "<?php echo_uri('gate_pass_rop_inbox/list_data'); ?>",
+        columnShowHideOption: false,
         columns: [
             { title: "<?php echo app_lang('reference'); ?>" },
+            { title: "<?php echo app_lang('created_at'); ?>" },
             { title: "<?php echo app_lang('company'); ?>" },
             { title: "<?php echo app_lang('department'); ?>" },
             { title: "<?php echo app_lang('requester'); ?>" },
@@ -167,18 +182,14 @@ $(document).ready(function() {
             { title: "<?php echo app_lang('visit_from'); ?>" },
             { title: "<?php echo app_lang('visit_to'); ?>" },
             { title: "<?php echo app_lang('status'); ?>" },
-            { title: "<i data-feather='menu' class='icon-16'></i>", class: "text-center option w100" }
+            { title: "<?php echo app_lang('options'); ?>", class: "text-end option w300 gp-rop-col-options" }
         ],
-        order: [[0, "desc"]],
+        order: [[1, "desc"]],
         onDrawCallback: function() {
-            $("#gate-pass-rop-inbox-table tbody tr").each(function(idx, row) {
-                $(row).css({ opacity: 0, transform: "translateY(4px)" });
-                setTimeout(function() {
-                    $(row).css({ opacity: 1, transform: "translateY(0)", transition: "opacity .18s ease, transform .18s ease" });
-                }, 30 * idx);
-            });
             if (window.feather) feather.replace();
         }
     });
 });
 </script>
+</div>
+</div>

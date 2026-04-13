@@ -10,12 +10,16 @@
 
 <title>
     <?php
-    $router = service('router');
-    $controller_name = strtolower(get_actual_controller_name($router));
-    $title = get_setting('app_title');
-    if (strpos(app_lang($controller_name), '.') === false) {
-        $title = app_lang($controller_name) . " | " . $title;
+    if (!empty($page_title)) {
+        echo esc($page_title);
+    } else {
+        $router = service('router');
+        $controller_name = strtolower(get_actual_controller_name($router));
+        $title = get_setting('app_title');
+        if (strpos(app_lang($controller_name), '.') === false) {
+            $title = app_lang($controller_name) . " | " . $title;
+        }
+        echo $title;
     }
-    echo $title;
     ?>
 </title>

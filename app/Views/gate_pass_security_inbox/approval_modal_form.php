@@ -56,7 +56,7 @@ $(document).ready(function () {
 
     $("#gp-security-approval-form").appForm({
         onSuccess: function () {
-            $("#gate-pass-security-inbox-table").DataTable().ajax.reload(null, false);
+            window.location.href = "<?php echo get_uri('gate_pass_security_inbox'); ?>";
         }
     });
 });

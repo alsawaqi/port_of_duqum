@@ -1,4 +1,5 @@
 <?php
+$m = $model_info ?? null;
 $vehicle_type_options = [
     "private" => "Private",
     "commercial" => "Commercial",
@@ -6,32 +7,52 @@ $vehicle_type_options = [
     "bus" => "Bus",
     "other" => "Other",
 ];
-$current_vehicle_type = strtolower(trim((string)($model_info->type ?? "private")));
+$current_vehicle_type = strtolower(trim((string)($m?->type ?? "private")));
 if (!isset($vehicle_type_options[$current_vehicle_type])) {
     $current_vehicle_type = "private";
 }
+$plate_split = gate_pass_plate_split_prefix_digits((string) ($m?->plate_no ?? ""));
+$prefix_options = gate_pass_oman_plate_prefix_options_for_ui();
+$sel_prefix = $plate_split["prefix"] ?? "";
+if ($sel_prefix !== "" && !array_key_exists($sel_prefix, $prefix_options)) {
+    $prefix_options[$sel_prefix] = $sel_prefix;
+}
 ?>
+<style>
+.gp-plate-pair { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+.gp-plate-pair .gp-plate-prefix-wrap { flex: 0 1 220px; min-width: 140px; }
+.gp-plate-pair .gp-plate-digits-wrap { flex: 1 1 160px; min-width: 120px; }
+.gp-plate-pair label.gp-plate-field-label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+</style>
 
 <?php echo form_open(get_uri("gate_pass_security_inbox/save_vehicle"), [
     "id" => "gp-sec-vehicle-form",
     "class" => "general-form",
-    "role" => "form"
+    "role" => "form",
+    "enctype" => "multipart/form-data",
 ]); ?>
 
 <div class="modal-body clearfix gp-pro-modal-body">
-    <input type="hidden" name="id" value="<?php echo esc($model_info->id ?? ""); ?>" />
+    <input type="hidden" name="id" value="<?php echo esc($m ? ($m->id ?? "") : ""); ?>" />
     <input type="hidden" name="gate_pass_request_id" value="<?php echo (int)$gate_pass_request_id; ?>" />
 
     <div class="form-group">
-        <label for="plate_no"><?php echo app_lang("plate_no"); ?> <span class="text-danger">*</span></label>
-        <input
-            id="plate_no"
-            name="plate_no"
-            class="form-control"
-            value="<?php echo esc($model_info->plate_no ?? ""); ?>"
-            required
-            autocomplete="off"
-        />
+        <label class="mb8"><?php echo app_lang("plate_no"); ?> <span class="text-danger">*</span></label>
+        <div class="gp-plate-pair">
+            <div class="gp-plate-prefix-wrap">
+                <label class="gp-plate-field-label" for="gp-sec-plate-prefix"><?php echo app_lang("gate_pass_plate_prefix"); ?></label>
+                <select name="plate_prefix" id="gp-sec-plate-prefix" class="form-control" required>
+                    <?php foreach ($prefix_options as $val => $lab): ?>
+                        <option value="<?php echo esc($val); ?>" <?php echo $sel_prefix === $val ? "selected" : ""; ?>><?php echo esc($lab); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="gp-plate-digits-wrap">
+                <label class="gp-plate-field-label" for="gp-sec-plate-digits"><?php echo app_lang("gate_pass_plate_numbers"); ?></label>
+                <input type="text" name="plate_digits" id="gp-sec-plate-digits" class="form-control" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="6" required value="<?php echo esc($plate_split["digits"] ?? ""); ?>">
+            </div>
+        </div>
+        <small class="text-muted"><?php echo app_lang("gate_pass_plate_format_hint"); ?></small>
     </div>
 
     <div class="form-group">
@@ -45,43 +66,12 @@ if (!isset($vehicle_type_options[$current_vehicle_type])) {
         </select>
     </div>
 
-    <div class="row">
-        <div class="col-md-6">
-            <div class="form-group">
-                <label for="make"><?php echo app_lang("make"); ?></label>
-                <input
-                    id="make"
-                    name="make"
-                    class="form-control"
-                    value="<?php echo esc($model_info->make ?? ""); ?>"
-                    autocomplete="off"
-                />
-            </div>
-        </div>
-
-        <div class="col-md-6">
-            <div class="form-group">
-                <label for="model"><?php echo app_lang("model"); ?></label>
-                <input
-                    id="model"
-                    name="model"
-                    class="form-control"
-                    value="<?php echo esc($model_info->model ?? ""); ?>"
-                    autocomplete="off"
-                />
-            </div>
-        </div>
-    </div>
-
     <div class="form-group">
-        <label for="color"><?php echo app_lang("color"); ?></label>
-        <input
-            id="color"
-            name="color"
-            class="form-control"
-            value="<?php echo esc($model_info->color ?? ""); ?>"
-            autocomplete="off"
-        />
+        <label><?php echo app_lang("gate_pass_mulkiyah_attachment"); ?></label>
+        <input type="file" name="mulkiyah_attachment_path" class="form-control" accept="image/*,.pdf">
+        <?php if ($m && !empty($m->mulkiyah_attachment_path)) { ?>
+            <small class="text-muted d-block mt-1"><?php echo app_lang("current"); ?>: <?php echo esc(basename($m->mulkiyah_attachment_path)); ?></small>
+        <?php } ?>
     </div>
 </div>
 
@@ -94,10 +84,12 @@ if (!isset($vehicle_type_options[$current_vehicle_type])) {
 
 <script>
 $(document).ready(function () {
+    $("#gp-sec-plate-digits").on("input", function () {
+        this.value = (this.value || "").replace(/\D/g, "").slice(0, 6);
+    });
+
     $("#gp-sec-vehicle-form").appForm({
         onSuccess: function (result) {
-            // ✅ IMPORTANT: this table id must match your scan page
-            // In your scan.php it is: #gp-scan-vehicles-table
             $("#gp-scan-vehicles-table").appTable({
                 newData: result.data,
                 dataId: result.id
@@ -108,7 +100,11 @@ $(document).ready(function () {
     });
 
     setTimeout(function() {
-        $("#plate_no").focus();
+        if (!$("#gp-sec-plate-prefix").val()) {
+            $("#gp-sec-plate-prefix").focus();
+        } else {
+            $("#gp-sec-plate-digits").focus();
+        }
     }, 200);
 });
 </script>

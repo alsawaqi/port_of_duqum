@@ -3695,6 +3695,12 @@ var $appFilterXhrRequest = 'new';
 
             } else if (settings.rowDeleted) {
                 table.fnUpdateRow(settings.newData, table.api().page(), true); //refresh row after delete
+            } else if (settings.newData === true) {
+                // Boolean true was mistakenly used in many modals meaning "refresh the table".
+                // Passing true into fnUpdateRow corrupts rows (DataTables: unknown parameter '0').
+                var ic = window.InstanceCollection && window.InstanceCollection[instanceId];
+                var fp = ic && ic.filterParams ? ic.filterParams : { datatable: true };
+                $("#" + instanceId).appTable({ reload: true, filterParams: fp });
             } else {
                 table.fnUpdateRow(settings.newData); //add new row
             }
@@ -4680,7 +4686,7 @@ var $appFilterXhrRequest = 'new';
             //     oSettings.oFeatures.bServerSide = false; //disable serverside processing temporarily
             // }
 
-            if (data) {
+            if (data && $.isArray(data)) {
                 this.oApi._fnAddData(oSettings, data);
             }
 

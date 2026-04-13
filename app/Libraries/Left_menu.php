@@ -257,13 +257,16 @@ class Left_menu
                 $gitpass_master_submenu[] = array("name" => "gate_pass_security_users", "url" => "gate_pass_security_users", "class" => "shield");
             }
             if ($gp_view("rop_users")) {
-                $gitpass_master_submenu[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-check");
+                $gitpass_master_submenu[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-text");
             }
             if ($gp_view("request_list")) {
                 $gitpass_master_submenu[] = array("name" => "gate_pass_filter_requests", "url" => "gate_pass_request_list", "class" => "filter");
             }
             if ($gp_view("fee_rules")) {
                 $gitpass_master_submenu[] = array("name" => "gate_pass_fee_rules", "url" => "gate_pass_fee_rules", "class" => "dollar-sign");
+            }
+            if ($this->ci->login_user->is_admin) {
+                $gitpass_master_submenu[] = array("name" => "gate_pass_admin_activity_logs", "url" => "gate_pass_activity_logs", "class" => "activity");
             }
             if (count($gitpass_master_submenu)) {
                 $sidebar_menu["gitpass_master"] = array(
@@ -488,8 +491,13 @@ class Left_menu
                         if ($my_gate_pass_security_user) {
                             $sidebar_menu["gate_pass_security_requests"] = array(
                                 "name"  => "gate_pass_security_requests",
-                                "url"   => "gate_pass_security_inbox",
-                                "class" => "shield"
+                                "url"   => "#",
+                                "class" => "shield",
+                                "submenu" => array(
+                                    array("name" => "gate_pass_security_dashboard", "url" => "gate_pass_security_inbox/dashboard", "class" => "activity"),
+                                    array("name" => "gate_pass_security_nav_requests", "url" => "gate_pass_security_inbox", "class" => "list"),
+                                    array("name" => "gate_pass_security_scan_qr", "url" => "gate_pass_security_inbox/scan", "class" => "camera"),
+                                ),
                             );
                         }
                     } catch (\Throwable $e) {
@@ -509,7 +517,7 @@ class Left_menu
                             $sidebar_menu["gate_pass_rop_requests"] = array(
                                 "name"  => "gate_pass_rop_requests",
                                 "url"   => "gate_pass_rop_inbox",
-                                "class" => "file-check"
+                                "class" => "file-text"
                             );
                         }
                     } catch (\Throwable $e) {
@@ -1141,9 +1149,12 @@ $submenu_names = [];
                         if ($gp_view("department_users")) $gp_sub[] = array("name" => "gate_pass_department_users", "url" => "gate_pass_department_users", "class" => "user-plus");
                         if ($gp_view("commercial_users")) $gp_sub[] = array("name" => "gate_pass_commercial_users", "url" => "gate_pass_commercial_users", "class" => "dollar-sign");
                         if ($gp_view("security_users")) $gp_sub[] = array("name" => "gate_pass_security_users", "url" => "gate_pass_security_users", "class" => "shield");
-                        if ($gp_view("rop_users")) $gp_sub[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-check");
+                        if ($gp_view("rop_users")) $gp_sub[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-text");
                         if ($gp_view("request_list")) $gp_sub[] = array("name" => "gate_pass_filter_requests", "url" => "gate_pass_request_list", "class" => "filter");
                         if ($gp_view("fee_rules")) $gp_sub[] = array("name" => "gate_pass_fee_rules", "url" => "gate_pass_fee_rules", "class" => "dollar-sign");
+                        if ($this->ci->login_user->is_admin) {
+                            $gp_sub[] = array("name" => "gate_pass_admin_activity_logs", "url" => "gate_pass_activity_logs", "class" => "activity");
+                        }
                         $final_left_menu_items[$last_final_menu_item]["submenu"] = $gp_sub;
                         $final_left_menu_items[$last_final_menu_item]["url"] = "#";
 
@@ -1288,9 +1299,21 @@ $submenu_names = [];
                 if ($gp_view("department_users")) $gate_pass_submenu[] = array("name" => "gate_pass_department_users", "url" => "gate_pass_department_users", "class" => "user-plus");
                 if ($gp_view("commercial_users")) $gate_pass_submenu[] = array("name" => "gate_pass_commercial_users", "url" => "gate_pass_commercial_users", "class" => "dollar-sign");
                 if ($gp_view("security_users")) $gate_pass_submenu[] = array("name" => "gate_pass_security_users", "url" => "gate_pass_security_users", "class" => "shield");
-                if ($gp_view("rop_users")) $gate_pass_submenu[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-check");
+                if ($gp_view("rop_users")) $gate_pass_submenu[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-text");
                 if ($gp_view("request_list")) $gate_pass_submenu[] = array("name" => "gate_pass_filter_requests", "url" => "gate_pass_request_list", "class" => "filter");
                 if ($gp_view("fee_rules")) $gate_pass_submenu[] = array("name" => "gate_pass_fee_rules", "url" => "gate_pass_fee_rules", "class" => "dollar-sign");
+            }
+            if ($this->ci->login_user->is_admin) {
+                $has_gp_audit = false;
+                foreach ($gate_pass_submenu as $_gp_it) {
+                    if (get_array_value($_gp_it, "url") === "gate_pass_activity_logs") {
+                        $has_gp_audit = true;
+                        break;
+                    }
+                }
+                if (!$has_gp_audit) {
+                    $gate_pass_submenu[] = array("name" => "gate_pass_admin_activity_logs", "url" => "gate_pass_activity_logs", "class" => "activity");
+                }
             }
             $found_gitpass = false;
             foreach ($view_data["sidebar_menu"] as $k => $m) {

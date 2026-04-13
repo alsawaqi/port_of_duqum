@@ -3,10 +3,8 @@
     $status = $request->status ?? "";
     $stage  = $request->stage ?? "";
 
-    // Format status for display (no helper dependency)
     if (!isset($status_label)) {
-        $s = strtolower(trim((string) $status));
-        $status_label = ($s === "" || $s === "-") ? "-" : (($s === "rop_approved") ? "ROP Approved" : ucwords(str_replace("_", " ", $s)));
+        $status_label = gate_pass_request_status_display($request);
     }
 
     // soft status badge classes
@@ -85,7 +83,7 @@
 
                     <?php echo modal_anchor(
                         get_uri("gate_pass_department_requests/approval_history_modal"),
-                        "<i data-feather='history' class='icon-16'></i> " . app_lang("approval_history"),
+                        "<i data-feather='list' class='icon-16'></i> " . app_lang("approval_history"),
                         ["class" => "btn btn-default gp-btn", "title" => app_lang("approval_history"), "data-post-id" => $request->id]
                     ); ?>
                 </div>
@@ -161,6 +159,8 @@
 
         </div>
     </div>
+
+    <?php echo view("gate_pass_includes/request_information_card", ["request" => $request]); ?>
 
     <!-- Visitors -->
     <div id="gp-dept-visitors-card" class="card gp-card mb15">
@@ -405,9 +405,7 @@ $(document).ready(function () {
         scrollCollapse: false,
         columns: [
             { title: "<?php echo app_lang('plate_no'); ?>", data: 0 },
-            { title: "<?php echo app_lang('make'); ?>", data: 1 },
-            { title: "<?php echo app_lang('model'); ?>", data: 2 },
-            { title: "<?php echo app_lang('color'); ?>", data: 3 }
+            { title: "<?php echo app_lang('gate_pass_mulkiyah_attachment'); ?>", data: 1, class: "text-center" }
         ],
         order: [[0, "asc"]]
     });

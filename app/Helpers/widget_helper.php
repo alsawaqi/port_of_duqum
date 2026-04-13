@@ -1813,16 +1813,77 @@ if (!function_exists('pod_gate_pass_kpis_widget')) {
         $ci = new Security_Controller(false);
         $template = new Template();
 
-        // NON-ADMIN: show empty
-       if (empty($ci->login_user->is_admin)) {
+        if (empty($ci->login_user)) {
             return $template->view('dashboards/pod_widgets/coming_soon_body_only');
         }
 
-        // ADMIN: show real data
         $Stats = model("App\\Models\\Pod_dashboard_stats_model");
+        $options = [];
+        $scope_label = "All companies";
+
+        if (!empty($ci->login_user->is_admin)) {
+            $options = [];
+            $scope_label = "All companies";
+        } else {
+            $db = db_connect();
+            $uid = (int)$ci->login_user->id;
+            $gp = $db->prefixTable("gate_pass_users");
+            $dept = $db->prefixTable("gate_pass_department_users");
+            $com = $db->prefixTable("gate_pass_commercial_users");
+            $sec = $db->prefixTable("gate_pass_security_users");
+            $rop = $db->prefixTable("gate_pass_rop_users");
+
+            if ($db->query("SELECT id FROM $gp WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1", [$uid])->getRow()) {
+                $options["requester_id"] = $uid;
+                $scope_label = "My gate pass requests";
+            } elseif ($db->query("SELECT id FROM $dept WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1", [$uid])->getRow()) {
+                $ids = [];
+                $q = $db->query("SELECT department_id FROM $dept WHERE user_id=? AND deleted=0 AND status='active'", [$uid]);
+                foreach ($q->getResult() as $r) {
+                    $ids[] = (int)$r->department_id;
+                }
+                if (count($ids)) {
+                    $options["department_ids"] = $ids;
+                }
+                $scope_label = "My departments";
+            } elseif ($db->query("SELECT id FROM $com WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1", [$uid])->getRow()) {
+                $ids = [];
+                $q = $db->query("SELECT company_id FROM $com WHERE user_id=? AND deleted=0 AND status='active'", [$uid]);
+                foreach ($q->getResult() as $r) {
+                    $ids[] = (int)$r->company_id;
+                }
+                if (count($ids)) {
+                    $options["company_ids"] = $ids;
+                }
+                $scope_label = "My companies (commercial)";
+            } elseif ($db->query("SELECT id FROM $sec WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1", [$uid])->getRow()) {
+                $ids = [];
+                $q = $db->query("SELECT company_id FROM $sec WHERE user_id=? AND deleted=0 AND status='active'", [$uid]);
+                foreach ($q->getResult() as $r) {
+                    $ids[] = (int)$r->company_id;
+                }
+                if (count($ids)) {
+                    $options["company_ids"] = $ids;
+                }
+                $scope_label = "My companies (security)";
+            } elseif ($db->query("SELECT id FROM $rop WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1", [$uid])->getRow()) {
+                $ids = [];
+                $q = $db->query("SELECT company_id FROM $rop WHERE user_id=? AND deleted=0 AND status='active'", [$uid]);
+                foreach ($q->getResult() as $r) {
+                    $ids[] = (int)$r->company_id;
+                }
+                if (count($ids)) {
+                    $options["company_ids"] = $ids;
+                }
+                $scope_label = "My companies (ROP)";
+            } else {
+                return $template->view('dashboards/pod_widgets/coming_soon_body_only');
+            }
+        }
+
         $view_data = [
-            "kpis" => $Stats->gate_pass_kpis([]),
-            "scope_label" => "All companies"
+            "kpis" => $Stats->gate_pass_kpis($options),
+            "scope_label" => $scope_label,
         ];
 
         return $template->view("dashboards/pod_widgets/gate_pass_kpis_widget", $view_data);

@@ -19,12 +19,11 @@
                         <td><?php echo esc($a->stage ?? "-"); ?></td>
                         <td>
                             <?php
-                            $badge = "bg-secondary";
-                            if (($a->decision ?? "") === "approved") $badge = "bg-success";
-                            if (($a->decision ?? "") === "rejected") $badge = "bg-danger";
-                            if (($a->decision ?? "") === "returned") $badge = "bg-warning";
+                            $decRaw = (string)($a->decision ?? "");
+                            $badge = gate_pass_approval_decision_badge_class($decRaw);
+                            $decLabel = gate_pass_approval_decision_label($decRaw);
                             ?>
-                            <span class="badge <?php echo $badge; ?>"><?php echo esc($a->decision ?? "-"); ?></span>
+                            <span class="badge <?php echo $badge; ?>"><?php echo esc($decLabel); ?></span>
                         </td>
                         <td class="text-break">
                             <?php

@@ -2582,6 +2582,97 @@ if (!function_exists('format_gate_pass_status')) {
     }
 }
 
+if (!function_exists('gate_pass_request_status_display')) {
+
+    /**
+     * Human-facing workflow label: who is reviewing now (e.g. "Under security review")
+     * instead of the internal milestone status (e.g. "Commercial approved").
+     *
+     * @param object|null $request Row with at least status + stage.
+     */
+    function gate_pass_request_status_display($request, string $empty_value = "-"): string
+    {
+        if (!$request || !is_object($request)) {
+            return $empty_value;
+        }
+
+        $status = strtolower(trim((string)($request->status ?? "")));
+        $stage = strtolower(trim((string)($request->stage ?? "")));
+
+        if ($status === "" || $status === "-") {
+            return $empty_value;
+        }
+
+        if ($status === "cancelled") {
+            $k = "gate_pass_status_cancelled";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Cancelled";
+        }
+        if ($status === "expired") {
+            $k = "gate_pass_status_expired";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Expired";
+        }
+        if ($status === "rejected") {
+            $k = "gate_pass_status_rejected";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Rejected";
+        }
+        if ($status === "returned") {
+            $k = "gate_pass_status_returned";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Returned";
+        }
+        if ($status === "draft") {
+            $k = "gate_pass_status_draft";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Draft";
+        }
+
+        // Issued / complete (status may be `issued` or `rop_approved` with stage `issued`)
+        if ($status === "issued" || ($stage === "issued" && $status === "rop_approved")) {
+            $k = "gate_pass_status_issued";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Issued";
+        }
+
+        // Queue owner = current stage (legacy `visitor` stage treated like department)
+        $pre_commercial_stages = ["department", "visitor"];
+        if (in_array($stage, $pre_commercial_stages, true) && $status === "submitted") {
+            $k = "gate_pass_review_department";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Under department review";
+        }
+        if ($stage === "commercial" && $status === "department_approved") {
+            $k = "gate_pass_review_commercial";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Under commercial review";
+        }
+        if ($stage === "security" && $status === "commercial_approved") {
+            $k = "gate_pass_review_security";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Under security review";
+        }
+        if ($stage === "rop" && $status === "security_approved") {
+            $k = "gate_pass_review_rop";
+            $t = app_lang($k);
+
+            return ($t !== $k) ? $t : "Under ROP review";
+        }
+
+        return format_gate_pass_status($status, $empty_value);
+    }
+}
+
 if (!function_exists('create_invoice_from_order')) {
 
     function create_invoice_from_order($order_id) {
@@ -3242,5 +3333,612 @@ if (!function_exists('render_user_list')) {
         }
 
         return $result;
+    }
+}
+
+if (!function_exists('gate_pass_oman_plate_arabic_prefix_values')) {
+
+    /**
+     * Arabic script plate letter options (value => label, same string).
+     *
+     * @return array<string, string>
+     */
+    function gate_pass_oman_plate_arabic_prefix_values(): array
+    {
+        $arabic = [
+            "أ", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي", "ى", "ة",
+        ];
+        $opts = [];
+        foreach ($arabic as $c) {
+            $opts[$c] = $c;
+        }
+
+        return $opts;
+    }
+}
+
+if (!function_exists('gate_pass_oman_plate_latin_prefix_values')) {
+
+    /**
+     * Latin script plate letter / code options (value => label).
+     *
+     * @return array<string, string>
+     */
+    function gate_pass_oman_plate_latin_prefix_values(): array
+    {
+        $opts = [];
+        $latin_special = ["MCT", "DH", "SH", "HD", "LK", "TB", "TC", "TD", "TA", "YB", "EXP", "OM", "KA", "KB", "KC"];
+        foreach ($latin_special as $c) {
+            $opts[$c] = $c;
+        }
+        foreach (range("A", "Z") as $c) {
+            if (!isset($opts[$c])) {
+                $opts[$c] = $c;
+            }
+        }
+        uksort($opts, static function ($a, $b) {
+            return strnatcasecmp($a, $b);
+        });
+
+        return $opts;
+    }
+}
+
+if (!function_exists('gate_pass_plate_ui_prefers_arabic_script')) {
+
+    /**
+     * True when the active UI locale is Arabic (plate prefix dropdown shows Arabic letters only).
+     */
+    function gate_pass_plate_ui_prefers_arabic_script(): bool
+    {
+        $loc = strtolower((string) service("request")->getLocale());
+
+        return strpos($loc, "arabic") !== false;
+    }
+}
+
+if (!function_exists('gate_pass_oman_plate_prefix_options_for_ui')) {
+
+    /**
+     * Plate prefix dropdown for the current language: Arabic letters only, or Latin letters/codes only.
+     *
+     * @return array<string, string> value => label (includes leading "" => select label)
+     */
+    function gate_pass_oman_plate_prefix_options_for_ui(): array
+    {
+        $head = ["" => app_lang("select")];
+        if (gate_pass_plate_ui_prefers_arabic_script()) {
+            return $head + gate_pass_oman_plate_arabic_prefix_values();
+        }
+
+        return $head + gate_pass_oman_plate_latin_prefix_values();
+    }
+}
+
+if (!function_exists('gate_pass_oman_plate_prefix_options')) {
+
+    /**
+     * Full prefix set for validation / parsing (Arabic + Latin). UI uses gate_pass_oman_plate_prefix_options_for_ui().
+     *
+     * @return array<string, string> value => label
+     */
+    function gate_pass_oman_plate_prefix_options(): array
+    {
+        return ["" => app_lang("select")]
+            + gate_pass_oman_plate_arabic_prefix_values()
+            + gate_pass_oman_plate_latin_prefix_values();
+    }
+}
+
+if (!function_exists('gate_pass_oman_plate_prefix_whitelist')) {
+
+    /**
+     * @return list<string> longest prefixes first (for parsing)
+     */
+    function gate_pass_oman_plate_prefix_whitelist(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        $o = gate_pass_oman_plate_prefix_options();
+        unset($o[""]);
+        $keys = array_keys($o);
+        usort($keys, static function ($a, $b) {
+            return strlen($b) <=> strlen($a);
+        });
+        $cache = $keys;
+
+        return $cache;
+    }
+}
+
+if (!function_exists('gate_pass_plate_split_prefix_digits')) {
+
+    /**
+     * Split stored plate_no into prefix + digits for the portal vehicle form.
+     *
+     * @return array{prefix:string,digits:string}
+     */
+    function gate_pass_plate_split_prefix_digits(string $plate): array
+    {
+        $plate = trim(preg_replace('/\s+/u', " ", $plate));
+        if ($plate === "") {
+            return ["prefix" => "", "digits" => ""];
+        }
+        foreach (gate_pass_oman_plate_prefix_whitelist() as $pref) {
+            $q = preg_quote($pref, "/");
+            if (preg_match("/^" . $q . "\s+(\d{1,6})$/u", $plate, $m)) {
+                return ["prefix" => $pref, "digits" => $m[1]];
+            }
+            if (preg_match("/^" . $q . "(\d{1,6})$/u", $plate, $m)) {
+                return ["prefix" => $pref, "digits" => $m[1]];
+            }
+        }
+        if (preg_match("/^([A-Za-z]{1,4})\s+(\d{1,6})$/", $plate, $m)) {
+            return ["prefix" => strtoupper($m[1]), "digits" => $m[2]];
+        }
+        if (preg_match("/^([A-Za-z]{1,4})(\d{1,6})$/", $plate, $m)) {
+            return ["prefix" => strtoupper($m[1]), "digits" => $m[2]];
+        }
+        if (preg_match("/^(\p{Arabic})\s+(\d{1,6})$/u", $plate, $m)) {
+            return ["prefix" => $m[1], "digits" => $m[2]];
+        }
+        if (preg_match("/^(\p{Arabic})(\d{1,6})$/u", $plate, $m)) {
+            return ["prefix" => $m[1], "digits" => $m[2]];
+        }
+
+        return ["prefix" => "", "digits" => ""];
+    }
+}
+
+if (!function_exists('gate_pass_plate_merge_prefix_digits')) {
+
+    /**
+     * Normalized plate string for DB (prefix + space + digits only).
+     */
+    function gate_pass_plate_merge_prefix_digits(string $prefix, string $digits): string
+    {
+        $digits = preg_replace("/\D/u", "", $digits);
+        $prefix = trim($prefix);
+        if ($prefix === "" || $digits === "") {
+            return "";
+        }
+        if (preg_match("/^\p{Arabic}+$/u", $prefix)) {
+            return $prefix . " " . $digits;
+        }
+
+        return strtoupper($prefix) . " " . $digits;
+    }
+}
+
+if (!function_exists('gate_pass_plate_merge_from_post_parts')) {
+
+    /**
+     * Validate portal POST fields plate_prefix + plate_digits and build plate_no.
+     *
+     * @return array{ok:bool, plate?:string, message?:string}
+     */
+    function gate_pass_plate_merge_from_post_parts(string $prefixRaw, string $digitsRaw): array
+    {
+        $prefix = trim($prefixRaw);
+        $digits = preg_replace("/\D/u", "", $digitsRaw);
+        if ($prefix === "" || $digits === "") {
+            return ["ok" => false, "message" => app_lang("field_required")];
+        }
+        if (strlen($digits) > 6) {
+            return ["ok" => false, "message" => app_lang("gate_pass_plate_digits_invalid")];
+        }
+        $prefixOk = in_array($prefix, gate_pass_oman_plate_prefix_whitelist(), true)
+            || preg_match("/^[A-Za-z]{1,4}$/", $prefix);
+        if (!$prefixOk) {
+            return ["ok" => false, "message" => app_lang("gate_pass_plate_prefix_invalid")];
+        }
+        $plate = gate_pass_plate_merge_prefix_digits($prefix, $digits);
+        if (!gate_pass_plate_no_is_valid($plate)) {
+            return ["ok" => false, "message" => app_lang("gate_pass_plate_invalid_chars")];
+        }
+
+        return ["ok" => true, "plate" => $plate];
+    }
+}
+
+if (!function_exists('gate_pass_plate_no_is_valid')) {
+
+    /**
+     * Accepts Oman-style prefix + digits, or legacy plates (Latin letters + digits).
+     */
+    function gate_pass_plate_no_is_valid(string $plate): bool
+    {
+        $plate = trim(preg_replace('/\s+/u', " ", $plate));
+        if ($plate === "") {
+            return false;
+        }
+        $split = gate_pass_plate_split_prefix_digits($plate);
+        if ($split["prefix"] !== "" && $split["digits"] !== "" && preg_match("/^\d{1,6}$/", $split["digits"])) {
+            if (in_array($split["prefix"], gate_pass_oman_plate_prefix_whitelist(), true)) {
+                return true;
+            }
+            if (preg_match("/^[A-Z]{1,4}$/", $split["prefix"])) {
+                return true;
+            }
+            if (preg_match("/^\p{Arabic}$/u", $split["prefix"])) {
+                return true;
+            }
+        }
+        $u = strtoupper($plate);
+
+        return (bool) preg_match("/[A-Z]/", $u) && (bool) preg_match("/[0-9]/", $u);
+    }
+}
+
+if (!function_exists('gate_pass_vehicle_mulkiyah_path_value')) {
+
+    /**
+     * Vehicle registration file path (Mulkiyah). Supports legacy column
+     * `vehicle_registration_attachment_path` from older DB dumps alongside `mulkiyah_attachment_path`.
+     *
+     * @param object|array|null $vehicle
+     */
+    function gate_pass_vehicle_mulkiyah_path_value($vehicle): string
+    {
+        if (!$vehicle) {
+            return "";
+        }
+        $mul = is_object($vehicle)
+            ? trim((string)($vehicle->mulkiyah_attachment_path ?? ""))
+            : trim((string)($vehicle["mulkiyah_attachment_path"] ?? ""));
+        if ($mul !== "") {
+            return $mul;
+        }
+        $legacy = is_object($vehicle)
+            ? trim((string)($vehicle->vehicle_registration_attachment_path ?? ""))
+            : trim((string)($vehicle["vehicle_registration_attachment_path"] ?? ""));
+
+        return $legacy;
+    }
+}
+
+if (!function_exists('gate_pass_requester_can_edit_request')) {
+
+    /**
+     * Requester may change request header, visitors, and vehicles only while preparing a draft
+     * or after a reviewer returns the request — not while it is in the approval workflow.
+     */
+    function gate_pass_requester_can_edit_request($request): bool
+    {
+        $status = is_object($request)
+            ? strtolower(trim((string)($request->status ?? "")))
+            : strtolower(trim((string)$request));
+
+        return in_array($status, ["draft", "returned"], true);
+    }
+}
+
+if (!function_exists('gate_pass_status_after_requester_resubmit')) {
+
+    /**
+     * After a reviewer returns a request, the requester resubmits with the same `stage`.
+     * Restore the status that inbox queues use for that stage so the flow continues
+     * (does not restart from department unless stage is department).
+     *
+     * @param string $stage Current workflow stage (department|commercial|security|rop)
+     * @return string|null Status to set, or null if unknown stage
+     */
+    function gate_pass_status_after_requester_resubmit(string $stage): ?string
+    {
+        $stage = strtolower(trim($stage));
+        if ($stage === "department") {
+            return "submitted";
+        }
+        if ($stage === "commercial") {
+            return "department_approved";
+        }
+        if ($stage === "security") {
+            return "commercial_approved";
+        }
+        if ($stage === "rop") {
+            return "security_approved";
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('gate_pass_request_created_at_pick')) {
+
+    /**
+     * Best timestamp for "when this request was created / first entered workflow"
+     * (many DB rows never had created_at populated; submitted_at is a reliable fallback).
+     *
+     * @param object|null $row Row from gate_pass_requests / get_details.
+     */
+    function gate_pass_request_created_at_pick($row): ?string
+    {
+        if (!$row || !is_object($row)) {
+            return null;
+        }
+
+        $candidates = ["created_at", "submitted_at", "stage_updated_at"];
+        foreach ($candidates as $field) {
+            if (!property_exists($row, $field)) {
+                continue;
+            }
+            $v = trim((string)($row->{$field} ?? ""));
+            if ($v === "" || strpos($v, "0000-00-00") === 0) {
+                continue;
+            }
+
+            return $v;
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('gate_pass_request_created_display')) {
+
+    /**
+     * Human-readable "created" column for gate pass inbox / portal tables.
+     */
+    function gate_pass_request_created_display($row): string
+    {
+        $raw = gate_pass_request_created_at_pick($row);
+
+        return $raw ? format_to_datetime($raw) : "-";
+    }
+}
+
+if (!function_exists('gate_pass_fee_waiver_pending')) {
+
+    /**
+     * Department requested a fee waiver and commercial has not approved/rejected yet.
+     */
+    function gate_pass_fee_waiver_pending($request): bool
+    {
+        if (!$request || !is_object($request)) {
+            return false;
+        }
+        if ((int)($request->fee_waiver_requested ?? 0) !== 1) {
+            return false;
+        }
+        $st = strtolower(trim((string)($request->fee_waiver_commercial_status ?? "")));
+
+        return $st === "" || $st === "pending";
+    }
+}
+
+if (!function_exists('gate_pass_approval_decision_label')) {
+
+    /**
+     * Human-readable gate pass approval decision for history tables.
+     */
+    function gate_pass_approval_decision_label($decision): string
+    {
+        $d = strtolower(trim((string)($decision ?? "")));
+        if ($d === "fee_waiver_rejected") {
+            $t = app_lang("gate_pass_decision_fee_waiver_rejected");
+            return ($t !== "gate_pass_decision_fee_waiver_rejected") ? $t : "Fee waiver rejected";
+        }
+
+        $raw = trim((string)($decision ?? ""));
+        return $raw !== "" ? $raw : "-";
+    }
+}
+
+if (!function_exists('gate_pass_approval_decision_badge_class')) {
+
+    /**
+     * Bootstrap badge class for a gate pass approval decision.
+     */
+    function gate_pass_approval_decision_badge_class($decision): string
+    {
+        $d = strtolower(trim((string)($decision ?? "")));
+        if ($d === "approved") {
+            return "bg-success";
+        }
+        if ($d === "rejected") {
+            return "bg-danger";
+        }
+        if ($d === "returned") {
+            return "bg-warning";
+        }
+        if ($d === "fee_waiver_rejected") {
+            return "bg-info text-dark";
+        }
+
+        return "bg-secondary";
+    }
+}
+
+if (!function_exists('gate_pass_portal_can_pay_fee')) {
+
+    /**
+     * Requester may use the portal "Pay" action (fee > 0, not waived, waiver not awaiting commercial).
+     */
+    function gate_pass_portal_can_pay_fee($request): bool
+    {
+        if (!$request || !is_object($request)) {
+            return false;
+        }
+        if (($request->status ?? "") !== "department_approved") {
+            return false;
+        }
+        $fee = (float)($request->fee_amount ?? 0);
+        if ($fee <= 0) {
+            return false;
+        }
+        if (!empty($request->fee_is_waived)) {
+            return false;
+        }
+        if (gate_pass_fee_waiver_pending($request)) {
+            return false;
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('gate_pass_clean_approval_data_for_save')) {
+
+    /**
+     * XSS-clean a gate pass approval row before insert/update.
+     * clean_data()/xss_clean turns null into "", which MySQL stores as 0 for UNSIGNED reason_id
+     * and breaks FK pod_gate_pass_request_approvals_reason_id_foreign → pod_gate_pass_reasons.
+     */
+    function gate_pass_clean_approval_data_for_save(array $data): array
+    {
+        $data = clean_data($data);
+        if (!array_key_exists("reason_id", $data)) {
+            return $data;
+        }
+        $rid = $data["reason_id"];
+        if ($rid === null || $rid === "" || (is_numeric($rid) && (int)$rid < 1)) {
+            unset($data["reason_id"]);
+        }
+
+        return $data;
+    }
+}
+
+if (!function_exists('gate_pass_audit_log')) {
+
+    /**
+     * Append a row to gate_pass_request_audit_log if the table exists (no-op on failure).
+     */
+    function gate_pass_audit_log(?int $actor_user_id, int $gate_pass_request_id, string $action, string $details = ""): void
+    {
+        if ($gate_pass_request_id < 1) {
+            return;
+        }
+        try {
+            $model = new \App\Models\Gate_pass_request_audit_log_model();
+            $req = \Config\Services::request();
+            $ip = $req ? $req->getIPAddress() : "";
+            $model->ci_save(clean_data([
+                "gate_pass_request_id" => $gate_pass_request_id,
+                "actor_user_id" => (int)($actor_user_id ?? 0),
+                "action" => substr(trim($action), 0, 100),
+                "details" => $details !== "" ? substr($details, 0, 65000) : null,
+                "created_at" => get_current_utc_time(),
+                "ip_address" => substr((string)$ip, 0, 64),
+                "deleted" => 0,
+            ]));
+        } catch (\Throwable $e) {
+            log_message("debug", "gate_pass_audit_log skipped: " . $e->getMessage());
+        }
+    }
+}
+
+if (!function_exists('gate_pass_audit_action_display_label')) {
+
+    /**
+     * Short label for the activity log "Action" column (requester portal + admin feed).
+     */
+    function gate_pass_audit_action_display_label(string $action): string
+    {
+        $action = strtolower(trim($action));
+        if ($action === "") {
+            return "";
+        }
+        $key = "gate_pass_audit_action_" . preg_replace("/[^a-z0-9_]/", "", $action);
+        $t = app_lang($key);
+        if ($t !== $key && $t !== "") {
+            return $t;
+        }
+
+        return ucwords(str_replace("_", " ", $action));
+    }
+}
+
+if (!function_exists('gate_pass_audit_log_visitor_block')) {
+
+    /**
+     * Human-readable audit entry for visitor block/unblock (no internal numeric IDs in text).
+     *
+     * @param string $actor_type "security" or "rop"
+     */
+    function gate_pass_audit_log_visitor_block(
+        ?int $actor_user_id,
+        object $request,
+        object $visitor,
+        string $block_action,
+        string $block_reason,
+        string $actor_type
+    ): void {
+        $actor_type = strtolower(trim($actor_type));
+        $actor_label = $actor_type === "rop"
+            ? app_lang("gate_pass_audit_actor_rop")
+            : app_lang("gate_pass_audit_actor_security");
+
+        $stage = strtolower(trim((string)($request->stage ?? "")));
+        if ($actor_type === "rop") {
+            $context = app_lang("gate_pass_audit_context_rop_review");
+        } elseif ($stage === "issued") {
+            $context = app_lang("gate_pass_audit_context_issued_gate");
+        } else {
+            $context = app_lang("gate_pass_audit_context_security_review");
+        }
+
+        $ref = trim((string)($request->reference ?? ""));
+        if ($ref === "") {
+            $ref = app_lang("gate_pass_audit_unknown_reference");
+        }
+
+        $company = trim((string)($request->company_name ?? ""));
+        $company_clause = $company !== ""
+            ? " " . sprintf(app_lang("gate_pass_audit_company_clause"), $company)
+            : "";
+
+        $vname = trim((string)($visitor->full_name ?? ""));
+        if ($vname === "") {
+            $vname = app_lang("gate_pass_audit_unnamed_visitor");
+        }
+
+        $block_action = strtolower(trim($block_action));
+        if ($block_action === "block") {
+            $reason = trim($block_reason);
+            if ($reason === "") {
+                $reason = app_lang("gate_pass_audit_reason_not_specified");
+            }
+            $detail = sprintf(
+                app_lang("gate_pass_audit_visitor_blocked_body"),
+                $actor_label,
+                $vname,
+                $ref,
+                $company_clause,
+                $context,
+                $reason
+            );
+            gate_pass_audit_log($actor_user_id, (int)$request->id, "visitor_blocked", $detail);
+        } else {
+            $detail = sprintf(
+                app_lang("gate_pass_audit_visitor_unblocked_body"),
+                $actor_label,
+                $vname,
+                $ref,
+                $company_clause,
+                $context
+            );
+            gate_pass_audit_log($actor_user_id, (int)$request->id, "visitor_unblocked", $detail);
+        }
+    }
+}
+
+if (!function_exists('gate_pass_audit_stage_label_for_log')) {
+
+    /** Readable workflow stage name for audit text (uses existing review strings where possible). */
+    function gate_pass_audit_stage_label_for_log(string $stage): string
+    {
+        $stage = strtolower(trim($stage));
+        $map = [
+            "department" => app_lang("gate_pass_review_department"),
+            "commercial" => app_lang("gate_pass_review_commercial"),
+            "security" => app_lang("gate_pass_review_security"),
+            "rop" => app_lang("gate_pass_review_rop"),
+            "issued" => app_lang("gate_pass_status_issued"),
+        ];
+
+        return $map[$stage] ?? $stage;
     }
 }

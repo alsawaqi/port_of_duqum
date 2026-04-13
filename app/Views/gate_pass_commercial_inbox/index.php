@@ -110,10 +110,36 @@
             border-color: #1d4ed8;
             color: #fff;
         }
+        /* Set fee: show OMR instead of a $ icon */
+        .gp-set-fee-omr {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            line-height: 1;
+            padding: 3px 6px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            margin-inline-end: 2px;
+            vertical-align: middle;
+        }
+        .gpci-table-wrap .btn-default .gp-set-fee-omr {
+            border-color: rgba(15, 23, 42, 0.22);
+            color: inherit;
+        }
     </style>
 
     <div class="gpci-shell">
         <div class="gpci-inner">
+            <?php $kpis = $kpis ?? []; ?>
+            <?php echo view("gate_pass_includes/dashboard_kpis_widget", ["kpis" => $kpis]); ?>
+            <div class="mb15">
+                <a class="btn btn-default btn-sm" href="<?php echo get_uri("gate_pass_commercial_inbox/export_list_csv"); ?>">
+                    <i data-feather="download" class="icon-16"></i> <?php echo app_lang("gate_pass_export_csv"); ?>
+                </a>
+            </div>
             <div class="gpci-header">
                 <div class="gpci-header-title">
                     <div class="gpci-header-icon">
@@ -137,6 +163,7 @@
 
 <script type="text/javascript">
 $(document).ready(function() {
+    if (typeof feather !== "undefined") feather.replace();
     var $t = $("#gate-pass-commercial-inbox-table");
     if ($.fn.DataTable.isDataTable($t)) {
         $t.DataTable().clear().destroy();
@@ -150,6 +177,7 @@ $(document).ready(function() {
         source: '<?php echo_uri("gate_pass_commercial_inbox/list_data"); ?>',
         columns: [
             { title: "<?php echo app_lang('reference'); ?>" },
+            { title: "<?php echo app_lang('created_at'); ?>" },
             { title: "<?php echo app_lang('company'); ?>" },
             { title: "<?php echo app_lang('department'); ?>" },
             { title: "<?php echo app_lang('requester'); ?>" },
@@ -161,7 +189,7 @@ $(document).ready(function() {
             { title: "<?php echo app_lang('waived'); ?>" },
             { title: "<i data-feather='menu' class='icon-16'></i>", class: "text-center option w100" }
         ],
-        order: [[0, "desc"]],
+        order: [[1, "desc"]],
         onDrawCallback: function() {
             $("#gate-pass-commercial-inbox-table tbody tr").each(function(idx, row) {
                 $(row).css({ opacity: 0, transform: "translateY(4px)" });

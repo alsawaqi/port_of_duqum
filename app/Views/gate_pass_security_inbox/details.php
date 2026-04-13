@@ -1,11 +1,10 @@
-<div id="page-content" class="page-wrapper clearfix gp-details-page">
+<div id="page-content" class="page-wrapper clearfix gp-details-page gp-sec-hub-page">
     <?php
     $status = $request->status ?? "";
     $stage  = $request->stage ?? "";
 
     if (!isset($status_label)) {
-        $s = strtolower(trim((string) $status));
-        $status_label = ($s === "" || $s === "-") ? "-" : (($s === "rop_approved") ? "ROP Approved" : ucwords(str_replace("_", " ", $s)));
+        $status_label = gate_pass_request_status_display($request);
     }
 
     $status_class = "gp-badge-soft-secondary";
@@ -23,6 +22,9 @@
 
     $show_review_btn = ($status === "commercial_approved" && $stage === "security");
     ?>
+
+    <div class="gp-sec-hub-page-inner p15">
+        <?php echo view("gate_pass_security_inbox/_hub_nav", ["active" => $security_nav_active ?? "requests"]); ?>
 
     <div class="card gp-card mb15">
         <div class="gp-header">
@@ -67,18 +69,23 @@
             <div class="gp-actions">
                 <div class="title-button-group gp-actions-row">
                     <a class="btn btn-default gp-btn" href="<?php echo get_uri("gate_pass_security_inbox/scan"); ?>">
-                        <i data-feather="camera" class="icon-16"></i> Scan QR
+                        <i data-feather="camera" class="icon-16"></i> <?php echo app_lang("gate_pass_security_scan_qr"); ?>
                     </a>
                     <?php if ($show_review_btn): ?>
                         <?php echo modal_anchor(
                             get_uri("gate_pass_security_inbox/approval_modal_form"),
-                            "<i data-feather='check-square' class='icon-16'></i> " . app_lang("review"),
-                            ["class" => "btn btn-primary gp-btn-primary", "title" => app_lang("review"), "data-post-id" => $request->id]
+                            "<i data-feather='clipboard' class='icon-16'></i> " . app_lang("gate_pass_security_record_decision"),
+                            ["class" => "btn btn-primary gp-btn-primary", "title" => app_lang("gate_pass_security_record_decision"), "data-post-id" => $request->id]
                         ); ?>
                     <?php endif; ?>
                     <?php echo modal_anchor(
+                        get_uri("gate_pass_security_inbox/visitor_block_modal_form"),
+                        "<i data-feather='slash' class='icon-16'></i> Block Visitor",
+                        ["class" => "btn btn-warning gp-btn", "title" => "Block/Unblock Visitor", "data-post-request_id" => $request->id]
+                    ); ?>
+                    <?php echo modal_anchor(
                         get_uri("gate_pass_security_inbox/approval_history_modal"),
-                        "<i data-feather='history' class='icon-16'></i> " . app_lang("approval_history"),
+                        "<i data-feather='list' class='icon-16'></i> " . app_lang("approval_history"),
                         ["class" => "btn btn-default gp-btn", "title" => app_lang("approval_history"), "data-post-id" => $request->id]
                     ); ?>
                 </div>
@@ -149,6 +156,86 @@
         </div>
     </div>
 
+    <?php echo view("gate_pass_includes/request_information_card", ["request" => $request]); ?>
+
+    <?php
+    $visitor_rows_for_attachments = $visitor_rows_for_attachments ?? [];
+    $vehicle_rows_for_attachments = $vehicle_rows_for_attachments ?? [];
+    $vf_attach_fields = [
+        "id_attachment_path" => app_lang("id_attachment"),
+        "visa_attachment_path" => app_lang("visa_attachment"),
+        "photo_attachment_path" => app_lang("photo_attachment"),
+        "driving_license_attachment_path" => app_lang("driving_license_attachment"),
+    ];
+    ?>
+    <?php if (count($visitor_rows_for_attachments) || count($vehicle_rows_for_attachments)): ?>
+    <div class="card gp-card mb15">
+        <div class="gp-section-title gp-section-title-row">
+            <div class="d-flex align-items-center">
+                <span class="gp-section-icon"><i data-feather="paperclip" class="icon-18"></i></span>
+                <div>
+                    <h4 class="mt0 mb0"><?php echo app_lang("gate_pass_documents_on_file_title"); ?></h4>
+                    <div class="text-off font-13"><?php echo app_lang("gate_pass_documents_security_hint"); ?></div>
+                </div>
+            </div>
+        </div>
+        <div class="p20 pt10">
+            <?php foreach ($visitor_rows_for_attachments as $vrow): ?>
+                <div class="mb15 pb15" style="border-bottom:1px solid rgba(0,0,0,.06);">
+                    <div class="fw-semibold mb8"><?php echo app_lang("visitors"); ?>: <?php echo esc($vrow->full_name ?? "-"); ?></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb0">
+                            <thead><tr><th><?php echo app_lang("attachment"); ?></th><th class="text-center w180"><?php echo app_lang("actions"); ?></th></tr></thead>
+                            <tbody>
+                            <?php foreach ($vf_attach_fields as $field => $flabel): ?>
+                                <?php $p = isset($vrow->{$field}) ? trim((string)$vrow->{$field}) : ""; ?>
+                                <?php if ($p !== ""): ?>
+                                <tr>
+                                    <td><?php echo esc($flabel); ?></td>
+                                    <td class="text-center">
+                                        <?php
+                                        $base = get_uri("gate_pass_security_inbox/visitor_attachment_download/" . (int)$vrow->id . "/" . $field);
+                                        ?>
+                                        <a href="<?php echo esc($base); ?>" class="btn btn-default btn-sm" target="_blank"><?php echo app_lang("view"); ?></a>
+                                        <a href="<?php echo esc($base . "?download=1"); ?>" class="btn btn-default btn-sm" target="_blank"><?php echo app_lang("download"); ?></a>
+                                    </td>
+                                </tr>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+
+            <?php foreach ($vehicle_rows_for_attachments as $veh): ?>
+                <?php $mp = gate_pass_vehicle_mulkiyah_path_value($veh); ?>
+                <?php if ($mp === "") {
+                    continue;
+                } ?>
+                <div class="mb0">
+                    <div class="fw-semibold mb8"><?php echo app_lang("vehicles"); ?>: <?php echo esc($veh->plate_no ?? "-"); ?></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb0">
+                            <thead><tr><th><?php echo app_lang("attachment"); ?></th><th class="text-center w180"><?php echo app_lang("actions"); ?></th></tr></thead>
+                            <tbody>
+                                <tr>
+                                    <td><?php echo app_lang("gate_pass_mulkiyah_attachment"); ?></td>
+                                    <td class="text-center">
+                                        <?php $vb = get_uri("gate_pass_security_inbox/vehicle_attachment_download/" . (int)$veh->id . "/mulkiyah_attachment_path"); ?>
+                                        <a href="<?php echo esc($vb); ?>" class="btn btn-default btn-sm" target="_blank"><?php echo app_lang("view"); ?></a>
+                                        <a href="<?php echo esc($vb . "?download=1"); ?>" class="btn btn-default btn-sm" target="_blank"><?php echo app_lang("download"); ?></a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div id="gp-security-visitors-card" class="card gp-card mb15">
         <div class="gp-section-title gp-section-title-row">
             <div class="d-flex align-items-center">
@@ -177,6 +264,7 @@
         <div class="table-responsive p15 p-sm-10 gp-table-wrap">
             <table id="gp-security-vehicles-table" class="display" width="100%" cellspacing="0"></table>
         </div>
+    </div>
     </div>
 </div>
 
@@ -240,9 +328,10 @@ $(document).ready(function () {
             { title: "<?php echo app_lang('nationality'); ?>", data: 3 },
             { title: "<?php echo app_lang('phone'); ?>", data: 4 },
             { title: "<?php echo app_lang('role'); ?>", data: 5 },
-            { title: "<?php echo app_lang('blocked'); ?>", data: 6, class: "text-center" },
-            { title: "<?php echo app_lang('reason'); ?>", data: 7 },
-            { title: "<i data-feather='menu' class='icon-16'></i>", data: 8, class: "text-center option", orderable: false }
+            { title: "<?php echo app_lang('attachments'); ?>", data: 6, class: "w220", orderable: false },
+            { title: "<?php echo app_lang('blocked'); ?>", data: 7, class: "text-center" },
+            { title: "<?php echo app_lang('reason'); ?>", data: 8 },
+            { title: "<i data-feather='menu' class='icon-16'></i>", data: 9, class: "text-center option", orderable: false }
         ],
         order: [[0, "asc"]]
     });
@@ -254,10 +343,8 @@ $(document).ready(function () {
         columns: [
             { title: "<?php echo app_lang('plate_no'); ?>", data: 0 },
             { title: "<?php echo app_lang('type'); ?>", data: 1 },
-            { title: "<?php echo app_lang('make'); ?>", data: 2 },
-            { title: "<?php echo app_lang('model'); ?>", data: 3 },
-            { title: "<?php echo app_lang('color'); ?>", data: 4 },
-            { title: "<i data-feather='menu' class='icon-16'></i>", data: 5, class: "text-center option", orderable: false }
+            { title: "<?php echo app_lang('gate_pass_mulkiyah_attachment'); ?>", data: 2, class: "text-center" },
+            { title: "<i data-feather='menu' class='icon-16'></i>", data: 3, class: "text-center option", orderable: false }
         ],
         order: [[0, "asc"]]
     });
