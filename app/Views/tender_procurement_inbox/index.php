@@ -1,15 +1,32 @@
-<div class="card">
-  <div class="card-header">
-    <h4><?php echo app_lang("tender_procurement_inbox"); ?></h4>
-  </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+  <div class="card gp-pro-card">
+    <div class="page-title clearfix">
+      <h1><?php echo app_lang("tender_procurement_inbox"); ?></h1>
+    </div>
 
-  <div class="card-body">
-    <table id="tender-procurement-inbox-table" class="display" cellspacing="0" width="100%"></table>
+    <div class="table-responsive gp-pro-table-shell">
+      <table id="tender-procurement-inbox-table" class="display" cellspacing="0" width="100%"></table>
+    </div>
   </div>
 </div>
 
 <script>
 $(document).ready(function () {
+  function tryParseResponse(res) {
+    if (typeof res === "object") {
+      return res;
+    }
+    try {
+      return JSON.parse(res);
+    } catch (e) {
+      return {success: false, message: "Unexpected server response."};
+    }
+  }
+
+  function reloadTable() {
+    $("#tender-procurement-inbox-table").appTable({reload: true});
+  }
+
   $("#tender-procurement-inbox-table").appTable({
     source: '<?php echo_uri("tender_procurement_inbox/list_data"); ?>',
     columns: [
@@ -32,14 +49,56 @@ $(document).ready(function () {
     appLoader.show();
     $.post($el.attr("data-action-url"), {tender_request_id: requestId}, function (res) {
       appLoader.hide();
-      var r = JSON.parse(res);
+      var r = tryParseResponse(res);
       if (r.success) {
-        $("#tender-procurement-inbox-table").appTable({newData: true});
+        reloadTable();
         appAlert.success(r.message, {duration: 3000});
       } else {
         appAlert.error(r.message || "Error", {duration: 3000});
       }
+    }).fail(function () {
+      appLoader.hide();
+      appAlert.error("Request failed. Please try again.", {duration: 3000});
     });
+  });
+
+  function postTenderAction($el, successReloadSelector) {
+    var tenderId = $el.attr("data-tender-id");
+    appLoader.show();
+    $.post($el.attr("data-action-url"), {tender_id: tenderId}, function (res) {
+      appLoader.hide();
+      var r = tryParseResponse(res);
+      if (r.success) {
+        $(successReloadSelector).appTable({reload: true});
+        appAlert.success(r.message || "Done", {duration: 3000});
+      } else {
+        appAlert.error(r.message || "Error", {duration: 3000});
+      }
+    }).fail(function () {
+      appLoader.hide();
+      appAlert.error("Request failed. Please try again.", {duration: 3000});
+    });
+  }
+
+  $(document).on("click", ".award", function () {
+    if (!confirm("Finalize this tender as awarded?")) {
+      return;
+    }
+    postTenderAction($(this), "#tender-procurement-inbox-table");
+  });
+
+  $(document).on("click", ".cancel-tender", function () {
+    if (!confirm("Cancel this tender?")) {
+      return;
+    }
+    postTenderAction($(this), "#tender-procurement-inbox-table");
+  });
+
+  $(document).on("click", ".retender", function () {
+    if (!confirm("Create a new retender draft from this tender?")) {
+      return;
+    }
+    postTenderAction($(this), "#tender-procurement-inbox-table");
   });
 });
 </script>

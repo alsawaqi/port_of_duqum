@@ -76,7 +76,33 @@ protected function can_tender(string $section, string $action): bool
         return true;
     }
     $key = "can_{$action}_tender_{$section}";
-    return get_array_value($this->login_user->permissions, $key) == "1";
+    if (get_array_value($this->login_user->permissions, $key) == "1") {
+        return true;
+    }
+
+    // Backward-compatible fallback for legacy roles missing tender permission keys.
+    // This avoids production lockout for already-assigned tender users.
+    if ($section === "technical_eval" && in_array($action, ["view", "update"], true)) {
+        $db = db_connect();
+        $ttu = $db->prefixTable("tender_technical_users");
+        $users = $db->prefixTable("users");
+        $row = $db->query(
+            "SELECT $ttu.id
+             FROM $ttu
+             INNER JOIN $users ON $users.id = $ttu.user_id
+             WHERE $ttu.deleted=0
+               AND $ttu.status='active'
+               AND $users.deleted=0
+               AND $users.status='active'
+               AND $ttu.user_id=?
+             LIMIT 1",
+            [(int) $this->login_user->id]
+        )->getRow();
+
+        return (bool) $row;
+    }
+
+    return false;
 }
 
 protected function access_only_tender(string $section, string $action)

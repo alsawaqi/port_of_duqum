@@ -324,18 +324,19 @@ class Tender_commercial_inbox extends Security_Controller
         $message = "Commercial evaluation saved successfully.";
         $redirect_url = null;
 
-        if ($pending_count === 0 && $approved_count === 1) {
+        if ($pending_count === 0) {
             $this->Tenders_model->ci_save([
-                "status"         => "awarded",
                 "workflow_stage" => "award_decision",
                 "award_ready_at" => $now,
                 "updated_at"     => $now,
             ], $tender_id);
 
-            $message = "Commercial evaluation saved successfully. One bid has been selected and the tender is now awarded.";
+            if ($approved_count === 1) {
+                $message = "Commercial evaluation saved successfully. Commercial review is complete and the tender is now waiting for Procurement final award decision.";
+            } else {
+                $message = "Commercial evaluation saved successfully. Commercial review is complete, but no valid winner is available. Procurement must cancel or retender.";
+            }
             $redirect_url = get_uri("tender_commercial_inbox");
-        } elseif ($pending_count === 0) {
-            $message = "Commercial evaluation saved successfully. All bids are finalized, but exactly one bid must be commercially approved before the tender can be finalized.";
         }
 
         if ($db->transStatus() === false) {

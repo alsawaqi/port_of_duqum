@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page">
     <div class="mb15">
         <a href="<?php echo get_uri('tender_technical_inbox'); ?>" class="btn btn-default">
             <i data-feather="arrow-left" class="icon-16"></i>
@@ -6,7 +6,7 @@
         </a>
     </div>
 
-    <div class="card mb15">
+    <div class="card gp-pro-card mb15">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h3 class="mb5">Technical Evaluation - <?php echo esc($tender->reference ?? '-'); ?></h3>
@@ -39,12 +39,12 @@
         </div>
     </div>
 
-    <div class="card mb15">
+    <div class="card gp-pro-card mb15">
         <div class="card-header">
             <h4 class="mb0">Bids Pending Your Action</h4>
         </div>
         <div class="card-body p0">
-            <div class="table-responsive">
+            <div class="table-responsive gp-pro-table-shell">
                 <table class="table table-bordered table-striped mb0">
                     <thead>
                         <tr>
@@ -97,12 +97,12 @@
         </div>
     </div>
 
-    <div class="card mb15">
+    <div class="card gp-pro-card mb15">
         <div class="card-header">
             <h4 class="mb0">My Finalized Decisions</h4>
         </div>
         <div class="card-body p0">
-            <div class="table-responsive">
+            <div class="table-responsive gp-pro-table-shell">
                 <table class="table table-bordered table-striped mb0">
                     <thead>
                         <tr>
@@ -148,12 +148,12 @@
         </div>
     </div>
 
-    <div class="card">
+    <div class="card gp-pro-card">
         <div class="card-header">
             <h4 class="mb0">Locked Decisions by Other Evaluators</h4>
         </div>
         <div class="card-body p0">
-            <div class="table-responsive">
+            <div class="table-responsive gp-pro-table-shell">
                 <table class="table table-bordered table-striped mb0">
                     <thead>
                         <tr>

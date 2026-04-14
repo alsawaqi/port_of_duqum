@@ -129,7 +129,7 @@ $(document).ready(function () {
 
     $("#tender-department-user-form").appForm({
         onSuccess: function () {
-            $("#tender-department-users-table").appTable({ newData: true });
+            $("#tender-department-users-table").appTable({reload: true});
         }
     });
 });

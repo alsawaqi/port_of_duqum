@@ -1,9 +1,9 @@
 <?php
 $docs = $docs ?? [];
 $bid = $bid ?? null;
-$submission_open = (($tender->status ?? "") === "published");
+$submission_open = (($tender->status ?? "") === "published") && (($tender->workflow_stage ?? "bidding") === "bidding");
 
-if ($submission_open && !empty($tender->closing_at) && strtotime($tender->closing_at) < time()) {
+if ($submission_open && !empty($tender->closing_at) && strtotime($tender->closing_at) <= time()) {
     $submission_open = false;
 }
 ?>

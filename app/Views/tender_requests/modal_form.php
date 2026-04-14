@@ -16,249 +16,342 @@ foreach (($selected_itc_members ?? []) as $u) {
 
 $selected_chairman_id = (int) ($selected_chairman->id ?? 0);
 $selected_secretary_id = (int) ($selected_secretary->id ?? 0);
+$selected_department_manager_id = (int) ($model_info->department_manager_user_id ?? ($department_manager_assignment->user_id ?? 0));
+$selected_department_manager_title = (string) ($model_info->department_manager_title ?? ($department_manager_assignment->job_title ?? 'Department Manager'));
+$selected_department_manager_label = trim((string) ($department_manager_assignment->full_name ?? ''));
+if ($selected_department_manager_label !== '' && !empty($department_manager_assignment->email)) {
+    $selected_department_manager_label .= ' (' . $department_manager_assignment->email . ')';
+}
 ?>
 <?php echo form_open(get_uri('tender_requests/save'), ['id' => 'tender-request-form', 'class' => 'general-form']); ?>
 <input type="hidden" name="id" value="<?php echo $model_info->id ?? ''; ?>" />
 
-<div class="modal-body">
-
-    <div class="form-group">
-        <label>Requester Name</label>
-        <input type="text" class="form-control" value="<?php echo esc($requester_display->full_name ?? ($this->login_user->first_name.' '.$this->login_user->last_name)); ?>" readonly>
-        <small class="text-muted">Auto-filled from the logged-in Tender Requester.</small>
-    </div>
-
-    <?php if (!empty($requester_context_locked) && !empty($requester_assignment)) { ?>
-
-        <div class="form-group">
-            <label>Company <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" value="<?php echo esc($requester_assignment->company_name ?? '-'); ?>" readonly>
-            <input type="hidden" name="company_id" id="tender-company" value="<?php echo (int) ($model_info->company_id ?? 0); ?>">
-        </div>
-
-        <div class="form-group">
-            <label>Department</label>
-            <input type="text" class="form-control" value="<?php echo esc($requester_assignment->department_name ?? '-'); ?>" readonly>
-            <input type="hidden" name="department_id" id="tender-department" value="<?php echo (int) ($model_info->department_id ?? 0); ?>">
-        </div>
-
-    <?php } else { ?>
-
-        <div class="form-group">
-            <label>Company <span class="text-danger">*</span></label>
-            <?php echo form_dropdown(
-                'company_id',
-                $company_dropdown ?? ['' => '- '.app_lang('select').' -'],
-                $model_info->company_id ?? '',
-                "class='form-control' id='tender-company' required"
-            ); ?>
-        </div>
-
-        <div class="form-group">
-            <label>Department</label>
-            <select name="department_id" id="tender-department" class="form-control">
-                <option value="">- <?php echo app_lang('select'); ?> -</option>
-            </select>
-        </div>
-
-    <?php } ?>
-
-    <div class="form-group">
-        <label>Department Manager</label>
-        <input type="text" id="department-manager-name" class="form-control" readonly
-               value="<?php echo esc($department_manager_assignment->full_name ?? ''); ?>">
-        <small class="text-muted">Auto-filled from Tender Department Manager Users for the same department.</small>
-    </div>
-
-    <div class="form-group">
-        <label>Department Manager Title</label>
-        <input type="text" id="department-manager-title" class="form-control" readonly
-               value="<?php echo esc($department_manager_assignment->job_title ?? 'Department Manager'); ?>">
-        <small class="text-muted">Manager will approve in Department Manager Inbox after submission.</small>
-    </div>
-
-    <div class="alert alert-warning" id="department-manager-warning" style="<?php echo !empty($department_manager_assignment) ? 'display:none;' : ''; ?>">
-        No Department Manager is configured for this company/department yet.
-    </div>
-
-    <div class="form-group">
-        <label>Reference <span class="text-danger">*</span></label>
-        <?php echo form_input(['name' => 'reference', 'value' => $model_info->reference ?? '', 'class' => 'form-control', 'required' => true]); ?>
-    </div>
-
-    <div class="form-group">
-        <label>Request Date</label>
-        <?php echo form_input(['name' => 'request_date', 'type' => 'date', 'value' => $model_info->request_date ?? date('Y-m-d'), 'class' => 'form-control']); ?>
-    </div>
-
-    <div class="form-group">
-        <label>Budget Assigned (OMR) <span class="text-danger">*</span></label>
-        <?php echo form_input(['name' => 'budget_omr', 'type' => 'number', 'step' => '0.001', 'value' => $model_info->budget_omr ?? '0.000', 'class' => 'form-control', 'required' => true]); ?>
-        <small class="text-muted">Fee auto-calculates as Budget × 0.05%</small>
-    </div>
-
-    <div class="form-group">
-        <label>Estimated Previous Amount (optional)</label>
-        <?php echo form_input(['name' => 'estimated_previous_amount', 'type' => 'number', 'step' => '0.001', 'value' => $model_info->estimated_previous_amount ?? '', 'class' => 'form-control']); ?>
-    </div>
-
-    <div class="form-group">
-        <label>Estimated Previous Notes</label>
-        <?php echo form_textarea(['name' => 'estimated_previous_notes', 'value' => $model_info->estimated_previous_notes ?? '', 'class' => 'form-control']); ?>
-    </div>
-
-    <div class="form-group">
-        <label>Subject <span class="text-danger">*</span></label>
-        <?php echo form_input(['name' => 'subject', 'value' => $model_info->subject ?? '', 'class' => 'form-control', 'required' => true]); ?>
-    </div>
-
-    <div class="form-group">
-        <label>Brief Description <span class="text-danger">*</span></label>
-        <?php echo form_textarea(['name' => 'brief_description', 'value' => $model_info->brief_description ?? '', 'class' => 'form-control', 'required' => true]); ?>
-    </div>
-
-    <div class="form-group">
-        <label>Announcement</label>
-        <?php
-        echo form_dropdown(
-            'announcement',
-            ['local' => 'Local', 'international' => 'International'],
-            $model_info->announcement ?? 'local',
-            "class='form-control' required"
-        );
-?>
-    </div>
-
-    <div class="form-group">
-        <label>Tender Type</label>
-        <?php
-echo form_dropdown(
-    'tender_type',
-    ['open' => 'Open', 'close' => 'Close'],
-    $model_info->tender_type ?? 'open',
-    "class='form-control' required"
-);
-?>
-    </div>
-
-    <div class="form-group" id="close-vendors-wrap" style="display:none;">
-        <label>Invited Suppliers (Close Tender)</label>
-        <select name="invited_vendor_ids[]" id="invited_vendor_ids" class="form-control" multiple="multiple">
-            <?php if (!empty($selected_vendors)) { ?>
-                <?php foreach ($selected_vendors as $v) { ?>
-                    <option value="<?php echo (int) $v->id; ?>" selected="selected">
-                        <?php echo esc($v->vendor_name); ?>
-                    </option>
-                <?php } ?>
-            <?php } ?>
-        </select>
-        <small class="text-muted">Required when Tender Type = Close.</small>
-    </div>
-
-    <div class="form-group">
-        <label>Evaluation Method</label>
-        <?php
-echo form_dropdown(
-    'evaluation_method',
-    ['separate' => 'Technical & Commercial Separate', 'combined' => 'Combined'],
-    $model_info->evaluation_method ?? 'separate',
-    "class='form-control' required"
-);
-?>
-    </div>
-
-    <div class="form-group">
-        <label>Weights</label>
+<div class="modal-body tender-request-modal-body">
+    <div class="mb20 tender-request-section">
+        <h5 class="mb15">Requester and Organization</h5>
         <div class="row">
             <div class="col-md-6">
-                <label class="text-muted">Technical Weight</label>
-                <?php echo form_input(['name' => 'technical_weight', 'type' => 'number', 'value' => $model_info->technical_weight ?? 70, 'class' => 'form-control', 'required' => true]); ?>
+                <div class="form-group">
+                    <label>Requester Name</label>
+                    <input type="text" class="form-control" value="<?php echo esc($requester_display->full_name ?? ($this->login_user->first_name.' '.$this->login_user->last_name)); ?>" readonly>
+                    <small class="text-muted">Auto-filled from the logged-in Tender Requester.</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <?php if (!empty($requester_context_locked) && !empty($requester_assignment)) { ?>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>Company <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" value="<?php echo esc($requester_assignment->company_name ?? '-'); ?>" readonly>
+                        <input type="hidden" name="company_id" id="tender-company" value="<?php echo (int) ($model_info->company_id ?? 0); ?>">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input type="text" class="form-control" value="<?php echo esc($requester_assignment->department_name ?? '-'); ?>" readonly>
+                        <input type="hidden" name="department_id" id="tender-department" value="<?php echo (int) ($model_info->department_id ?? 0); ?>">
+                    </div>
+                </div>
+            <?php } else { ?>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>Company <span class="text-danger">*</span></label>
+                        <?php echo form_dropdown(
+                            'company_id',
+                            $company_dropdown ?? ['' => '- '.app_lang('select').' -'],
+                            $model_info->company_id ?? '',
+                            "class='form-control' id='tender-company' data-placeholder='Search and select company' required"
+                        ); ?>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label>Department</label>
+                        <select name="department_id" id="tender-department" class="form-control" data-placeholder="Search and select department">
+                            <option value="">- <?php echo app_lang('select'); ?> -</option>
+                        </select>
+                    </div>
+                </div>
+            <?php } ?>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="form-group">
+                    <label>Department Manager <span class="text-danger">*</span></label>
+                    <select name="department_manager_user_id" id="department-manager-user-id" class="form-control" data-placeholder="Search and select department manager" required>
+                        <option value="">- <?php echo app_lang('select'); ?> -</option>
+                        <?php if ($selected_department_manager_id > 0) { ?>
+                            <option
+                                value="<?php echo $selected_department_manager_id; ?>"
+                                data-title="<?php echo esc($selected_department_manager_title); ?>"
+                                selected="selected">
+                                <?php echo esc($selected_department_manager_label ?: ('Manager #' . $selected_department_manager_id)); ?>
+                            </option>
+                        <?php } ?>
+                    </select>
+                    <small class="text-muted">Choose from Tender Department Manager Users for the selected company and department.</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Department Manager Title</label>
+                    <input type="text" id="department-manager-title" class="form-control" readonly
+                           value="<?php echo esc($selected_department_manager_title); ?>">
+                    <small class="text-muted">Manager will approve in Department Manager Inbox after submission.</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-warning mb0" id="department-manager-warning" style="<?php echo !empty($department_manager_assignment) ? 'display:none;' : ''; ?>">
+            No Department Manager is configured for this company/department yet.
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="mb20 tender-request-section">
+        <h5 class="mb15">Request Details</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Reference <span class="text-danger">*</span></label>
+                    <?php echo form_input(['name' => 'reference', 'value' => $model_info->reference ?? '', 'class' => 'form-control', 'required' => true]); ?>
+                </div>
             </div>
             <div class="col-md-6">
-                <label class="text-muted">Commercial Weight</label>
-                <?php echo form_input(['name' => 'commercial_weight', 'type' => 'number', 'value' => $model_info->commercial_weight ?? 30, 'class' => 'form-control', 'required' => true]); ?>
+                <div class="form-group">
+                    <label>Request Date</label>
+                    <?php echo form_input(['name' => 'request_date', 'type' => 'date', 'value' => $model_info->request_date ?? date('Y-m-d'), 'class' => 'form-control']); ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="form-group">
+                    <label>Subject <span class="text-danger">*</span></label>
+                    <?php echo form_input(['name' => 'subject', 'value' => $model_info->subject ?? '', 'class' => 'form-control', 'required' => true]); ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="form-group mb0">
+                    <label>Brief Description <span class="text-danger">*</span></label>
+                    <?php echo form_textarea(['name' => 'brief_description', 'value' => $model_info->brief_description ?? '', 'class' => 'form-control', 'required' => true, 'rows' => 4]); ?>
+                </div>
             </div>
         </div>
     </div>
 
-     <hr>
-<h6>Technical Evaluation Team</h6>
-<div class="form-group">
-    <select name="technical_user_ids[]" id="technical_user_ids" class="form-control" multiple="multiple">
-        <?php foreach (($technical_pool_users ?? []) as $u) { ?>
-            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_technical_ids, true) ? 'selected="selected"' : ''; ?>>
-                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
-            </option>
-        <?php } ?>
-    </select>
-    <small class="text-muted">Select from Tender Technical Users.</small>
-</div>
+    <hr>
 
-<h6>Commercial Evaluation Team</h6>
-<div class="form-group">
-    <select name="commercial_user_ids[]" id="commercial_user_ids" class="form-control" multiple="multiple">
-        <?php foreach (($commercial_pool_users ?? []) as $u) { ?>
-            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_commercial_ids, true) ? 'selected="selected"' : ''; ?>>
-                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
-            </option>
-        <?php } ?>
-    </select>
-    <small class="text-muted">Select from Tender Commercial Users.</small>
-</div>
+    <div class="mb20 tender-request-section">
+        <h5 class="mb15">Budget and Tender Setup</h5>
 
-<hr>
-<h6>Tender Committee / ITT</h6>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Budget Assigned (OMR) <span class="text-danger">*</span></label>
+                    <?php echo form_input(['name' => 'budget_omr', 'type' => 'number', 'step' => '0.001', 'value' => $model_info->budget_omr ?? '0.000', 'class' => 'form-control', 'required' => true]); ?>
+                    <small class="text-muted">Fee auto-calculates as Budget x 0.05%</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Estimated Previous Amount</label>
+                    <?php echo form_input(['name' => 'estimated_previous_amount', 'type' => 'number', 'step' => '0.001', 'value' => $model_info->estimated_previous_amount ?? '', 'class' => 'form-control']); ?>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Announcement</label>
+                    <?php
+                    echo form_dropdown(
+                        'announcement',
+                        ['local' => 'Local', 'international' => 'International'],
+                        $model_info->announcement ?? 'local',
+                        "class='form-control' id='announcement-select' data-placeholder='Search and select announcement' required"
+                    );
+                    ?>
+                </div>
+            </div>
+        </div>
 
-<div class="alert alert-info">
-    For final submission, choose:
-    <strong>1 Chairman</strong>,
-    <strong>1 Secretary</strong>,
-    and <strong>at least 1 separate ITT Member</strong>.
-    Chairman and Secretary will not be counted as ITT Members.
-</div>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="form-group">
+                    <label>Estimated Previous Notes</label>
+                    <?php echo form_textarea(['name' => 'estimated_previous_notes', 'value' => $model_info->estimated_previous_notes ?? '', 'class' => 'form-control', 'rows' => 3]); ?>
+                </div>
+            </div>
+        </div>
 
-<div class="form-group">
-    <label>Chairman</label>
-    <select name="chairman_user_id" id="chairman_user_id" class="form-control">
-        <option value="">- <?php echo app_lang('select'); ?> -</option>
-        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
-            <option value="<?php echo (int) $u->id; ?>" <?php echo ((int) $u->id === $selected_chairman_id) ? 'selected="selected"' : ''; ?>>
-                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
-            </option>
-        <?php } ?>
-    </select>
-    <small class="text-muted">Select from Tender Committee Users.</small>
-</div>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Tender Type</label>
+                    <?php
+                    echo form_dropdown(
+                        'tender_type',
+                        ['open' => 'Open', 'close' => 'Close'],
+                        $model_info->tender_type ?? 'open',
+                        "class='form-control' id='tender-type-select' data-placeholder='Search and select tender type' required"
+                    );
+                    ?>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Evaluation Method</label>
+                    <?php
+                    echo form_dropdown(
+                        'evaluation_method',
+                        ['separate' => 'Technical & Commercial Separate', 'combined' => 'Combined'],
+                        $model_info->evaluation_method ?? 'separate',
+                        "class='form-control' id='evaluation-method-select' data-placeholder='Search and select evaluation method' required"
+                    );
+                    ?>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="form-group">
+                    <label>Technical Weight</label>
+                    <?php echo form_input(['name' => 'technical_weight', 'type' => 'number', 'value' => $model_info->technical_weight ?? 70, 'class' => 'form-control', 'required' => true]); ?>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="form-group">
+                    <label>Commercial Weight</label>
+                    <?php echo form_input(['name' => 'commercial_weight', 'type' => 'number', 'value' => $model_info->commercial_weight ?? 30, 'class' => 'form-control', 'required' => true]); ?>
+                </div>
+            </div>
+        </div>
 
-<div class="form-group">
-    <label>Secretary</label>
-    <select name="secretary_user_id" id="secretary_user_id" class="form-control">
-        <option value="">- <?php echo app_lang('select'); ?> -</option>
-        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
-            <option value="<?php echo (int) $u->id; ?>" <?php echo ((int) $u->id === $selected_secretary_id) ? 'selected="selected"' : ''; ?>>
-                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
-            </option>
-        <?php } ?>
-    </select>
-    <small class="text-muted">Select from Tender Committee Users.</small>
-</div>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="form-group mb0" id="close-vendors-wrap" style="display:none;">
+                    <label>Invited Suppliers (Close Tender)</label>
+                    <select name="invited_vendor_ids[]" id="invited_vendor_ids" class="form-control" data-placeholder="Search and select invited suppliers" multiple="multiple">
+                        <?php if (!empty($selected_vendors)) { ?>
+                            <?php foreach ($selected_vendors as $v) { ?>
+                                <option value="<?php echo (int) $v->id; ?>" selected="selected">
+                                    <?php echo esc($v->vendor_name); ?>
+                                </option>
+                            <?php } ?>
+                        <?php } ?>
+                    </select>
+                    <input type="hidden" name="invited_vendor_ids" id="invited_vendor_ids_payload" value="" />
+                    <small class="text-muted">Required when Tender Type = Close.</small>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<div class="form-group">
-    <label>ITT Members</label>
-    <select name="itc_member_user_ids[]" id="itc_member_user_ids" class="form-control" multiple="multiple">
-        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
-            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_itc_member_ids, true) ? 'selected="selected"' : ''; ?>>
-                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
-            </option>
-        <?php } ?>
-    </select>
-    <small id="committee-helper-text" class="text-muted">
-        Select separate committee members only. Chairman and Secretary are selected above.
-    </small>
-</div>
-     
-    
+    <hr>
 
+    <div class="mb20 tender-request-section">
+        <h5 class="mb15">Evaluation Teams</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Technical Evaluation Team</label>
+                    <select name="technical_user_ids[]" id="technical_user_ids" class="form-control" data-placeholder="Search and select technical team" multiple="multiple">
+                        <?php foreach (($technical_pool_users ?? []) as $u) { ?>
+                            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_technical_ids, true) ? 'selected="selected"' : ''; ?>>
+                                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+                            </option>
+                        <?php } ?>
+                    </select>
+                    <input type="hidden" name="technical_user_ids" id="technical_user_ids_payload" value="" />
+                    <small class="text-muted">Select from Tender Technical Users.</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Commercial Evaluation Team</label>
+                    <select name="commercial_user_ids[]" id="commercial_user_ids" class="form-control" data-placeholder="Search and select commercial team" multiple="multiple">
+                        <?php foreach (($commercial_pool_users ?? []) as $u) { ?>
+                            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_commercial_ids, true) ? 'selected="selected"' : ''; ?>>
+                                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+                            </option>
+                        <?php } ?>
+                    </select>
+                    <input type="hidden" name="commercial_user_ids" id="commercial_user_ids_payload" value="" />
+                    <small class="text-muted">Select from Tender Commercial Users.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="tender-request-section">
+        <h5 class="mb15">Tender Committee / ITT</h5>
+
+        <div class="alert alert-info">
+            For final submission, choose:
+            <strong>1 Chairman</strong>,
+            <strong>1 Secretary</strong>,
+            and <strong>at least 1 separate ITT Member</strong>.
+            Chairman and Secretary will not be counted as ITT Members.
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Chairman</label>
+                    <select name="chairman_user_id" id="chairman_user_id" class="form-control" data-placeholder="Search and select chairman">
+                        <option value="">- <?php echo app_lang('select'); ?> -</option>
+                        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
+                            <option value="<?php echo (int) $u->id; ?>" <?php echo ((int) $u->id === $selected_chairman_id) ? 'selected="selected"' : ''; ?>>
+                                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+                            </option>
+                        <?php } ?>
+                    </select>
+                    <small class="text-muted">Select from Tender Committee Users.</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Secretary</label>
+                    <select name="secretary_user_id" id="secretary_user_id" class="form-control" data-placeholder="Search and select secretary">
+                        <option value="">- <?php echo app_lang('select'); ?> -</option>
+                        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
+                            <option value="<?php echo (int) $u->id; ?>" <?php echo ((int) $u->id === $selected_secretary_id) ? 'selected="selected"' : ''; ?>>
+                                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+                            </option>
+                        <?php } ?>
+                    </select>
+                    <small class="text-muted">Select from Tender Committee Users.</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="form-group mb0">
+                    <label>ITT Members</label>
+                    <select name="itc_member_user_ids[]" id="itc_member_user_ids" class="form-control" data-placeholder="Search and select ITT members" multiple="multiple">
+                        <?php foreach (($committee_pool_users ?? []) as $u) { ?>
+                            <option value="<?php echo (int) $u->id; ?>" <?php echo in_array((int) $u->id, $selected_itc_member_ids, true) ? 'selected="selected"' : ''; ?>>
+                                <?php echo esc(trim($u->full_name.(!empty($u->email) ? ' ('.$u->email.')' : ''))); ?>
+                            </option>
+                        <?php } ?>
+                    </select>
+                    <input type="hidden" name="itc_member_user_ids" id="itc_member_user_ids_payload" value="" />
+                    <small id="committee-helper-text" class="text-muted">
+                        Select separate committee members only. Chairman and Secretary are selected above.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="modal-footer">
@@ -268,24 +361,159 @@ echo form_dropdown(
 
 <?php echo form_close(); ?>
 
+<style>
+    #tender-request-form .modal-body.tender-request-modal-body {
+        background: #f8fafc;
+    }
+
+    #tender-request-form .tender-request-section {
+        background: #ffffff;
+        border: 1px solid #e7edf3;
+        border-radius: 12px;
+        padding: 14px 14px 10px;
+        box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+    }
+
+    #tender-request-form .tender-request-section h5 {
+        color: #17365d;
+        font-weight: 600;
+    }
+
+    #tender-request-form hr {
+        border-top: 1px solid #dce5ee;
+        margin: 14px 0;
+    }
+
+    #tender-request-form label {
+        color: #344054;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    /* Scoped readability improvements for select fields */
+    #tender-request-form .select2-container .select2-selection--single {
+        min-height: 40px;
+        border-color: #c8d5e4;
+        border-radius: 8px;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    #tender-request-form .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 38px;
+        font-size: 13px;
+        color: #1f2937;
+    }
+
+    #tender-request-form .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 38px;
+    }
+
+    #tender-request-form .select2-container .select2-selection--multiple {
+        min-height: 52px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        border-color: #c8d5e4;
+        border-radius: 8px;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    /* Extra height for team and ITT multi-selects for better visibility */
+    #tender-request-form #technical_user_ids + .select2-container .select2-selection--multiple,
+    #tender-request-form #commercial_user_ids + .select2-container .select2-selection--multiple,
+    #tender-request-form #itc_member_user_ids + .select2-container .select2-selection--multiple {
+        min-height: 56px;
+    }
+
+    #tender-request-form .select2-container.select2-container-active .select2-selection--single,
+    #tender-request-form .select2-container.select2-container-active .select2-selection--multiple {
+        border-color: #4f8cff;
+        box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.16);
+    }
+
+    #tender-request-form .select2-container--default .select2-selection--multiple .select2-selection__choice {
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 4px 8px;
+        margin-top: 5px;
+        background: #edf4ff;
+        border-color: #bed6ff;
+        color: #1849a9;
+        border-radius: 6px;
+    }
+
+    #tender-request-form .select2-container--default .select2-selection--multiple .select2-search__field {
+        font-size: 14px;
+        margin-top: 6px;
+    }
+
+    .tender-request-select2-dropdown .select2-results__option {
+        font-size: 14px;
+        line-height: 1.55;
+        padding: 10px 12px;
+    }
+
+    .tender-request-select2-dropdown .select2-search input {
+        border-radius: 7px;
+        border: 1px solid #c8d5e4;
+        padding: 7px 9px;
+    }
+
+    /* Select2 v3 fallback (used in this project) */
+    #tender-request-form #s2id_technical_user_ids .select2-choices,
+    #tender-request-form #s2id_commercial_user_ids .select2-choices,
+    #tender-request-form #s2id_itc_member_user_ids .select2-choices {
+        min-height: 56px !important;
+        padding: 6px 8px !important;
+        border-radius: 8px !important;
+        border-color: #c8d5e4 !important;
+    }
+
+    #tender-request-form #s2id_technical_user_ids .select2-search-choice,
+    #tender-request-form #s2id_commercial_user_ids .select2-search-choice,
+    #tender-request-form #s2id_itc_member_user_ids .select2-search-choice {
+        font-size: 13px !important;
+        line-height: 1.5 !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+    }
+
+    #tender-request-form #s2id_technical_user_ids .select2-search-field input,
+    #tender-request-form #s2id_commercial_user_ids .select2-search-field input,
+    #tender-request-form #s2id_itc_member_user_ids .select2-search-field input {
+        height: 30px !important;
+        font-size: 14px !important;
+    }
+
+    .select2-drop.tender-request-select2-dropdown .select2-result-label {
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+        line-height: 1.55 !important;
+    }
+</style>
+
 <script>
     $(document).ready(function () {
 
         function initStaticSelect2(selector, multiple) {
-    var $el = $(selector);
+            var $el = $(selector);
+            if (!$el.length || !$el.is("select")) {
+                return;
+            }
 
-    if ($el.hasClass("select2-hidden-accessible")) {
-        $el.select2("destroy");
-    }
+            if ($el.hasClass("select2-hidden-accessible")) {
+                $el.select2("destroy");
+            }
 
-    $el.select2({
-        multiple: !!multiple,
-        minimumInputLength: 0,
-        showSearchBox: true,
-        width: "100%",
-        closeOnSelect: multiple ? false : true
-    });
-}
+            $el.select2({
+                multiple: !!multiple,
+                minimumInputLength: 0,
+                showSearchBox: true,
+                width: "100%",
+                allowClear: !multiple && !$el.prop("required"),
+                closeOnSelect: multiple ? false : true,
+                dropdownCssClass: "tender-request-select2-dropdown"
+            });
+        }
 
       function rebuildOptions(selector, items, selectedValues, includeBlank) {
     const $el = $(selector);
@@ -405,8 +633,60 @@ echo form_dropdown(
                         opts += "<option value='" + r.id + "' " + sel + ">" + r.text + "</option>";
                     });
                     $("#tender-department").html(opts);
-                    loadDepartmentManagerContext();
+                    loadDepartmentManagers(companyId, $("#tender-department").val(), "");
                 });
+        }
+
+        function refreshDepartmentManagerFields() {
+            const $selected = $("#department-manager-user-id option:selected");
+            const managerId = String($("#department-manager-user-id").val() || "");
+            const title = ($selected.data("title") || "").toString().trim();
+
+            $("#department-manager-title").val(title || "Department Manager");
+
+            if (managerId) {
+                $("#department-manager-warning").hide();
+            } else {
+                $("#department-manager-warning").show();
+            }
+        }
+
+        function loadDepartmentManagers(companyId, departmentId, selectedId) {
+            selectedId = String(selectedId || "");
+
+            if ($("#department-manager-user-id").hasClass("select2-hidden-accessible")) {
+                $("#department-manager-user-id").val("").trigger("change");
+            } else {
+                $("#department-manager-user-id").html("<option value=''>- <?php echo app_lang('select'); ?> -</option>");
+            }
+
+            if (!companyId || !departmentId) {
+                refreshDepartmentManagerFields();
+                return;
+            }
+
+            fetchOptions("<?php echo get_uri('tender_requests/department_managers_suggestion'); ?>", {
+                company_id: companyId,
+                department_id: departmentId,
+                q: ""
+            }, function (items) {
+                let html = "<option value=''>- <?php echo app_lang('select'); ?> -</option>";
+
+                (items || []).forEach(function (item) {
+                    const id = String(item.id || "");
+                    const text = item.text || "";
+                    const title = (item.title || "Department Manager").replace(/"/g, "&quot;");
+                    const selected = selectedId && selectedId === id ? "selected='selected'" : "";
+                    html += "<option value='" + id + "' data-title=\"" + title + "\" " + selected + ">" + text + "</option>";
+                });
+
+                $("#department-manager-user-id").html(html);
+                if (selectedId) {
+                    $("#department-manager-user-id").val(selectedId);
+                }
+                $("#department-manager-user-id").trigger("change");
+                refreshDepartmentManagerFields();
+            });
         }
 
         function loadDepartmentManagerContext() {
@@ -414,25 +694,10 @@ echo form_dropdown(
             const departmentId = $("#tender-department").val();
 
             if (!companyId || !departmentId) {
-                $("#department-manager-name").val("");
-                $("#department-manager-title").val("");
-                $("#department-manager-warning").show();
+                loadDepartmentManagers(companyId, departmentId, "");
                 return;
             }
-
-            $.getJSON("<?php echo_uri('tender_requests/department_manager_context'); ?>", {
-                company_id: companyId,
-                department_id: departmentId
-            }).done(function (res) {
-                $("#department-manager-name").val(res.name || "");
-                $("#department-manager-title").val(res.title || "Department Manager");
-
-                if (res.user_id) {
-                    $("#department-manager-warning").hide();
-                } else {
-                    $("#department-manager-warning").show();
-                }
-            });
+            loadDepartmentManagers(companyId, departmentId, $("#department-manager-user-id").val() || "");
         }
 
         function loadTenderPools() {
@@ -483,11 +748,12 @@ echo form_dropdown(
 
         const initialCompany = $("#tender-company").val();
 const initialDept = "<?php echo esc($model_info->department_id ?? ""); ?>";
+const initialDepartmentManagerId = "<?php echo (int) $selected_department_manager_id; ?>";
 const companyFieldLocked = $("#tender-company").is("input[type='hidden']");
 
 if (initialCompany) {
     loadDepartments(initialCompany, initialDept);
-    loadDepartmentManagerContext();
+    loadDepartmentManagers(initialCompany, initialDept, initialDepartmentManagerId);
 }
 
 // Only auto-fetch pools on load for admin / visible company dropdown.
@@ -498,9 +764,11 @@ if (!companyFieldLocked) {
 
 $("#tender-company").on("change", function () {
     loadDepartments($(this).val(), "");
+    loadDepartmentManagers($(this).val(), $("#tender-department").val(), "");
 
     $("#technical_user_ids").val([]).trigger("change");
     $("#commercial_user_ids").val([]).trigger("change");
+    $("#department-manager-user-id").val("").trigger("change");
     $("#chairman_user_id").val("").trigger("change");
     $("#secretary_user_id").val("").trigger("change");
     $("#itc_member_user_ids").val([]).trigger("change");
@@ -509,12 +777,28 @@ $("#tender-company").on("change", function () {
 });
 
         $("#tender-department").on("change", function () {
-            loadDepartmentManagerContext();
+            loadDepartmentManagers($("#tender-company").val(), $(this).val(), "");
+        });
+
+        $("#department-manager-user-id").on("change", function () {
+            refreshDepartmentManagerFields();
         });
 
         $("#tender-request-form").appForm({
             onSubmit: function () {
                 sanitizeCommitteeMembers();
+
+                function syncMultiSelectPayload(selectSelector, payloadSelector, originalName) {
+                    const values = $(selectSelector).val() || [];
+                    const normalized = Array.isArray(values) ? values : [values];
+                    $(payloadSelector).val(normalized.filter(Boolean).join(","));
+                    $(selectSelector).attr("data-original-name", originalName).removeAttr("name");
+                }
+
+                syncMultiSelectPayload("#technical_user_ids", "#technical_user_ids_payload", "technical_user_ids[]");
+                syncMultiSelectPayload("#commercial_user_ids", "#commercial_user_ids_payload", "commercial_user_ids[]");
+                syncMultiSelectPayload("#itc_member_user_ids", "#itc_member_user_ids_payload", "itc_member_user_ids[]");
+                syncMultiSelectPayload("#invited_vendor_ids", "#invited_vendor_ids_payload", "invited_vendor_ids[]");
 
                 const chairman = String($("#chairman_user_id").val() || "");
                 const secretary = String($("#secretary_user_id").val() || "");
@@ -524,10 +808,16 @@ $("#tender-company").on("change", function () {
                     return false;
                 }
 
+                const departmentManagerId = String($("#department-manager-user-id").val() || "");
+                if (!departmentManagerId) {
+                    appAlert.error("Please select a Department Manager.");
+                    return false;
+                }
+
                 return true;
             },
-            onSuccess: function (result) {
-                $("#tender-requests-table").appTable({newData: result.data, dataId: result.id});
+            onSuccess: function () {
+                $("#tender-requests-table").appTable({reload: true});
             }
         });
 
@@ -535,6 +825,8 @@ $("#tender-company").on("change", function () {
             multiple: true,
             minimumInputLength: 0,
             showSearchBox: true,
+            width: "100%",
+            dropdownCssClass: "tender-request-select2-dropdown",
             ajax: {
                 url: "<?php echo get_uri('tender_requests/vendors_suggestion'); ?>",
                 type: "POST",
@@ -551,9 +843,15 @@ $("#tender-company").on("change", function () {
 
         initStaticSelect2("#technical_user_ids", true);
         initStaticSelect2("#commercial_user_ids", true);
+        initStaticSelect2("#department-manager-user-id", false);
         initStaticSelect2("#chairman_user_id", false);
         initStaticSelect2("#secretary_user_id", false);
         initStaticSelect2("#itc_member_user_ids", true);
+        initStaticSelect2("#announcement-select", false);
+        initStaticSelect2("#tender-type-select", false);
+        initStaticSelect2("#evaluation-method-select", false);
+        initStaticSelect2("#tender-company", false);
+        initStaticSelect2("#tender-department", false);
 
         loadTenderPools();
 

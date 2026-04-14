@@ -572,4 +572,7 @@ $lang["tender_technical_inbox"] = "Tender Technical Inbox";
 $lang["tender_commercial_inbox"] = "Tender Commercial Inbox";
 
 
+$lang["tender_committee_opening_inbox"] = "Tender Committee Opening Inbox";
+
+
 return $lang;

@@ -52,16 +52,31 @@ $tender_id = $tender->id ?? "";
 
 
 
-<h5 class="mb-2">Target Vendors (Specialty)</h5>
+<h5 class="mb-2">Target Vendors</h5>
 
 <div class="row">
+  <div class="col-md-6">
+    <label>Target By</label>
+    <?php echo form_dropdown(
+        "target_mode",
+        [
+          "specialty" => "Vendor Specialty",
+          "group" => "Vendor Group"
+        ],
+        $selected_target_mode ?? "specialty",
+        "class='form-control select2' id='target_mode'"
+    ); ?>
+  </div>
+</div>
+
+<div class="row mt-2" id="target-by-specialty-wrap">
   <div class="col-md-6">
     <label>Vendor Category</label>
     <?php echo form_dropdown(
         "vendor_category_id",
         $vendor_categories_dropdown ?? ["" => "- " . app_lang("select") . " -"],
         !empty($target_cat) ? (int)$target_cat->id : "",
-        "class='form-control select2' id='vendor_category_id' data-rule-required='true' data-msg-required='" . app_lang("field_required") . "'"
+        "class='form-control select2' id='vendor_category_id'"
     ); ?>
   </div>
 
@@ -70,6 +85,19 @@ $tender_id = $tender->id ?? "";
     <select name="vendor_sub_category_id" id="vendor_sub_category_id" class="form-control select2">
       <option value=""><?php echo "- " . app_lang("select") . " -"; ?></option>
     </select>
+  </div>
+</div>
+
+<div class="row mt-2" id="target-by-group-wrap" style="display:none;">
+  <div class="col-md-6">
+    <label>Vendor Group</label>
+    <?php echo form_dropdown(
+        "vendor_group_id",
+        $vendor_groups_dropdown ?? ["" => "- " . app_lang("select_vendor_group") . " -"],
+        (int) ($selected_vendor_group_id ?? 0),
+        "class='form-control select2' id='vendor_group_id'"
+    ); ?>
+    <small class="text-muted">Only approved vendors in selected group will be invited.</small>
   </div>
 </div>
 
@@ -255,6 +283,16 @@ if (!empty($target_cat)) { ?>
 
 <script>
 $(document).ready(function () {
+  function tryParseResponse(res) {
+    if (typeof res === "object") {
+      return res;
+    }
+    try {
+      return JSON.parse(res);
+    } catch (e) {
+      return {success: false, message: "Unexpected server response."};
+    }
+  }
 
   // init Select2 in modal (once)
   $("#tender-procurement-form .select2").select2();
@@ -291,9 +329,27 @@ $(document).ready(function () {
     loadSubCategories(initialCat, window.__target_sub_id || "");
   }
 
+  function toggleTargetMode() {
+    var mode = $("#target_mode").val() || "specialty";
+
+    if (mode === "group") {
+      $("#target-by-group-wrap").show();
+      $("#target-by-specialty-wrap").hide();
+      $("#vendor_category_id").val("").trigger("change");
+      $("#vendor_sub_category_id").val("").trigger("change");
+    } else {
+      $("#target-by-specialty-wrap").show();
+      $("#target-by-group-wrap").hide();
+      $("#vendor_group_id").val("").trigger("change");
+    }
+  }
+
+  $("#target_mode").on("change", toggleTargetMode);
+  toggleTargetMode();
+
   $("#tender-procurement-form").appForm({
     onSuccess: function (result) {
-      $("#tender-procurement-inbox-table").appTable({newData: true});
+      $("#tender-procurement-inbox-table").appTable({reload: true});
       appAlert.success(result.message || "Saved", {duration: 3000});
     }
   });
@@ -303,13 +359,16 @@ $(document).ready(function () {
     appLoader.show();
     $.post("<?php echo_uri('tender_procurement_inbox/delete_document'); ?>", {id: id}, function (res) {
       appLoader.hide();
-      var r = JSON.parse(res);
+      var r = tryParseResponse(res);
       if (r.success) {
         $("#doc-row-" + id).remove();
         appAlert.success(r.message, {duration: 3000});
       } else {
         appAlert.error(r.message || "Error", {duration: 3000});
       }
+    }).fail(function () {
+      appLoader.hide();
+      appAlert.error("Request failed. Please try again.", {duration: 3000});
     });
   });
 

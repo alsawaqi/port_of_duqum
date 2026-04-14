@@ -63,13 +63,34 @@
 
 <script>
 $(document).ready(function () {
+    function tryParseResponse(res) {
+        if (typeof res === "object") {
+            return res;
+        }
+        try {
+            return JSON.parse(res);
+        } catch (e) {
+            return {success: false, message: "Unexpected server response."};
+        }
+    }
+
     $("#generate-3key-btn").on("click", function () {
+        appLoader.show();
         $.post('<?php echo_uri("tender_committee_opening_inbox/generate_codes"); ?>', {
             tender_id: $(this).data("tender-id")
         }, function (res) {
-            appAlert.success(res.message || "Codes generated.", {duration: 3000});
-            $(".modal").modal("hide");
-            $("#tender-committee-opening-table").appTable({reload: true});
+            appLoader.hide();
+            var r = tryParseResponse(res);
+            if (r.success) {
+                appAlert.success(r.message || "Codes generated.", {duration: 3000});
+                $(".modal").modal("hide");
+                $("#tender-committee-opening-table").appTable({reload: true});
+            } else {
+                appAlert.error(r.message || "Error", {duration: 3000});
+            }
+        }).fail(function () {
+            appLoader.hide();
+            appAlert.error("Request failed. Please try again.", {duration: 3000});
         });
     });
 
