@@ -43,6 +43,7 @@ class Gate_pass_request_audit_log_model extends Crud_model
     {
         $t = $this->db->prefixTable("gate_pass_request_audit_log");
         $r = $this->db->prefixTable("gate_pass_requests");
+        $c = $this->db->prefixTable("companies");
         $u = $this->db->prefixTable("users");
 
         $limit = (int)($options["limit"] ?? 1500);
@@ -53,13 +54,15 @@ class Gate_pass_request_audit_log_model extends Crud_model
             $limit = 3000;
         }
 
+        // company name lives on `companies`, not on gate_pass_requests (same as Gate_pass_requests_model).
         $sql = "SELECT $t.*,
                        TRIM(CONCAT(COALESCE($u.first_name,''),' ',COALESCE($u.last_name,''))) AS actor_name,
                        $r.reference AS request_reference,
-                       $r.company_name AS request_company
+                       $c.name AS request_company
                 FROM $t
                 LEFT JOIN $u ON $u.id = $t.actor_user_id
                 LEFT JOIN $r ON $r.id = $t.gate_pass_request_id AND $r.deleted = 0
+                LEFT JOIN $c ON $c.id = $r.company_id
                 WHERE $t.deleted = 0
                 ORDER BY $t.id DESC
                 LIMIT " . $limit;
