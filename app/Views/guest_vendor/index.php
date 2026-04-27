@@ -341,7 +341,7 @@
                             </div>
                         </div>
 
-                        <div class="col-lg-12">
+                        <div class="col-lg-6">
                             <div class="form-group">
                                 <label for="email"><?php echo app_lang('email'); ?> <span class="text-danger">*</span></label>
                                 <?php
@@ -358,6 +358,72 @@
                                 ]);
                                 ?>
                                 <div id="vendor-email-error" class="alert alert-danger mt10 d-none"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label for="cr_number">CR Number <span class="text-danger">*</span></label>
+                                <?php
+                                echo form_input([
+                                    "id" => "cr_number",
+                                    "name" => "cr_number",
+                                    "value" => "",
+                                    "class" => "form-control",
+                                    "placeholder" => "Commercial registration number",
+                                    "data-rule-required" => true,
+                                    "data-msg-required" => app_lang('field_required')
+                                ]);
+                                ?>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label for="phone"><?php echo app_lang('phone'); ?> <span class="text-danger">*</span></label>
+                                <?php
+                                echo form_input([
+                                    "id" => "phone",
+                                    "name" => "phone",
+                                    "value" => "",
+                                    "class" => "form-control",
+                                    "placeholder" => app_lang('phone'),
+                                    "data-rule-required" => true,
+                                    "data-msg-required" => app_lang('field_required')
+                                ]);
+                                ?>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label for="contact_person">Contact Person <span class="text-danger">*</span></label>
+                                <?php
+                                echo form_input([
+                                    "id" => "contact_person",
+                                    "name" => "contact_person",
+                                    "value" => "",
+                                    "class" => "form-control",
+                                    "placeholder" => "Primary contact name",
+                                    "data-rule-required" => true,
+                                    "data-msg-required" => app_lang('field_required')
+                                ]);
+                                ?>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label for="contact_designation">Contact Designation</label>
+                                <?php
+                                echo form_input([
+                                    "id" => "contact_designation",
+                                    "name" => "contact_designation",
+                                    "value" => "",
+                                    "class" => "form-control",
+                                    "placeholder" => "Role / designation"
+                                ]);
+                                ?>
                             </div>
                         </div>
                     </div>

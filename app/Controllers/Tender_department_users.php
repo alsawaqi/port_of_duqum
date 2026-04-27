@@ -125,8 +125,6 @@ class Tender_department_users extends Security_Controller
             "id" => "numeric",
             "company_id" => "required|numeric",
             "department_id" => "required|numeric",
-            "first_name" => "required",
-            "last_name" => "required",
             "email" => "required|valid_email",
             "status" => "required",
         ]);
@@ -134,19 +132,12 @@ class Tender_department_users extends Security_Controller
         $id = (int)$this->request->getPost("id");
         $company_id = (int)$this->request->getPost("company_id");
         $department_id = (int)$this->request->getPost("department_id");
-        $first_name = trim($this->request->getPost("first_name"));
-        $last_name  = trim($this->request->getPost("last_name"));
-        $email      = trim($this->request->getPost("email"));
-        $phone      = trim($this->request->getPost("phone"));
-        $status     = $this->request->getPost("status");
 
         // validate department belongs to company
         $dept = $this->Gate_pass_departments_model->get_one($department_id);
         if (!$dept || (int)$dept->company_id !== $company_id) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("invalid_department")]);
         }
-
-        $this->db->transStart();
 
         try {
         $role_id = $this->_ensure_role("Tender Department", [
@@ -155,95 +146,14 @@ class Tender_department_users extends Security_Controller
             "can_update_tender_requests",
         ]);
 
-        if (!$id) {
-            $password = $this->request->getPost("password");
-            if (!$password) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("password_is_required")]);
-            }
-            if ($this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_data = [
-                "email" => $email,
-                "password" => password_hash($password, PASSWORD_DEFAULT),
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "user_type" => "staff",
-                "is_admin" => 0,
-                "role_id" => $role_id,
-                "disable_login" => 0,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "job_title" => "Tender Department User",
-                "language" => (get_setting("language") ?: "english"),
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0
-            ];
-            $user_id = $this->Users_model->ci_save($user_data);
-
-            if (!$user_id) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-            }
-
-            $pivot_data = [
-                "user_id" => $user_id,
-                "company_id" => $company_id,
-                "department_id" => $department_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0
-            ];
-            $save_id = $this->Tender_department_users_model->ci_save($pivot_data);
-        } else {
-            $pivot = $this->Tender_department_users_model->get_one($id);
-            if (!$pivot || (int)$pivot->deleted) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
-            }
-
-            $existing_user = $this->Users_model->get_one($pivot->user_id);
-            if ($existing_user && $existing_user->email !== $email && $this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_update = [
-                "email" => $email,
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "role_id" => $role_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "disable_login" => ($status === "active") ? 0 : 1
-            ];
-            $password = $this->request->getPost("password");
-            if ($password) $user_update["password"] = password_hash($password, PASSWORD_DEFAULT);
-
-            $this->Users_model->ci_save($user_update, $pivot->user_id);
-
-            $pivot_data = [
-                "company_id" => $company_id,
-                "department_id" => $department_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "updated_at" => get_current_utc_time()
-            ];
-            $save_id = $this->Tender_department_users_model->ci_save($pivot_data, $id);
-        }
-
-        $this->db->transComplete();
-
-        if ($this->db->transStatus() === false || !$save_id) {
-            return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-        }
-
-        return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);
+        return $this->save_operational_user_assignment(
+            $this->Tender_department_users_model,
+            "tender_department_users",
+            ["company_id" => $company_id, "department_id" => $department_id],
+            ["job_title" => "Tender Department User", "role_id" => $role_id]
+        );
 
         } catch (\Throwable $e) {
-            $this->db->transComplete();
             $msg = (ENVIRONMENT !== 'production') ? $e->getMessage() : app_lang("error_occurred");
             return $this->response->setJSON(["success" => false, "message" => $msg]);
         }
@@ -261,10 +171,6 @@ class Tender_department_users extends Security_Controller
 
         $this->db->transStart();
         $this->Tender_department_users_model->delete($id);
-        if ($pivot->user_id) {
-            $user_data = ["disable_login" => 1, "status" => "inactive"];
-            $this->Users_model->ci_save($user_data, $pivot->user_id);
-        }
         $this->db->transComplete();
 
         return $this->response->setJSON(["success" => true, "message" => app_lang("record_deleted")]);

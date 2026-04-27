@@ -205,15 +205,56 @@ class Tender_bids_model extends Crud_model
         $ttm = $this->db->prefixTable("tender_team_members");
         $tb = $this->db->prefixTable("tender_bids");
 
-        $sql = "SELECT
+        $sql = "SELECT *
+                FROM (
+                SELECT
+                    $t.id,
+                    $t.reference,
+                    $t.title,
+                    $t.status,
+                    $t.workflow_stage,
+                    'technical' AS opening_stage,
+                    $t.closing_at,
+                    $t.closing_at AS opening_start_at,
+                    $t.bid_opening_at AS opening_end_at,
+                    COUNT(DISTINCT $tb.id) AS bids_count,
+                    SUM(CASE WHEN $tb.status = 'submitted' THEN 1 ELSE 0 END) AS pending_technical_count,
+                    SUM(CASE WHEN $tb.status = 'accepted' THEN 1 ELSE 0 END) AS accepted_bids_count
+                FROM $t
+                INNER JOIN $ttm
+                    ON $ttm.tender_id = $t.id
+                   AND $ttm.deleted = 0
+                   AND $ttm.is_active = 1
+                   AND $ttm.user_id = ?
+                   AND $ttm.team_role IN ('chairman', 'secretary', 'itc_member')
+                INNER JOIN $tb
+                    ON $tb.tender_id = $t.id
+                   AND $tb.deleted = 0
+                WHERE $t.deleted = 0
+                  AND $t.status = 'closed'
+                  AND $t.workflow_stage = 'technical_3key'
+                GROUP BY
                     $t.id,
                     $t.reference,
                     $t.title,
                     $t.status,
                     $t.workflow_stage,
                     $t.closing_at,
-                    $t.committee_3key_start_at,
-                    $t.committee_3key_end_at,
+                    $t.bid_opening_at
+                HAVING COUNT(DISTINCT $tb.id) > 0
+
+                UNION ALL
+
+                SELECT
+                    $t.id,
+                    $t.reference,
+                    $t.title,
+                    $t.status,
+                    $t.workflow_stage,
+                    'commercial' AS opening_stage,
+                    $t.closing_at,
+                    $t.committee_3key_start_at AS opening_start_at,
+                    $t.committee_3key_end_at AS opening_end_at,
                     COUNT(DISTINCT $tb.id) AS bids_count,
                     SUM(CASE WHEN $tb.status = 'submitted' THEN 1 ELSE 0 END) AS pending_technical_count,
                     SUM(CASE WHEN $tb.status = 'accepted' THEN 1 ELSE 0 END) AS accepted_bids_count
@@ -242,12 +283,14 @@ class Tender_bids_model extends Crud_model
                 HAVING COUNT(DISTINCT $tb.id) > 0
                    AND SUM(CASE WHEN $tb.status = 'submitted' THEN 1 ELSE 0 END) = 0
                    AND SUM(CASE WHEN $tb.status = 'accepted' THEN 1 ELSE 0 END) > 0
+                ) openings
                 ORDER BY
-                    CASE WHEN $t.committee_3key_end_at IS NULL THEN 1 ELSE 0 END ASC,
-                    $t.committee_3key_end_at ASC,
-                    $t.id DESC";
+                    CASE opening_stage WHEN 'technical' THEN 0 ELSE 1 END ASC,
+                    CASE WHEN opening_end_at IS NULL THEN 1 ELSE 0 END ASC,
+                    opening_end_at ASC,
+                    id DESC";
 
-        return $this->db->query($sql, [$user_id])->getResult();
+        return $this->db->query($sql, [$user_id, $user_id])->getResult();
     }
 
     public function get_unlocked_tenders_for_commercial_user(int $user_id)
@@ -422,7 +465,7 @@ $t.commercial_end_at
                     SELECT tender_bid_id, MAX(id) AS max_id
                     FROM $tbd
                     WHERE deleted = 0
-                      AND section = 'commercial'
+                      AND section IN ('commercial_priced', 'commercial')
                     GROUP BY tender_bid_id
                 ) comm_doc_max
                     ON comm_doc_max.tender_bid_id = $tb.id
@@ -611,9 +654,18 @@ $t.commercial_end_at
                 $tb.total_amount,
                 $tb.currency,
                 $v.vendor_name,
+                tech_doc.id AS technical_doc_id,
+                tech_doc.original_name AS technical_doc_name,
+                tech_doc.path AS technical_doc_path,
+                unpriced_doc.id AS commercial_unpriced_doc_id,
+                unpriced_doc.original_name AS commercial_unpriced_doc_name,
+                unpriced_doc.path AS commercial_unpriced_doc_path,
                 comm_doc.id AS commercial_doc_id,
                 comm_doc.original_name AS commercial_doc_name,
                 comm_doc.path AS commercial_doc_path,
+                bank_doc.id AS bank_guarantee_doc_id,
+                bank_doc.original_name AS bank_guarantee_doc_name,
+                bank_doc.path AS bank_guarantee_doc_path,
                 comm_eval.id AS commercial_evaluation_id,
                 comm_eval.evaluator_id AS decision_evaluator_id,
                 comm_eval.decision AS commercial_decision,
@@ -664,12 +716,42 @@ $t.commercial_end_at
                 SELECT tender_bid_id, MAX(id) AS max_id
                 FROM $tbd
                 WHERE deleted = 0
-                  AND section = 'commercial'
+                  AND section = 'technical'
+                GROUP BY tender_bid_id
+            ) tech_doc_max
+                ON tech_doc_max.tender_bid_id = $tb.id
+            LEFT JOIN $tbd tech_doc
+                ON tech_doc.id = tech_doc_max.max_id
+            LEFT JOIN (
+                SELECT tender_bid_id, MAX(id) AS max_id
+                FROM $tbd
+                WHERE deleted = 0
+                  AND section = 'commercial_unpriced'
+                GROUP BY tender_bid_id
+            ) unpriced_doc_max
+                ON unpriced_doc_max.tender_bid_id = $tb.id
+            LEFT JOIN $tbd unpriced_doc
+                ON unpriced_doc.id = unpriced_doc_max.max_id
+            LEFT JOIN (
+                SELECT tender_bid_id, MAX(id) AS max_id
+                FROM $tbd
+                WHERE deleted = 0
+                  AND section IN ('commercial_priced', 'commercial')
                 GROUP BY tender_bid_id
             ) comm_doc_max
                 ON comm_doc_max.tender_bid_id = $tb.id
             LEFT JOIN $tbd comm_doc
                 ON comm_doc.id = comm_doc_max.max_id
+            LEFT JOIN (
+                SELECT tender_bid_id, MAX(id) AS max_id
+                FROM $tbd
+                WHERE deleted = 0
+                  AND section = 'bank_guarantee'
+                GROUP BY tender_bid_id
+            ) bank_doc_max
+                ON bank_doc_max.tender_bid_id = $tb.id
+            LEFT JOIN $tbd bank_doc
+                ON bank_doc.id = bank_doc_max.max_id
             WHERE $tb.deleted = 0
               AND $tb.status = 'accepted'
               AND $tb.tender_id = ?
@@ -702,9 +784,18 @@ public function get_tender_bid_for_commercial_user(int $tender_id, int $bid_id, 
                 $tb.total_amount,
                 $tb.currency,
                 $v.vendor_name,
+                tech_doc.id AS technical_doc_id,
+                tech_doc.original_name AS technical_doc_name,
+                tech_doc.path AS technical_doc_path,
+                unpriced_doc.id AS commercial_unpriced_doc_id,
+                unpriced_doc.original_name AS commercial_unpriced_doc_name,
+                unpriced_doc.path AS commercial_unpriced_doc_path,
                 comm_doc.id AS commercial_doc_id,
                 comm_doc.original_name AS commercial_doc_name,
                 comm_doc.path AS commercial_doc_path,
+                bank_doc.id AS bank_guarantee_doc_id,
+                bank_doc.original_name AS bank_guarantee_doc_name,
+                bank_doc.path AS bank_guarantee_doc_path,
                 comm_eval.id AS commercial_evaluation_id,
                 comm_eval.evaluator_id AS decision_evaluator_id,
                 comm_eval.decision AS commercial_decision,
@@ -755,12 +846,42 @@ public function get_tender_bid_for_commercial_user(int $tender_id, int $bid_id, 
                 SELECT tender_bid_id, MAX(id) AS max_id
                 FROM $tbd
                 WHERE deleted = 0
-                  AND section = 'commercial'
+                  AND section = 'technical'
+                GROUP BY tender_bid_id
+            ) tech_doc_max
+                ON tech_doc_max.tender_bid_id = $tb.id
+            LEFT JOIN $tbd tech_doc
+                ON tech_doc.id = tech_doc_max.max_id
+            LEFT JOIN (
+                SELECT tender_bid_id, MAX(id) AS max_id
+                FROM $tbd
+                WHERE deleted = 0
+                  AND section = 'commercial_unpriced'
+                GROUP BY tender_bid_id
+            ) unpriced_doc_max
+                ON unpriced_doc_max.tender_bid_id = $tb.id
+            LEFT JOIN $tbd unpriced_doc
+                ON unpriced_doc.id = unpriced_doc_max.max_id
+            LEFT JOIN (
+                SELECT tender_bid_id, MAX(id) AS max_id
+                FROM $tbd
+                WHERE deleted = 0
+                  AND section IN ('commercial_priced', 'commercial')
                 GROUP BY tender_bid_id
             ) comm_doc_max
                 ON comm_doc_max.tender_bid_id = $tb.id
             LEFT JOIN $tbd comm_doc
                 ON comm_doc.id = comm_doc_max.max_id
+            LEFT JOIN (
+                SELECT tender_bid_id, MAX(id) AS max_id
+                FROM $tbd
+                WHERE deleted = 0
+                  AND section = 'bank_guarantee'
+                GROUP BY tender_bid_id
+            ) bank_doc_max
+                ON bank_doc_max.tender_bid_id = $tb.id
+            LEFT JOIN $tbd bank_doc
+                ON bank_doc.id = bank_doc_max.max_id
             WHERE $tb.deleted = 0
               AND $tb.status = 'accepted'
               AND $tb.tender_id = ?

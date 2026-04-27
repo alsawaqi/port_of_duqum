@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\Tender_bids_model;
 use App\Models\Tender_bid_documents_model;
+use App\Models\Tender_documents_model;
 use App\Models\Tender_evaluations_model;
 use App\Models\Tenders_model;
 
@@ -11,6 +12,7 @@ class Tender_commercial_inbox extends Security_Controller
 {
     protected $Tender_bids_model;
     protected $Tender_bid_documents_model;
+    protected $Tender_documents_model;
     protected $Tender_evaluations_model;
     protected $Tenders_model;
 
@@ -21,6 +23,7 @@ class Tender_commercial_inbox extends Security_Controller
 
         $this->Tender_bids_model = new Tender_bids_model();
         $this->Tender_bid_documents_model = new Tender_bid_documents_model();
+        $this->Tender_documents_model = new Tender_documents_model();
         $this->Tender_evaluations_model = new Tender_evaluations_model();
         $this->Tenders_model = new Tenders_model();
     }
@@ -63,6 +66,7 @@ class Tender_commercial_inbox extends Security_Controller
             app_redirect("tender_commercial_inbox");
         }
 
+        $tender_documents = $this->Tender_documents_model->get_details(["tender_id" => $tender_id])->getResult();
         $bids = $this->Tender_bids_model->get_tender_bids_overview_for_commercial_user($tender_id, (int) $this->login_user->id);
 
         $pending_bids = [];
@@ -94,6 +98,7 @@ class Tender_commercial_inbox extends Security_Controller
 
         return $this->template->rander("tender_commercial_inbox/details", [
             "tender"            => $tender,
+            "tender_documents"  => $tender_documents,
             "pending_bids"      => $pending_bids,
             "my_finalized_bids" => $my_finalized_bids,
             "locked_bids"       => $locked_bids,
@@ -361,12 +366,80 @@ class Tender_commercial_inbox extends Security_Controller
         return $this->response->setJSON($response);
     }
 
+    public function preview_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->template->view(
+            "tender_commercial_inbox/file_preview",
+            $this->_make_file_preview_data($context["doc"], get_uri("tender_commercial_inbox/view_tender_document/" . (int) $id))
+        );
+    }
+
+    public function view_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_document_file($context["doc"], $context["full_path"], false);
+    }
+
+    public function download_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_document_file($context["doc"], $context["full_path"], true);
+    }
+
+    public function preview_bid_document($id = 0)
+    {
+        $context = $this->_get_accessible_bid_document_context((int) $id);
+        return $this->template->view(
+            "tender_commercial_inbox/file_preview",
+            $this->_make_file_preview_data($context["doc"], get_uri("tender_commercial_inbox/view_bid_document/" . (int) $id))
+        );
+    }
+
+    public function view_bid_document($id = 0)
+    {
+        $context = $this->_get_accessible_bid_document_context((int) $id);
+        return $this->_serve_document_file($context["doc"], $context["full_path"], false);
+    }
+
     public function download_bid_document($id = 0)
+    {
+        $context = $this->_get_accessible_bid_document_context((int) $id);
+        return $this->_serve_document_file($context["doc"], $context["full_path"], true);
+    }
+
+    private function _get_accessible_tender_document_context(int $id): array
     {
         $this->access_only_tender("commercial_eval", "view");
         $this->Tenders_model->auto_progress_workflow();
 
-        $id = (int) $id;
+        if (!$id) {
+            show_404();
+        }
+
+        $doc = $this->Tender_documents_model->get_one($id);
+        if (!$doc || (int) ($doc->deleted ?? 0) === 1) {
+            show_404();
+        }
+
+        $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user((int) $doc->tender_id, (int) $this->login_user->id);
+        if (!$tender) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = getcwd() . "/" . ltrim((string) $doc->path, "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _get_accessible_bid_document_context(int $id): array
+    {
+        $this->access_only_tender("commercial_eval", "view");
+        $this->Tenders_model->auto_progress_workflow();
+
         if (!$id) {
             show_404();
         }
@@ -376,7 +449,7 @@ class Tender_commercial_inbox extends Security_Controller
             show_404();
         }
 
-        if (($doc->section ?? "") !== "commercial") {
+        if (!in_array((string) ($doc->section ?? ""), ["technical", "commercial", "commercial_priced", "commercial_unpriced", "bank_guarantee"], true)) {
             app_redirect("forbidden");
         }
 
@@ -405,7 +478,41 @@ class Tender_commercial_inbox extends Security_Controller
             show_404();
         }
 
-        return $this->response->download($full_path, null)->setFileName($doc->original_name ?: basename($full_path));
+        return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _make_file_preview_data($doc, string $file_url): array
+    {
+        $file_name = (string) ($doc->original_name ?? basename((string) ($doc->path ?? "")));
+
+        return [
+            "file_url" => $file_url,
+            "is_image_file" => is_image_file($file_name),
+            "is_iframe_preview_available" => is_iframe_preview_available($file_name),
+            "is_google_preview_available" => is_google_preview_available($file_name),
+            "is_viewable_video_file" => is_viewable_video_file($file_name),
+            "is_google_drive_file" => false,
+        ];
+    }
+
+    private function _serve_document_file($doc, string $full_path, bool $download)
+    {
+        $mime = !empty($doc->mime_type ?? "")
+            ? (string) $doc->mime_type
+            : (function_exists("mime_content_type") ? mime_content_type($full_path) : "application/octet-stream");
+        $name = $doc->original_name ?: basename($full_path);
+        $inline = !$download && (
+            strpos($mime, "image/") === 0
+            || strpos($mime, "video/") === 0
+            || strpos($mime, "audio/") === 0
+            || $mime === "application/pdf"
+            || strpos($mime, "text/") === 0
+        );
+
+        return $this->response
+            ->setHeader("Content-Type", $mime)
+            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
+            ->setBody(file_get_contents($full_path));
     }
 
     private function _make_row($row)

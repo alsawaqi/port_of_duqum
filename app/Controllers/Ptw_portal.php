@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use App\Libraries\Pdf;
+
 class Ptw_portal extends Security_Controller
 {
     protected $Ptw_applications_model;
@@ -315,6 +317,7 @@ if ($submit_mode === "draft") {
             "attachments" => $attachments,
             "audit_logs" => $audit_logs,
             "can_edit" => $this->_can_edit_application($app),
+            "can_download_final_permit" => $this->_is_final_permit_available($app),
             "duration_days" => $this->_calculate_duration_days($app->work_from, $app->work_to),
         ];
 
@@ -367,6 +370,41 @@ if ($submit_mode === "draft") {
         return $this->response->download($full, null)->setFileName($app->signature_file_name ?: basename($full));
     }
 
+    public function download_final_permit($application_id = 0)
+    {
+        $this->_require_ptw_access();
+
+        $app = $this->Ptw_applications_model->get_details(["id" => (int) $application_id])->getRow();
+        if (!$app || !$this->_can_access_application($app) || !$this->_is_final_permit_available($app)) {
+            app_redirect("forbidden");
+        }
+
+        $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
+        $responses = [];
+        foreach ($this->Ptw_requirement_responses_model->get_by_application($app->id)->getResult() as $row) {
+            $responses[(int) $row->ptw_requirement_definition_id] = $row;
+        }
+
+        $reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $app->id])->getResult();
+        $html = $this->_ptw_final_permit_html($app, $this->_group_definitions($defs), $responses, $reviews);
+
+        $pdf = new Pdf("");
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetMargins(12, 12, 12);
+        $pdf->SetAutoPageBreak(true, 14);
+        $pdf->AddPage();
+        $pdf->writeHTML($html, true, false, true, false, "");
+
+        $safe_ref = preg_replace("/[^A-Za-z0-9_-]+/", "_", (string) ($app->reference ?? "ptw")) ?: "ptw";
+        $file_name = "issued-permit-" . $safe_ref . ".pdf";
+
+        return $this->response
+            ->setHeader("Content-Type", "application/pdf")
+            ->setHeader("Content-Disposition", 'inline; filename="' . addslashes($file_name) . '"')
+            ->setBody($pdf->Output($file_name, "S"));
+    }
+
     // ---------------- helpers ----------------
 
     private function _require_ptw_access()
@@ -415,6 +453,111 @@ if ($submit_mode === "draft") {
 
         // Portal edit is allowed only during revise cycle.
         return $status === "revise" && in_array($stage, ["hsse", "hmo", "terminal"], true);
+    }
+
+    private function _is_final_permit_available($app): bool
+    {
+        return strtolower((string) ($app->status ?? "")) === "approved"
+            && strtolower((string) ($app->stage ?? "")) === "completed";
+    }
+
+    private function _ptw_final_permit_html($app, array $definitions_grouped, array $responses, array $reviews): string
+    {
+        $h = static function ($value): string {
+            return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8");
+        };
+
+        $row = static function (string $label, $value) use ($h): string {
+            $value = ($value === null || $value === "") ? "-" : $value;
+            return "<tr><td class=\"k\">" . $h($label) . "</td><td>" . $h($value) . "</td></tr>";
+        };
+
+        $review_rows = "";
+        foreach ($reviews as $review) {
+            $reviewer = trim((string) (($review->first_name ?? "") . " " . ($review->last_name ?? "")));
+            if ($reviewer === "") {
+                $reviewer = $review->email ?? "-";
+            }
+            $review_rows .= "<tr>"
+                . "<td>" . $h(strtoupper((string) ($review->stage ?? "-"))) . "</td>"
+                . "<td>" . $h(ucwords(str_replace("_", " ", (string) ($review->decision ?? "pending")))) . "</td>"
+                . "<td>" . $h($reviewer) . "</td>"
+                . "<td>" . $h(!empty($review->reviewed_at) ? format_to_datetime($review->reviewed_at) : "-") . "</td>"
+                . "<td>" . nl2br($h($review->remarks ?? "-")) . "</td>"
+                . "</tr>";
+        }
+        if ($review_rows === "") {
+            $review_rows = "<tr><td colspan=\"5\">No approval records.</td></tr>";
+        }
+
+        $checklist_html = "";
+        $section_labels = [
+            "hazard_document" => "Hazards & Attachments",
+            "ppe" => "Proposed PPE",
+            "preparation" => "Work Area Preparations",
+            "other" => "Other Requirements",
+        ];
+        foreach ($section_labels as $category => $label) {
+            $rows = "";
+            foreach (($definitions_grouped[$category] ?? []) as $def) {
+                $response = $responses[(int) $def->id] ?? null;
+                $rows .= "<tr>"
+                    . "<td>" . $h($def->label ?? "-") . "</td>"
+                    . "<td>" . (!empty($response) && (int) ($response->is_checked ?? 0) === 1 ? "Yes" : "No") . "</td>"
+                    . "<td>" . nl2br($h($response->value_text ?? "-")) . "</td>"
+                    . "</tr>";
+            }
+            if ($rows === "") {
+                continue;
+            }
+
+            $checklist_html .= "<h3>" . $h($label) . "</h3>"
+                . "<table class=\"grid\"><thead><tr><th>Requirement</th><th>Checked</th><th>Notes</th></tr></thead><tbody>"
+                . $rows
+                . "</tbody></table>";
+        }
+
+        $issued_at = !empty($app->completed_at) ? format_to_datetime($app->completed_at) : format_to_datetime(get_current_utc_time());
+        $valid_from = !empty($app->work_from) ? format_to_datetime($app->work_from) : "-";
+        $valid_to = !empty($app->work_to) ? format_to_datetime($app->work_to) : "-";
+
+        $info_rows = ""
+            . $row("Permit Reference", $app->reference ?? "-")
+            . $row("Issued At", $issued_at)
+            . $row("Company", $app->company_name ?? "-")
+            . $row("Applicant", $app->applicant_name ?? "-")
+            . $row("Contact", trim((string) (($app->contact_phone ?? "") . " " . ($app->contact_email ?? ""))))
+            . $row("Supervisor", $app->work_supervisor_name ?? "-")
+            . $row("Workers", $app->total_workers ?? "-")
+            . $row("Work Location", $app->exact_location ?? "-")
+            . $row("Valid From", $valid_from)
+            . $row("Valid To", $valid_to)
+            . $row("Final Status", strtoupper((string) ($app->status ?? "approved")));
+
+        $description = nl2br($h($app->work_description ?? "-"));
+
+        return <<<HTML
+<style>
+  h1 { font-size: 18px; margin: 0 0 5px 0; color: #1f2a44; }
+  h2 { font-size: 13px; margin: 12px 0 6px 0; color: #1f2a44; }
+  h3 { font-size: 11px; margin: 10px 0 4px 0; color: #1f2a44; }
+  .muted { font-size: 9px; color: #666; margin-bottom: 10px; }
+  table.info, table.grid { width: 100%; border-collapse: collapse; font-size: 9px; }
+  table.info td, table.grid th, table.grid td { border: 1px solid #cfd6e4; padding: 5px; vertical-align: top; }
+  table.info td.k, table.grid th { background: #f3f6fb; font-weight: bold; }
+  .issued { border: 1px solid #8cc6a4; background: #f0fbf5; color: #166534; padding: 7px; font-size: 10px; font-weight: bold; margin: 8px 0; }
+  .desc { border: 1px solid #cfd6e4; padding: 7px; font-size: 9px; margin-bottom: 8px; }
+</style>
+<h1>Final Issued Permit to Work</h1>
+<div class="muted">System-generated issued permit view. Manual signatures can be attached separately where required by PODC procedure.</div>
+<div class="issued">PERMIT ISSUED - Approved by Terminal</div>
+<table class="info"><tbody>{$info_rows}</tbody></table>
+<h2>Work Description</h2>
+<div class="desc">{$description}</div>
+{$checklist_html}
+<h2>Approval Trail</h2>
+<table class="grid"><thead><tr><th>Stage</th><th>Decision</th><th>Reviewer</th><th>Reviewed At</th><th>Remarks</th></tr></thead><tbody>{$review_rows}</tbody></table>
+HTML;
     }
 
     private function _get_submit_stage_label($app): string

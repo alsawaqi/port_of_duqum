@@ -217,8 +217,19 @@ $view_data['can_reject_vendor_update_requests'] = get_array_value($permissions, 
 // Vendor Update Requests (Group by Vendor)
 $view_data['can_view_vendor_update_requests_by_vendor'] = get_array_value($permissions, "can_view_vendor_update_requests_by_vendor");
 
+// Shared Companies / Departments (Master Data)
+$view_data['can_view_companies']   = get_array_value($permissions, "can_view_companies") ?: get_array_value($permissions, "can_view_gate_pass_companies");
+$view_data['can_create_companies'] = get_array_value($permissions, "can_create_companies") ?: get_array_value($permissions, "can_create_gate_pass_companies");
+$view_data['can_update_companies'] = get_array_value($permissions, "can_update_companies") ?: get_array_value($permissions, "can_update_gate_pass_companies");
+$view_data['can_delete_companies'] = get_array_value($permissions, "can_delete_companies") ?: get_array_value($permissions, "can_delete_gate_pass_companies");
+
+$view_data['can_view_departments']   = get_array_value($permissions, "can_view_departments") ?: get_array_value($permissions, "can_view_gate_pass_departments");
+$view_data['can_create_departments'] = get_array_value($permissions, "can_create_departments") ?: get_array_value($permissions, "can_create_gate_pass_departments");
+$view_data['can_update_departments'] = get_array_value($permissions, "can_update_departments") ?: get_array_value($permissions, "can_update_gate_pass_departments");
+$view_data['can_delete_departments'] = get_array_value($permissions, "can_delete_departments") ?: get_array_value($permissions, "can_delete_gate_pass_departments");
+
 // Gate Pass Master (granular: view/create/update/delete per section)
-$gate_pass_sections = array('companies', 'departments', 'visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'request_list', 'fee_rules');
+$gate_pass_sections = array('visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'request_list', 'fee_rules');
 foreach ($gate_pass_sections as $section) {
     $view_data['can_view_gate_pass_' . $section]   = get_array_value($permissions, 'can_view_gate_pass_' . $section);
     $view_data['can_create_gate_pass_' . $section] = get_array_value($permissions, 'can_create_gate_pass_' . $section);
@@ -477,8 +488,19 @@ foreach ($ptw_sections as $section) {
         // Vendor Update Requests (Group by Vendor)
         $can_view_vendor_update_requests_by_vendor = $this->request->getPost('can_view_vendor_update_requests_by_vendor');
 
+        // Shared Companies / Departments (Master Data)
+        $can_view_companies   = $this->request->getPost('can_view_companies');
+        $can_create_companies = $this->request->getPost('can_create_companies');
+        $can_update_companies = $this->request->getPost('can_update_companies');
+        $can_delete_companies = $this->request->getPost('can_delete_companies');
+
+        $can_view_departments   = $this->request->getPost('can_view_departments');
+        $can_create_departments = $this->request->getPost('can_create_departments');
+        $can_update_departments = $this->request->getPost('can_update_departments');
+        $can_delete_departments = $this->request->getPost('can_delete_departments');
+
         // Gate Pass Master (granular)
-        $gate_pass_sections = array('companies', 'departments', 'visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'request_list', 'fee_rules');
+        $gate_pass_sections = array('visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'request_list', 'fee_rules');
         $gate_pass_permissions = array();
         foreach ($gate_pass_sections as $section) {
             $gate_pass_permissions['can_view_gate_pass_' . $section]   = $this->request->getPost('can_view_gate_pass_' . $section);
@@ -630,6 +652,16 @@ foreach ($ptw_sections as $section) {
             "can_reject_vendor_update_requests" => $can_reject_vendor_update_requests,
             // Vendor Update Requests (Group by Vendor)
             "can_view_vendor_update_requests_by_vendor" => $can_view_vendor_update_requests_by_vendor,
+
+            // Shared Companies / Departments (Master Data)
+            "can_view_companies"   => $can_view_companies,
+            "can_create_companies" => $can_create_companies,
+            "can_update_companies" => $can_update_companies,
+            "can_delete_companies" => $can_delete_companies,
+            "can_view_departments"   => $can_view_departments,
+            "can_create_departments" => $can_create_departments,
+            "can_update_departments" => $can_update_departments,
+            "can_delete_departments" => $can_delete_departments,
 
             // Gate Pass Master (granular)
         );

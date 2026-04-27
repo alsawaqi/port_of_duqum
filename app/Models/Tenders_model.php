@@ -22,6 +22,8 @@ class Tenders_model extends Crud_model
     private function get_stage_days(string $stage): int
     {
         switch ($stage) {
+            case 'technical_3key':
+                return 3;
             case 'technical':
                 return 3;
             case 'committee_3key':
@@ -50,25 +52,23 @@ class Tenders_model extends Crud_model
         $committeeDays = $this->get_stage_days('committee_3key');
         $commercialDays = $this->get_stage_days('commercial');
 
-        // 1) Close published tenders once bid closing time has passed.
+        // 1) Close released tenders once bid closing time has passed.
         $this->db->query(
             "UPDATE $t
              SET status = 'closed',
                  updated_at = ?
              WHERE deleted = 0
                AND status = 'published'
+               AND (release_at IS NULL OR release_at <= ?)
                AND closing_at IS NOT NULL
                AND closing_at <= ?",
-            [$now, $now]
+            [$now, $now, $now]
         );
         $affected += max(0, (int) $this->db->affectedRows());
-
-        // 2) Move closed tenders from bidding -> technical.
+        // 2) Move closed tenders from bidding -> technical 3-key opening.
         $this->db->query(
             "UPDATE $t
-             SET workflow_stage = 'technical',
-                 technical_start_at = IFNULL(technical_start_at, closing_at),
-                 technical_end_at = IFNULL(technical_end_at, DATE_ADD(IFNULL(technical_start_at, closing_at), INTERVAL {$technicalDays} DAY)),
+             SET workflow_stage = 'technical_3key',
                  updated_at = ?
              WHERE deleted = 0
                AND status = 'closed'
@@ -78,8 +78,33 @@ class Tenders_model extends Crud_model
             [$now, $now]
         );
         $affected += max(0, (int) $this->db->affectedRows());
+        // 3) If committee successfully unlocks the technical opening, start the technical stage.
+        $this->db->query(
+            "UPDATE $t
+             INNER JOIN (
+                 SELECT tender_id, MAX(id) AS max_id
+                 FROM $tbo
+                 WHERE deleted = 0
+                   AND stage = 'technical'
+                   AND status = 'unlocked'
+                 GROUP BY tender_id
+             ) latest_opening ON latest_opening.tender_id = $t.id
+             INNER JOIN $tbo opening ON opening.id = latest_opening.max_id
+             SET $t.workflow_stage = 'technical',
+                 $t.technical_start_at = IFNULL($t.technical_start_at, opening.unlocked_at),
+                 $t.technical_end_at = IFNULL(
+                    $t.technical_end_at,
+                    IFNULL($t.technical_eval_deadline, DATE_ADD(IFNULL($t.technical_start_at, opening.unlocked_at), INTERVAL {$technicalDays} DAY))
+                 ),
+                 $t.updated_at = ?
+             WHERE $t.deleted = 0
+               AND $t.status = 'closed'
+               AND $t.workflow_stage = 'technical_3key'",
+            [$now]
+        );
+        $affected += max(0, (int) $this->db->affectedRows());
 
-        // 3) Any bid still left as submitted after the technical deadline is auto-rejected.
+        // 4) Any bid still left as submitted after the technical deadline is auto-rejected.
         $this->db->query(
             "UPDATE $tb
              INNER JOIN $t ON $t.id = $tb.tender_id
@@ -96,24 +121,32 @@ class Tenders_model extends Crud_model
         );
         $affected += max(0, (int) $this->db->affectedRows());
 
-        // 4) Once technical deadline is reached, lock technical and open the committee 3-key stage.
+        // 5) Once technical review is complete or deadline is reached, lock technical and open the commercial 3-key stage.
         $this->db->query(
             "UPDATE $t
              SET workflow_stage = 'committee_3key',
-                 technical_locked_at = IFNULL(technical_locked_at, technical_end_at),
-                 committee_3key_start_at = IFNULL(committee_3key_start_at, technical_end_at),
-                 committee_3key_end_at = IFNULL(committee_3key_end_at, DATE_ADD(IFNULL(committee_3key_start_at, technical_end_at), INTERVAL {$committeeDays} DAY)),
+                 technical_locked_at = IFNULL(technical_locked_at, IFNULL(technical_end_at, ?)),
+                 committee_3key_start_at = IFNULL(committee_3key_start_at, IFNULL(technical_end_at, ?)),
+                 committee_3key_end_at = IFNULL(committee_3key_end_at, DATE_ADD(IFNULL(committee_3key_start_at, IFNULL(technical_end_at, ?)), INTERVAL {$committeeDays} DAY)),
                  updated_at = ?
              WHERE deleted = 0
                AND status = 'closed'
                AND workflow_stage = 'technical'
-               AND technical_end_at IS NOT NULL
-               AND technical_end_at <= ?",
-            [$now, $now]
+               AND (
+                    (technical_end_at IS NOT NULL AND technical_end_at <= ?)
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM $tb pending_bids
+                        WHERE pending_bids.deleted = 0
+                          AND pending_bids.tender_id = $t.id
+                          AND pending_bids.status = 'submitted'
+                    )
+               )",
+            [$now, $now, $now, $now, $now]
         );
         $affected += max(0, (int) $this->db->affectedRows());
 
-        // 5) If committee successfully unlocks the commercial opening, start the commercial stage.
+        // 6) If committee successfully unlocks the commercial opening, start the commercial stage.
         $this->db->query(
             "UPDATE $t
              INNER JOIN (
@@ -128,7 +161,10 @@ class Tenders_model extends Crud_model
              SET $t.workflow_stage = 'commercial',
                  $t.commercial_unlocked_at = IFNULL($t.commercial_unlocked_at, opening.unlocked_at),
                  $t.commercial_start_at = IFNULL($t.commercial_start_at, opening.unlocked_at),
-                 $t.commercial_end_at = IFNULL($t.commercial_end_at, DATE_ADD(IFNULL($t.commercial_start_at, opening.unlocked_at), INTERVAL {$commercialDays} DAY)),
+                 $t.commercial_end_at = IFNULL(
+                    $t.commercial_end_at,
+                    IFNULL($t.commercial_eval_deadline, DATE_ADD(IFNULL($t.commercial_start_at, opening.unlocked_at), INTERVAL {$commercialDays} DAY))
+                 ),
                  $t.updated_at = ?
              WHERE $t.deleted = 0
                AND $t.status = 'closed'
@@ -137,7 +173,7 @@ class Tenders_model extends Crud_model
         );
         $affected += max(0, (int) $this->db->affectedRows());
 
-        // 6) Once commercial window ends, move the tender to award decision stage.
+        // 7) Once commercial window ends, move the tender to award decision stage.
         $this->db->query(
             "UPDATE $t
              SET workflow_stage = 'award_decision',
@@ -154,7 +190,6 @@ class Tenders_model extends Crud_model
 
         return $affected;
     }
-
     public function get_by_request_id(int $tender_request_id)
     {
         $this->auto_progress_workflow();
@@ -172,6 +207,7 @@ class Tenders_model extends Crud_model
     {
         $this->auto_progress_workflow();
 
+        $now = $this->get_tender_business_now();
         $t = $this->db->prefixTable("tenders");
         $tiv = $this->db->prefixTable("tender_invited_vendors");
         $tts = $this->db->prefixTable("tender_target_specialties");
@@ -201,6 +237,7 @@ class Tenders_model extends Crud_model
                 LEFT JOIN $vsc ON $vsc.id = target.vendor_sub_category_id AND $vsc.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status IN ('published', 'closed', 'awarded')
+                  AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
                   AND (
                         (
                             $t.tender_type = 'close'
@@ -237,13 +274,13 @@ class Tenders_model extends Crud_model
                     $t.closing_at ASC,
                     $t.id DESC";
 
-        return $this->db->query($sql, [$vendor_id, $vendor_id]);
+        return $this->db->query($sql, [$vendor_id, $now, $vendor_id]);
     }
-
     public function get_vendor_visible_tender(int $tender_id, int $vendor_id)
     {
         $this->auto_progress_workflow();
 
+        $now = $this->get_tender_business_now();
         $t = $this->db->prefixTable("tenders");
         $tiv = $this->db->prefixTable("tender_invited_vendors");
         $tts = $this->db->prefixTable("tender_target_specialties");
@@ -273,6 +310,7 @@ class Tenders_model extends Crud_model
                 LEFT JOIN $vsc ON $vsc.id = target.vendor_sub_category_id AND $vsc.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status IN ('published', 'closed', 'awarded')
+                  AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
                   AND $t.id = ?
                   AND (
                         (
@@ -306,7 +344,7 @@ class Tenders_model extends Crud_model
                   )
                 LIMIT 1";
 
-        return $this->db->query($sql, [$vendor_id, $tender_id, $vendor_id])->getRow();
+        return $this->db->query($sql, [$vendor_id, $now, $tender_id, $vendor_id])->getRow();
     }
 
 

@@ -82,27 +82,47 @@ protected function can_tender(string $section, string $action): bool
 
     // Backward-compatible fallback for legacy roles missing tender permission keys.
     // This avoids production lockout for already-assigned tender users.
-    if ($section === "technical_eval" && in_array($action, ["view", "update"], true)) {
-        $db = db_connect();
-        $ttu = $db->prefixTable("tender_technical_users");
-        $users = $db->prefixTable("users");
-        $row = $db->query(
-            "SELECT $ttu.id
-             FROM $ttu
-             INNER JOIN $users ON $users.id = $ttu.user_id
-             WHERE $ttu.deleted=0
-               AND $ttu.status='active'
-               AND $users.deleted=0
-               AND $users.status='active'
-               AND $ttu.user_id=?
-             LIMIT 1",
-            [(int) $this->login_user->id]
-        )->getRow();
+    $fallback_tables = [
+        "technical_eval" => "tender_technical_users",
+        "commercial_eval" => "tender_commercial_users",
+        "committee" => "tender_committee_users",
+        "procurement" => "tender_procurement_users",
+    ];
 
-        return (bool) $row;
+    if (isset($fallback_tables[$section])) {
+        $allowed_actions = $section === "committee" ? ["view"] : ["view", "create", "update"];
+        if (in_array($action, $allowed_actions, true)) {
+            return $this->has_active_tender_assignment($fallback_tables[$section]);
+        }
     }
 
     return false;
+}
+
+protected function has_active_tender_assignment(string $table): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    $db = db_connect();
+    $pivot = $db->prefixTable($table);
+    $users = $db->prefixTable("users");
+
+    $row = $db->query(
+        "SELECT $pivot.id
+         FROM $pivot
+         INNER JOIN $users ON $users.id = $pivot.user_id
+         WHERE $pivot.deleted=0
+           AND $pivot.status='active'
+           AND $users.deleted=0
+           AND $users.status='active'
+           AND $pivot.user_id=?
+         LIMIT 1",
+        [(int) $this->login_user->id]
+    )->getRow();
+
+    return (bool) $row;
 }
 
 protected function access_only_tender(string $section, string $action)
@@ -118,7 +138,11 @@ protected function can_tender_3key_opening(): bool
     if ($this->login_user->is_admin) {
         return true;
     }
-    return get_array_value($this->login_user->permissions, "can_tender_open_bids_3key") == "1";
+    if (get_array_value($this->login_user->permissions, "can_tender_open_bids_3key") == "1") {
+        return true;
+    }
+
+    return $this->has_active_tender_assignment("tender_committee_users");
 }
 
     //prepear the login user's permissions
@@ -1385,6 +1409,39 @@ protected function access_only_countries_update()
     if (!$this->can_update_countries()) app_redirect("forbidden");
 }
 
+// ---------------------------------------------------------
+// Shared Master Data permissions
+// Companies/departments are stored in the existing Gate Pass tables, but they
+// are shared by Gate Pass, PTW, and Tender. Permission ownership lives here.
+// ---------------------------------------------------------
+protected function can_master_data(string $section, string $action): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    $key = "can_{$action}_{$section}";
+    if (get_array_value($this->login_user->permissions, $key) == "1") {
+        return true;
+    }
+
+    // Temporary backward compatibility for roles created before this moved out
+    // of Gate Pass Master.
+    if (in_array($section, ["companies", "departments"], true)) {
+        return get_array_value($this->login_user->permissions, "can_{$action}_gate_pass_{$section}") == "1";
+    }
+
+    return false;
+}
+
+protected function access_only_master_data(string $section, string $action)
+{
+    if (!$this->can_master_data($section, $action)) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
  
 
 
@@ -2208,6 +2265,221 @@ protected function access_only_vendor_update_requests_by_vendor_view()
         app_redirect("forbidden");
         exit;
     }
+}
+
+// ---------------------------------------------------------
+// Operational module assignments
+// Used by Gate Pass, PTW, and Tender user assignment screens.
+// Inbox visibility is controlled by the module pivot table; role_id is only
+// assigned when a brand-new staff user is created.
+// ---------------------------------------------------------
+protected function get_operational_user_by_email(string $email)
+{
+    $email = strtolower(trim($email));
+    if ($email === "") {
+        return null;
+    }
+
+    $users_table = $this->db->prefixTable("users");
+
+    return $this->db->query(
+        "SELECT id, first_name, last_name, email, phone, user_type, status, disable_login, role_id, deleted
+         FROM $users_table
+         WHERE deleted=0 AND LOWER(email)=?
+         ORDER BY user_type='staff' DESC, id ASC
+         LIMIT 1",
+        [$email]
+    )->getRow();
+}
+
+protected function operational_assignment_exists(string $table, int $user_id, array $scope = [], int $exclude_id = 0): bool
+{
+    if (!$user_id) {
+        return false;
+    }
+
+    $builder = $this->db->table($this->db->prefixTable($table));
+    $builder->where("deleted", 0);
+    $builder->where("user_id", $user_id);
+
+    foreach ($scope as $field => $value) {
+        $builder->where($field, $value);
+    }
+
+    if ($exclude_id) {
+        $builder->where("id !=", $exclude_id);
+    }
+
+    return (bool) $builder->get(1)->getRow();
+}
+
+protected function validate_operational_password(string $password, string $password_confirm, bool $required): array
+{
+    if ($password === "" && !$required) {
+        return ["success" => true];
+    }
+
+    if ($password === "") {
+        return ["success" => false, "message" => app_lang("password_is_required")];
+    }
+
+    if (preg_match('/\s/', $password)) {
+        return ["success" => false, "message" => app_lang("password_no_spaces")];
+    }
+
+    if ($password_confirm === "") {
+        return ["success" => false, "message" => app_lang("password_confirm_required")];
+    }
+
+    if ($password !== $password_confirm) {
+        return ["success" => false, "message" => app_lang("passwords_do_not_match")];
+    }
+
+    return ["success" => true];
+}
+
+protected function resolve_operational_assignment_user(array $options = [], $current_user = null): array
+{
+    $email = strtolower(trim((string) $this->request->getPost("email")));
+    $first_name = trim((string) $this->request->getPost("first_name"));
+    $last_name = trim((string) $this->request->getPost("last_name"));
+    $phone = trim((string) $this->request->getPost("phone"));
+    $status = trim((string) $this->request->getPost("status"));
+    $status = $status === "active" ? "active" : "inactive";
+    $password = (string) $this->request->getPost("password");
+    $password_confirm = (string) $this->request->getPost("password_confirm");
+
+    if ($email === "") {
+        return ["success" => false, "message" => app_lang("field_required")];
+    }
+
+    $existing_user = $this->get_operational_user_by_email($email);
+    $current_user_id = ($current_user && !empty($current_user->id)) ? (int) $current_user->id : 0;
+
+    if ($existing_user && (string) $existing_user->user_type !== "staff") {
+        return ["success" => false, "message" => app_lang("email_belongs_to_non_staff_user")];
+    }
+
+    if ($existing_user && (!$current_user_id || (int) $existing_user->id !== $current_user_id)) {
+        if ($status === "active") {
+            $this->Users_model->ci_save(["status" => "active", "disable_login" => 0], (int) $existing_user->id);
+        }
+
+        return ["success" => true, "user_id" => (int) $existing_user->id, "existing_user" => true];
+    }
+
+    if ($first_name === "" || $last_name === "") {
+        return ["success" => false, "message" => app_lang("field_required")];
+    }
+
+    $password_validation = $this->validate_operational_password($password, $password_confirm, !$current_user_id);
+    if (!$password_validation["success"]) {
+        return $password_validation;
+    }
+
+    $user_data = [
+        "email" => $email,
+        "first_name" => $first_name,
+        "last_name" => $last_name,
+        "phone" => $phone,
+    ];
+
+    if ($status === "active") {
+        $user_data["status"] = "active";
+        $user_data["disable_login"] = 0;
+    }
+
+    if ($password !== "") {
+        $user_data["password"] = password_hash($password, PASSWORD_DEFAULT);
+    }
+
+    if ($current_user_id) {
+        $saved = $this->Users_model->ci_save($user_data, $current_user_id);
+        if (!$saved) {
+            return ["success" => false, "message" => app_lang("error_occurred")];
+        }
+
+        return ["success" => true, "user_id" => $current_user_id, "existing_user" => false];
+    }
+
+    $user_data = array_merge($user_data, [
+        "user_type" => "staff",
+        "is_admin" => 0,
+        "role_id" => (int) get_array_value($options, "role_id"),
+        "disable_login" => $status === "active" ? 0 : 1,
+        "status" => $status,
+        "job_title" => (string) get_array_value($options, "job_title"),
+        "language" => get_setting("language") ?: "english",
+        "created_at" => get_current_utc_time(),
+        "deleted" => 0,
+    ]);
+
+    $user_id = $this->Users_model->ci_save($user_data);
+    if (!$user_id) {
+        return ["success" => false, "message" => app_lang("error_occurred")];
+    }
+
+    return ["success" => true, "user_id" => (int) $user_id, "existing_user" => false];
+}
+
+protected function save_operational_user_assignment($model, string $table, array $scope = [], array $options = [])
+{
+    $id = (int) $this->request->getPost("id");
+    $status = trim((string) $this->request->getPost("status"));
+    $status = $status === "active" ? "active" : "inactive";
+
+    $pivot = null;
+    $current_user = null;
+
+    if ($id) {
+        $pivot = $model->get_one($id);
+        if (!$pivot || empty($pivot->id) || (int) $pivot->deleted) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
+        }
+
+        $current_user = $this->Users_model->get_one($pivot->user_id);
+        if (!$current_user || empty($current_user->id) || (int) $current_user->deleted) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
+        }
+    }
+
+    $email = strtolower(trim((string) $this->request->getPost("email")));
+    $candidate_user = $this->get_operational_user_by_email($email);
+    $candidate_user_id = $candidate_user ? (int) $candidate_user->id : ($current_user && !empty($current_user->id) ? (int) $current_user->id : 0);
+
+    if ($candidate_user_id && $this->operational_assignment_exists($table, $candidate_user_id, $scope, $id)) {
+        return $this->response->setJSON(["success" => false, "message" => app_lang("assignment_already_exists")]);
+    }
+
+    $this->db->transStart();
+
+    $resolved = $this->resolve_operational_assignment_user($options, $current_user);
+    if (!$resolved["success"]) {
+        $this->db->transComplete();
+        return $this->response->setJSON($resolved);
+    }
+
+    $pivot_data = array_merge($scope, [
+        "user_id" => (int) $resolved["user_id"],
+        "status" => $status,
+    ]);
+
+    if ($id) {
+        $pivot_data["updated_at"] = get_current_utc_time();
+        $save_id = $model->ci_save($pivot_data, $id);
+    } else {
+        $pivot_data["created_at"] = get_current_utc_time();
+        $pivot_data["deleted"] = 0;
+        $save_id = $model->ci_save($pivot_data);
+    }
+
+    $this->db->transComplete();
+
+    if ($this->db->transStatus() === false || !$save_id) {
+        return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
+    }
+
+    return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);
 }
 
 // ---------------------------------------------------------

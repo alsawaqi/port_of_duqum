@@ -10,6 +10,32 @@ $owner_name = trim((string) ($latest_evaluation->evaluator_name ?? ''));
 if ($owner_name === '') {
     $owner_name = $latest_evaluation->evaluator_email ?? 'another evaluator';
 }
+
+$technical_bid_document_actions = function ($doc_id) {
+    $doc_id = (int) $doc_id;
+    if (!$doc_id) {
+        return "<span class='text-off'>No technical file</span>";
+    }
+
+    $preview = js_anchor(
+        "<i data-feather='eye' class='icon-14'></i> Preview",
+        [
+            "title" => "Preview Technical Proposal",
+            "class" => "btn btn-primary btn-sm mt5 me-1",
+            "data-toggle" => "app-modal",
+            "data-sidebar" => "0",
+            "data-url" => get_uri("tender_technical_inbox/preview_bid_document/" . $doc_id),
+        ]
+    );
+
+    $download = anchor(
+        get_uri("tender_technical_inbox/download_bid_document/" . $doc_id),
+        "<i data-feather='download' class='icon-14'></i> Download",
+        ["class" => "btn btn-default btn-sm mt5"]
+    );
+
+    return "<div class='d-flex flex-wrap gap-1'>" . $preview . $download . "</div>";
+};
 ?>
 
 <div class="modal-body">
@@ -34,14 +60,7 @@ if ($owner_name === '') {
         <div class="col-md-4 mb10"><strong>Current Score:</strong><br><?php echo !empty($active_evaluation->id) ? number_format((float) ($active_evaluation->total_score ?? 0), 3) : '0.000'; ?> / <?php echo number_format((float) $stage_max_score, 3); ?></div>
         <div class="col-md-4 mb10">
             <strong>Technical Proposal:</strong><br>
-            <?php if (!empty($bid->technical_doc_id)) { ?>
-                <a href="<?php echo get_uri('tender_technical_inbox/download_bid_document/' . $bid->technical_doc_id); ?>" class="btn btn-default btn-sm mt5">
-                    <i data-feather="download" class="icon-14"></i>
-                    Download
-                </a>
-            <?php } else { ?>
-                <span class="text-off">No technical file</span>
-            <?php } ?>
+            <?php echo $technical_bid_document_actions($bid->technical_doc_id ?? 0); ?>
         </div>
     </div>
 

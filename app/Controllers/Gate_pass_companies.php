@@ -17,7 +17,7 @@ class Gate_pass_companies extends Security_Controller
 
     function index()
     {
-        $this->access_only_gate_pass("companies", "view");
+        $this->access_only_master_data("companies", "view");
         return $this->template->rander("gate_pass_companies/index");
     }
 
@@ -25,7 +25,7 @@ class Gate_pass_companies extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
         $id = $this->request->getPost("id");
-        $this->access_only_gate_pass("companies", $id ? "update" : "create");
+        $this->access_only_master_data("companies", $id ? "update" : "create");
 
         $view_data["model_info"] = $this->Gate_pass_companies_model->get_one($id);
         return $this->template->view("gate_pass_companies/modal_form", $view_data);
@@ -40,7 +40,7 @@ class Gate_pass_companies extends Security_Controller
         ]);
 
         $id = $this->request->getPost("id");
-        $this->access_only_gate_pass("companies", $id ? "update" : "create");
+        $this->access_only_master_data("companies", $id ? "update" : "create");
 
         $data = [
             "name" => $this->request->getPost("name"),
@@ -65,7 +65,7 @@ class Gate_pass_companies extends Security_Controller
 
     function list_data()
     {
-        $this->access_only_gate_pass("companies", "view");
+        $this->access_only_master_data("companies", "view");
         $list_data = $this->Gate_pass_companies_model->get_details()->getResult();
         $result = [];
 
@@ -79,7 +79,7 @@ class Gate_pass_companies extends Security_Controller
     function delete()
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
-        $this->access_only_gate_pass("companies", "delete");
+        $this->access_only_master_data("companies", "delete");
 
         $id = $this->request->getPost("id");
         if ($this->Gate_pass_companies_model->delete($id)) {

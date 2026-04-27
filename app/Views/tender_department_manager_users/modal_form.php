@@ -5,6 +5,10 @@
     <div class="container-fluid">
         <input type="hidden" name="id" value="<?php echo esc($model_info->id ?? ''); ?>" />
 
+        <?php echo view("includes/operational_user_identity_fields", ["model_info" => $model_info]); ?>
+
+        <hr />
+
         <div class="form-group">
             <div class="row">
                 <label class="col-md-3"><?php echo app_lang("company"); ?></label>
@@ -32,43 +36,6 @@
                 </div>
             </div>
         </div>
-
-        <hr />
-
-        <div class="form-group"><div class="row">
-            <label class="col-md-3"><?php echo app_lang("first_name"); ?></label>
-            <div class="col-md-9">
-                <?php echo form_input(["name"=>"first_name","value"=>$model_info->first_name ?? "","class"=>"form-control","data-rule-required"=>true,"data-msg-required"=>app_lang("field_required")]); ?>
-            </div>
-        </div></div>
-
-        <div class="form-group"><div class="row">
-            <label class="col-md-3"><?php echo app_lang("last_name"); ?></label>
-            <div class="col-md-9">
-                <?php echo form_input(["name"=>"last_name","value"=>$model_info->last_name ?? "","class"=>"form-control","data-rule-required"=>true,"data-msg-required"=>app_lang("field_required")]); ?>
-            </div>
-        </div></div>
-
-        <div class="form-group"><div class="row">
-            <label class="col-md-3"><?php echo app_lang("email"); ?></label>
-            <div class="col-md-9">
-                <?php echo form_input(["name"=>"email","type"=>"email","value"=>$model_info->email ?? "","class"=>"form-control","data-rule-required"=>true,"data-rule-email"=>true,"data-msg-required"=>app_lang("field_required")]); ?>
-            </div>
-        </div></div>
-
-        <div class="form-group"><div class="row">
-            <label class="col-md-3"><?php echo app_lang("phone"); ?></label>
-            <div class="col-md-9">
-                <?php echo form_input(["name"=>"phone","value"=>$model_info->phone ?? "","class"=>"form-control"]); ?>
-            </div>
-        </div></div>
-
-        <div class="form-group"><div class="row">
-            <label class="col-md-3"><?php echo app_lang("password"); ?></label>
-            <div class="col-md-9">
-                <?php echo form_password(["name"=>"password","class"=>"form-control","placeholder"=>($model_info ? app_lang("leave_blank_to_keep") : "")]); ?>
-            </div>
-        </div></div>
 
         <div class="form-group"><div class="row">
             <label class="col-md-3"><?php echo app_lang("status"); ?></label>

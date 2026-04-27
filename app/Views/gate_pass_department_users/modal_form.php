@@ -5,6 +5,10 @@
 
         <input type="hidden" name="id" value="<?php echo esc($model_info->id ?? ''); ?>" />
 
+        <?php echo view("includes/operational_user_identity_fields", ["model_info" => $model_info]); ?>
+
+        <hr />
+
         <div class="form-group">
             <div class="row">
                 <label for="company_id" class=" col-md-3"><?php echo app_lang("company"); ?></label>
@@ -33,54 +37,6 @@
                         "class='form-control select2' id='department_id' data-rule-required='true' data-msg-required='" . app_lang("field_required") . "'"
                     );
                     ?>
-                </div>
-            </div>
-        </div>
-
-        <hr />
-
-        <div class="form-group">
-            <div class="row">
-                <label for="first_name" class=" col-md-3"><?php echo app_lang("first_name"); ?></label>
-                <div class="col-md-9">
-                    <?php echo form_input(["id" => "first_name", "name" => "first_name", "value" => $model_info->first_name ?? "", "class" => "form-control", "placeholder" => app_lang("first_name"), "data-rule-required" => true, "data-msg-required" => app_lang("field_required")]); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <div class="row">
-                <label for="last_name" class=" col-md-3"><?php echo app_lang("last_name"); ?></label>
-                <div class="col-md-9">
-                    <?php echo form_input(["id" => "last_name", "name" => "last_name", "value" => $model_info->last_name ?? "", "class" => "form-control", "placeholder" => app_lang("last_name"), "data-rule-required" => true, "data-msg-required" => app_lang("field_required")]); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <div class="row">
-                <label for="email" class=" col-md-3"><?php echo app_lang("email"); ?></label>
-                <div class="col-md-9">
-                    <?php echo form_input(["id" => "email", "name" => "email", "value" => $model_info->email ?? "", "class" => "form-control", "placeholder" => app_lang("email"), "data-rule-required" => true, "data-rule-email" => true, "data-msg-required" => app_lang("field_required"), "data-msg-email" => app_lang("enter_valid_email")]); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <div class="row">
-                <label for="phone" class=" col-md-3"><?php echo app_lang("phone"); ?></label>
-                <div class="col-md-9">
-                    <?php echo form_input(["id" => "phone", "name" => "phone", "value" => $model_info->phone ?? "", "class" => "form-control", "placeholder" => app_lang("phone")]); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <div class="row">
-                <label for="password" class=" col-md-3"><?php echo app_lang("password"); ?></label>
-                <div class="col-md-9">
-                    <?php echo form_password(["id" => "password", "name" => "password", "value" => "", "class" => "form-control", "placeholder" => app_lang("password")]); ?>
-                    <small class="text-muted"><?php echo app_lang("leave_blank_to_keep"); ?></small>
                 </div>
             </div>
         </div>

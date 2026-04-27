@@ -57,8 +57,15 @@ class Left_menu
         }
 
         // Backward-compatible fallback for legacy production roles.
-        if ($key === "technical_eval") {
-            return $this->_has_active_tender_assignment("tender_technical_users");
+        $fallback_tables = [
+            "technical_eval" => "tender_technical_users",
+            "commercial_eval" => "tender_commercial_users",
+            "committee" => "tender_committee_users",
+            "procurement" => "tender_procurement_users",
+        ];
+
+        if (isset($fallback_tables[$key])) {
+            return $this->_has_active_tender_assignment($fallback_tables[$key]);
         }
 
         return false;
@@ -79,6 +86,9 @@ class Left_menu
 
             $permission_manager = new Permission_manager($this->ci);
             $sidebar_menu = array("dashboard" => $dashboard_menu);
+            if ($this->ci->login_user->is_admin) {
+                $sidebar_menu["pod_reports"] = array("name" => "pod_reports", "url" => "pod_reports", "class" => "bar-chart-2");
+            }
 
             $permissions = $this->ci->login_user->permissions;
 
@@ -113,15 +123,24 @@ class Left_menu
             $master_data_submenu = array();
 
             // helper: can view a master data section
-            $can_view_master = function ($key) use ($permissions) {
+            $can_view_master = function ($key, $legacy_key = "") use ($permissions) {
                 // admin sees all
                 if ($this->ci->login_user->is_admin) {
                     return true;
                 }
-                return (bool) get_array_value($permissions, $key);
+                return (bool) get_array_value($permissions, $key)
+                    || ($legacy_key && (bool) get_array_value($permissions, $legacy_key));
             };
 
             // ✅ Legal Types
+            if ($can_view_master("can_view_companies", "can_view_gate_pass_companies")) {
+                $master_data_submenu[] = array("name" => "gate_pass_companies", "url" => "gate_pass_companies", "class" => "briefcase");
+            }
+
+            if ($can_view_master("can_view_departments", "can_view_gate_pass_departments")) {
+                $master_data_submenu[] = array("name" => "gate_pass_departments", "url" => "gate_pass_departments", "class" => "layers");
+            }
+
             if ($can_view_master("can_view_legal_types")) {
                 $master_data_submenu[] = array("name" => "legal_types", "url" => "legal_types", "class" => "file-text");
             }
@@ -216,9 +235,6 @@ class Left_menu
             // Tender Master (Admin only)
             if ($this->ci->login_user->is_admin) {
                 $tender_master_submenu = [
-                    ["name" => "tender_department_users",          "url" => "tender_department_users",          "class" => "user-plus"],
-                    ["name" => "tender_department_manager_users",  "url" => "tender_department_manager_users",  "class" => "user-check"],
-                    ["name" => "tender_finance_users",             "url" => "tender_finance_users",             "class" => "dollar-sign"],
                     ["name" => "tender_committee_users",           "url" => "tender_committee_users",           "class" => "users"],
                     ["name" => "tender_procurement_users",         "url" => "tender_procurement_users",         "class" => "briefcase"],
                     ["name" => "tender_technical_users",           "url" => "tender_technical_users",           "class" => "tool"],
@@ -238,31 +254,28 @@ class Left_menu
             $tender_view = function ($key) use ($permissions) {
                 return $this->_can_view_tender_section($key, $permissions);
             };
-            if ($tender_view("requests")) {
-                $tender_submenu[] = array("name" => "tender_requests", "url" => "tender_requests", "class" => "file-text");
-            }
-            if ($tender_view("manager_inbox")) {
-                $tender_submenu[] = array("name" => "tender_department_manager_inbox", "url" => "tender_department_manager_inbox", "class" => "user-check");
-            }
-            if ($tender_view("finance_inbox")) {
-                $tender_submenu[] = array("name" => "tender_finance_inbox", "url" => "tender_finance_inbox", "class" => "dollar-sign");
-            }
-            if ($tender_view("committee")) {
-                $tender_submenu[] = array("name" => "tender_committee_inbox", "url" => "tender_committee_inbox", "class" => "users");
-            }
-            if ($tender_view("procurement")) {
-                $tender_submenu[] = array("name" => "tender_procurement_inbox", "url" => "tender_procurement_inbox", "class" => "briefcase");
-            }
-            if ($tender_view("technical_eval")) {
-                $tender_submenu[] = array("name" => "tender_technical_inbox", "url" => "tender_technical_inbox", "class" => "tool");
-            }
-            
-            if ($tender_view("committee") && ($this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_tender_open_bids_3key"))) {
-                $tender_submenu[] = array("name" => "tender_committee_opening_inbox", "url" => "tender_committee_opening_inbox", "class" => "unlock");
-            }
-            
-            if ($tender_view("commercial_eval")) {
-                $tender_submenu[] = array("name" => "tender_commercial_inbox", "url" => "tender_commercial_inbox", "class" => "bar-chart-2");
+
+            if ($this->ci->login_user->is_admin) {
+                $tender_submenu[] = array("name" => "tender_register", "url" => "tender_reports", "class" => "bar-chart");
+            } else {
+                if ($tender_view("committee")) {
+                    $tender_submenu[] = array("name" => "tender_committee_inbox", "url" => "tender_committee_inbox", "class" => "users");
+                }
+                if ($tender_view("procurement")) {
+                    $tender_submenu[] = array("name" => "tender_procurement_inbox", "url" => "tender_procurement_inbox", "class" => "briefcase");
+                    $tender_submenu[] = array("name" => "tender_register", "url" => "tender_reports", "class" => "bar-chart");
+                }
+                if ($tender_view("technical_eval")) {
+                    $tender_submenu[] = array("name" => "tender_technical_inbox", "url" => "tender_technical_inbox", "class" => "tool");
+                }
+
+                if ($tender_view("committee") && (bool) get_array_value($permissions, "can_tender_open_bids_3key")) {
+                    $tender_submenu[] = array("name" => "tender_committee_opening_inbox", "url" => "tender_committee_opening_inbox", "class" => "unlock");
+                }
+
+                if ($tender_view("commercial_eval")) {
+                    $tender_submenu[] = array("name" => "tender_commercial_inbox", "url" => "tender_commercial_inbox", "class" => "bar-chart-2");
+                }
             }
             if (count($tender_submenu)) {
                 $sidebar_menu["tender"] = array(
@@ -280,12 +293,6 @@ class Left_menu
             $gp_view = function ($key) use ($permissions) {
                 return $this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_view_gate_pass_" . $key);
             };
-            if ($gp_view("companies")) {
-                $gitpass_master_submenu[] = array("name" => "gate_pass_companies", "url" => "gate_pass_companies", "class" => "briefcase");
-            }
-            if ($gp_view("departments")) {
-                $gitpass_master_submenu[] = array("name" => "gate_pass_departments", "url" => "gate_pass_departments", "class" => "layers");
-            }
             if ($gp_view("visitors")) {
                 $gitpass_master_submenu[] = array("name" => "gate_pass_visitors", "url" => "gate_pass_visitors", "class" => "users");
             }
@@ -306,6 +313,9 @@ class Left_menu
             }
             if ($gp_view("rop_users")) {
                 $gitpass_master_submenu[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-text");
+            }
+            if ($this->ci->login_user->is_admin) {
+                $gitpass_master_submenu[] = array("name" => "gate_pass_blocked_visitors", "url" => "gate_pass_blocked_visitors", "class" => "slash");
             }
             if ($gp_view("request_list")) {
                 $gitpass_master_submenu[] = array("name" => "gate_pass_filter_requests", "url" => "gate_pass_request_list", "class" => "filter");
@@ -564,8 +574,12 @@ class Left_menu
                         if ($my_gate_pass_rop_user) {
                             $sidebar_menu["gate_pass_rop_requests"] = array(
                                 "name"  => "gate_pass_rop_requests",
-                                "url"   => "gate_pass_rop_inbox",
-                                "class" => "file-text"
+                                "url"   => "#",
+                                "class" => "file-text",
+                                "submenu" => array(
+                                    array("name" => "gate_pass_rop_inbox", "url" => "gate_pass_rop_inbox", "class" => "list"),
+                                    array("name" => "gate_pass_blocked_visitors", "url" => "gate_pass_blocked_visitors", "class" => "slash"),
+                                ),
                             );
                         }
                     } catch (\Throwable $e) {
@@ -1189,8 +1203,6 @@ $submenu_names = [];
                         $gp_view = function ($key) use ($permissions) {
                             return $this->ci->login_user->is_admin || (bool) get_array_value($permissions, "can_view_gate_pass_" . $key);
                         };
-                        if ($gp_view("companies")) $gp_sub[] = array("name" => "gate_pass_companies", "url" => "gate_pass_companies", "class" => "briefcase");
-                        if ($gp_view("departments")) $gp_sub[] = array("name" => "gate_pass_departments", "url" => "gate_pass_departments", "class" => "layers");
                         if ($gp_view("visitors")) $gp_sub[] = array("name" => "gate_pass_visitors", "url" => "gate_pass_visitors", "class" => "users");
                         if ($gp_view("purposes")) $gp_sub[] = array("name" => "gate_pass_purposes", "url" => "gate_pass_purposes", "class" => "file-text");
                         if ($gp_view("reasons")) $gp_sub[] = array("name" => "gate_pass_reasons", "url" => "gate_pass_reasons", "class" => "alert-circle");
@@ -1198,6 +1210,7 @@ $submenu_names = [];
                         if ($gp_view("commercial_users")) $gp_sub[] = array("name" => "gate_pass_commercial_users", "url" => "gate_pass_commercial_users", "class" => "dollar-sign");
                         if ($gp_view("security_users")) $gp_sub[] = array("name" => "gate_pass_security_users", "url" => "gate_pass_security_users", "class" => "shield");
                         if ($gp_view("rop_users")) $gp_sub[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-text");
+                        if ($this->ci->login_user->is_admin) $gp_sub[] = array("name" => "gate_pass_blocked_visitors", "url" => "gate_pass_blocked_visitors", "class" => "slash");
                         if ($gp_view("request_list")) $gp_sub[] = array("name" => "gate_pass_filter_requests", "url" => "gate_pass_request_list", "class" => "filter");
                         if ($gp_view("fee_rules")) $gp_sub[] = array("name" => "gate_pass_fee_rules", "url" => "gate_pass_fee_rules", "class" => "dollar-sign");
                         if ($this->ci->login_user->is_admin) {
@@ -1288,7 +1301,38 @@ $submenu_names = [];
 
             // get the default menu version (permission-filtered, with submenu)
             $default_menu = $this->_get_sidebar_menu_items($type);
+            $default_master_data = $default_menu["master_data"] ?? null;
             $default_vendors_master = $default_menu["vendors_master"] ?? null;
+
+            if ($default_master_data) {
+                $found_master_data = false;
+                $default_master_submenu = get_array_value($default_master_data, "submenu") ?: array();
+
+                foreach ($view_data["sidebar_menu"] as $k => $m) {
+                    if (get_array_value($m, "name") === "master_data") {
+                        $found_master_data = true;
+                        $submenu = get_array_value($m, "submenu") ?: array();
+                        $existing_names = array();
+                        foreach ($submenu as $sm) {
+                            $existing_names[] = get_array_value($sm, "name");
+                        }
+
+                        foreach ($default_master_submenu as $dsm) {
+                            $dname = get_array_value($dsm, "name");
+                            if ($dname && !in_array($dname, $existing_names, true)) {
+                                $view_data["sidebar_menu"][$k]["submenu"][] = $dsm;
+                            }
+                        }
+
+                        $view_data["sidebar_menu"][$k]["url"] = "#";
+                        break;
+                    }
+                }
+
+                if (!$found_master_data) {
+                    $view_data["sidebar_menu"][] = $default_master_data;
+                }
+            }
 
             // Only inject if the user actually has any Vendors Master items available
             if ($default_vendors_master) {
@@ -1339,8 +1383,6 @@ $submenu_names = [];
                 $gp_view = function ($key) use ($gp_perms) {
                     return $this->ci->login_user->is_admin || (bool) get_array_value($gp_perms, "can_view_gate_pass_" . $key);
                 };
-                if ($gp_view("companies")) $gate_pass_submenu[] = array("name" => "gate_pass_companies", "url" => "gate_pass_companies", "class" => "briefcase");
-                if ($gp_view("departments")) $gate_pass_submenu[] = array("name" => "gate_pass_departments", "url" => "gate_pass_departments", "class" => "layers");
                 if ($gp_view("visitors")) $gate_pass_submenu[] = array("name" => "gate_pass_visitors", "url" => "gate_pass_visitors", "class" => "users");
                 if ($gp_view("purposes")) $gate_pass_submenu[] = array("name" => "gate_pass_purposes", "url" => "gate_pass_purposes", "class" => "file-text");
                 if ($gp_view("reasons")) $gate_pass_submenu[] = array("name" => "gate_pass_reasons", "url" => "gate_pass_reasons", "class" => "alert-circle");
@@ -1348,6 +1390,7 @@ $submenu_names = [];
                 if ($gp_view("commercial_users")) $gate_pass_submenu[] = array("name" => "gate_pass_commercial_users", "url" => "gate_pass_commercial_users", "class" => "dollar-sign");
                 if ($gp_view("security_users")) $gate_pass_submenu[] = array("name" => "gate_pass_security_users", "url" => "gate_pass_security_users", "class" => "shield");
                 if ($gp_view("rop_users")) $gate_pass_submenu[] = array("name" => "gate_pass_rop_users", "url" => "gate_pass_rop_users", "class" => "file-text");
+                if ($this->ci->login_user->is_admin) $gate_pass_submenu[] = array("name" => "gate_pass_blocked_visitors", "url" => "gate_pass_blocked_visitors", "class" => "slash");
                 if ($gp_view("request_list")) $gate_pass_submenu[] = array("name" => "gate_pass_filter_requests", "url" => "gate_pass_request_list", "class" => "filter");
                 if ($gp_view("fee_rules")) $gate_pass_submenu[] = array("name" => "gate_pass_fee_rules", "url" => "gate_pass_fee_rules", "class" => "dollar-sign");
             }
@@ -1368,9 +1411,26 @@ $submenu_names = [];
                 if (get_array_value($m, "name") === "gitpass_master") {
                     $found_gitpass = true;
                     $submenu = get_array_value($m, "submenu");
+                    if ($submenu && count($submenu)) {
+                        $submenu = array_values(array_filter($submenu, function ($item) {
+                            return !in_array(get_array_value($item, "name"), ["gate_pass_companies", "gate_pass_departments"], true);
+                        }));
+                        $view_data["sidebar_menu"][$k]["submenu"] = $submenu;
+                    }
                     if (!$submenu || !count($submenu)) {
                         $view_data["sidebar_menu"][$k]["submenu"] = $gate_pass_submenu;
                         $view_data["sidebar_menu"][$k]["class"]   = $default_gitpass_master ? get_array_value($default_gitpass_master, "class") : "key";
+                    } elseif ($this->ci->login_user->is_admin) {
+                        $submenu_names = [];
+                        foreach ($submenu as $existing_item) {
+                            $submenu_names[get_array_value($existing_item, "name")] = true;
+                        }
+                        foreach ($gate_pass_submenu as $default_item) {
+                            $default_name = get_array_value($default_item, "name");
+                            if (in_array($default_name, ["gate_pass_blocked_visitors", "gate_pass_admin_activity_logs"], true) && empty($submenu_names[$default_name])) {
+                                $view_data["sidebar_menu"][$k]["submenu"][] = $default_item;
+                            }
+                        }
                     }
                     // Always use # so click toggles dropdown instead of navigating
                     $view_data["sidebar_menu"][$k]["url"] = "#";
@@ -1549,9 +1609,14 @@ $submenu_names = [];
             $default_gate_pass_rop_requests = $default_menu["gate_pass_rop_requests"] ?? null;
             if ($default_gate_pass_rop_requests) {
                 $exists = false;
-                foreach ($view_data["sidebar_menu"] as $m) {
+                foreach ($view_data["sidebar_menu"] as $k => $m) {
                     if (get_array_value($m, "name") === "gate_pass_rop_requests") {
                         $exists = true;
+                        if (get_array_value($default_gate_pass_rop_requests, "submenu")) {
+                            $view_data["sidebar_menu"][$k]["url"] = "#";
+                            $view_data["sidebar_menu"][$k]["submenu"] = get_array_value($default_gate_pass_rop_requests, "submenu");
+                            $view_data["sidebar_menu"][$k]["class"] = get_array_value($default_gate_pass_rop_requests, "class");
+                        }
                         break;
                     }
                 }

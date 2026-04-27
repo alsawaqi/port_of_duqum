@@ -5,12 +5,13 @@ $lang["example"] = "Example";
 
 $lang["vendor_update_requests_by_vendor"] = "Vendor Group Request";
 $lang["vendor_portal"] = "Vendor Portal";
+$lang["pod_reports"] = "Operational Reports";
 $lang["pending_review"] = "Pending Review";
 
 // Gate Pass
 $lang["gitpass_master"] = "Gate Pass Master";
-$lang["gate_pass_companies"] = "Gate Pass Companies";
-$lang["gate_pass_departments"] = "Gate Pass Departments";
+$lang["gate_pass_companies"] = "Companies";
+$lang["gate_pass_departments"] = "Departments";
 $lang["gate_pass_visitors"] = "Gate Pass Visitors";
 $lang["gate_pass_portal_browser_title"] = "Port of Duqm - Gate Pass Application";
 $lang["gate_pass_request_information_section"] = "Request information";
@@ -109,6 +110,24 @@ $lang["gate_pass_rop_requests"] = "ROP Requests";
 $lang["gate_pass_rop_inbox"] = "ROP Inbox";
 $lang["gate_pass_rop_inbox_subtitle"] = "Review requests in the ROP stage, issue passes, and manage visitor blocks.";
 $lang["gate_pass_rop_no_company_scope"] = "You are not assigned to any company for ROP gate pass reviews. Ask an administrator to add you under ROP users for at least one company.";
+$lang["gate_pass_blocked_visitors"] = "Blocked Visitors";
+$lang["gate_pass_blocked_visitors_hint"] = "Track visitor ID/passport blocks, unblock decisions, and block history for future gate pass requests.";
+$lang["gate_pass_add_blocked_visitor"] = "Add blocked visitor";
+$lang["gate_pass_block_reason"] = "Block reason";
+$lang["gate_pass_block_reason_placeholder"] = "Enter the reason for blocking this visitor...";
+$lang["gate_pass_unblock"] = "Unblock";
+$lang["gate_pass_unblock_visitor"] = "Unblock visitor";
+$lang["gate_pass_unblocked"] = "Unblocked";
+$lang["gate_pass_unblocked_at"] = "Unblocked at";
+$lang["gate_pass_unblocked_by"] = "Unblocked by";
+$lang["gate_pass_unblock_reason"] = "Unblock reason";
+$lang["gate_pass_unblock_reason_placeholder"] = "Optional note explaining why this visitor is being unblocked...";
+$lang["gate_pass_block_again"] = "Block again";
+$lang["gate_pass_block_again_hint"] = "This visitor is currently unblocked. Saving this form will block the same ID/passport again.";
+$lang["gate_pass_block_history"] = "Block history";
+$lang["gate_pass_blocked_at"] = "Blocked at";
+$lang["gate_pass_unnamed_visitor"] = "Unnamed visitor";
+$lang["gate_pass_blocked_visitor_warning"] = "This visitor has been blocked. Are you sure you want to continue?";
 $lang["gate_pass_filter_requests"] = "Filter Requests";
 $lang["gate_pass_request_list"] = "Gate Pass Request List";
 $lang["gate_pass_department_inbox"] = "Department Inbox";
@@ -157,6 +176,7 @@ $lang["add_submenu_item"] = "Add Submenu Item";
 $lang["select"] = "Select";
 $lang["otp_channel"] = "OTP Channel";
 $lang["all_companies"] ="All Companies";
+$lang["ip"] = "IP";
  
 $lang["select_vendor_category"] = "Select Vendor Category";
 $lang["ptw_portal"] = "PTW Portal";
@@ -543,6 +563,7 @@ $lang["tender_requests"] = "Tender Requests";
 $lang["tender_finance_inbox"] = "Tender Finance Inbox";
 $lang["tender_committee_inbox"] = "Tender Committee Inbox";
 $lang["tender_procurement_inbox"] = "Tender Procurement Inbox";
+$lang["tender_register"] = "Tender Register";
 
 
 
@@ -573,6 +594,16 @@ $lang["tender_commercial_inbox"] = "Tender Commercial Inbox";
 
 
 $lang["tender_committee_opening_inbox"] = "Tender Committee Opening Inbox";
+
+$lang["existing_user_found_assignment_hint"] = "Existing staff user found. This form will only add the selected module assignment for this user.";
+$lang["new_user_required_assignment_hint"] = "Enter an email first. If the user does not exist, complete the user profile and password below.";
+$lang["edit_assignment_user_hint"] = "Update the assignment and user profile. Leave password blank to keep the current password.";
+$lang["password_confirm"] = "Confirm Password";
+$lang["password_no_spaces"] = "Password cannot contain spaces.";
+$lang["password_confirm_required"] = "Password confirmation is required.";
+$lang["passwords_do_not_match"] = "Password and confirmation do not match.";
+$lang["assignment_already_exists"] = "This user already has the same assignment.";
+$lang["email_belongs_to_non_staff_user"] = "This email belongs to a client or non-staff account and cannot be assigned to an internal inbox.";
 
 
 return $lang;

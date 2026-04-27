@@ -13,6 +13,31 @@ $owner_name = trim((string) ($latest_evaluation->evaluator_name ?? ''));
 if ($owner_name === '') {
     $owner_name = $latest_evaluation->evaluator_email ?? 'another evaluator';
 }
+
+$doc_button = function ($doc_id, string $label) {
+    if (empty($doc_id)) {
+        return "<span class='badge bg-light text-dark mb5'>" . esc($label) . ": missing</span>";
+    }
+
+    $preview = js_anchor(
+        "<i data-feather='eye' class='icon-14'></i> " . esc($label),
+        [
+            "title" => "Preview " . $label,
+            "class" => "btn btn-primary btn-sm mb5 me-1",
+            "data-toggle" => "app-modal",
+            "data-sidebar" => "0",
+            "data-url" => get_uri("tender_commercial_inbox/preview_bid_document/" . (int) $doc_id),
+        ]
+    );
+
+    $download = anchor(
+        get_uri("tender_commercial_inbox/download_bid_document/" . (int) $doc_id),
+        "<i data-feather='download' class='icon-14'></i>",
+        ["class" => "btn btn-default btn-sm mb5 me-1", "title" => "Download " . $label]
+    );
+
+    return "<span class='d-inline-flex flex-wrap align-items-center gap-1 me-1'>" . $preview . $download . "</span>";
+};
 ?>
 
 <div class="modal-body">
@@ -45,16 +70,17 @@ if ($owner_name === '') {
             }
             ?>
         </div>
-        <div class="col-md-4 mb10">
-            <strong>Commercial Proposal:</strong><br>
-            <?php if (!empty($bid->commercial_doc_id)) { ?>
-                <a href="<?php echo get_uri('tender_commercial_inbox/download_bid_document/' . $bid->commercial_doc_id); ?>" class="btn btn-default btn-sm mt5">
-                    <i data-feather="download" class="icon-14"></i>
-                    Download
-                </a>
-            <?php } else { ?>
-                <span class="text-off">No commercial file</span>
-            <?php } ?>
+    </div>
+
+    <div class="row mb15">
+        <div class="col-md-12">
+            <strong>Accessible Bid Documents:</strong><br>
+            <div class="mt5">
+                <?php echo $doc_button($bid->technical_doc_id ?? 0, "Technical Proposal"); ?>
+                <?php echo $doc_button($bid->commercial_unpriced_doc_id ?? 0, "Commercial Without Price"); ?>
+                <?php echo $doc_button($bid->commercial_doc_id ?? 0, "Commercial With Price"); ?>
+                <?php echo $doc_button($bid->bank_guarantee_doc_id ?? 0, "Bank Guarantee"); ?>
+            </div>
         </div>
     </div>
 

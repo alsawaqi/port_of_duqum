@@ -47,7 +47,7 @@ if ($stage === "rop")        $stage_class = "badge-soft-danger";
 if ($stage === "issued")     $stage_class = "badge-soft-success";
 
 $show_qr_section = ($status === "rop_approved" && !empty($gate_pass) && !empty($gate_pass->qr_token));
-$qr_image_url = $show_qr_section ? ("https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . urlencode($gate_pass->qr_token)) : "";
+$qr_image_url = $show_qr_section ? get_uri("gate_pass_portal/download_qr/" . (int)$request->id . "?inline=1") : "";
 
 $approval_history = $approval_history ?? [];
 $latest_return = null;

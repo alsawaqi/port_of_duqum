@@ -1,376 +1,517 @@
 <?php
-$tender_id = $tender->id ?? "";
+$tender = $tender ?? null;
+$request = $request ?? null;
+$existing_team_ids = $existing_team_ids ?? ["technical" => [], "commercial" => [], "chairman" => 0, "secretary" => 0, "itc_member" => []];
+$existing_required_codes = $existing_required_codes ?? [];
+$bid_requirement_labels = $bid_requirement_labels ?? [];
+
+$dtValue = function ($value) {
+    if (empty($value)) {
+        return "";
+    }
+    return date("Y-m-d\\TH:i", strtotime($value));
+};
 ?>
 
 <?php echo form_open(get_uri("tender_procurement_inbox/save"), ["id" => "tender-procurement-form", "class" => "general-form", "role" => "form"]); ?>
 
 <div class="modal-body clearfix">
-  <div class="container-fluid">
+    <div class="container-fluid">
+        <input type="hidden" name="tender_id" value="<?php echo (int) ($tender->id ?? 0); ?>" />
+        <input type="hidden" name="tender_request_id" value="<?php echo (int) ($request->id ?? 0); ?>" />
 
-    <input type="hidden" name="tender_request_id" value="<?php echo esc($request->id); ?>" />
-
-    <div class="row">
-      <div class="col-md-6">
-        <div><strong>Request Ref:</strong> <?php echo esc($request->reference); ?></div>
-        <div><strong>Company:</strong> <?php echo esc($request->company_name ?? "-"); ?></div>
-        <div><strong>Department:</strong> <?php echo esc($request->department_name ?? "-"); ?></div>
-        <div><strong>Requester:</strong> <?php echo esc($request->requester_name ?? "-"); ?></div>
-      </div>
-      <div class="col-md-6">
-        <div><strong>Budget (OMR):</strong> <?php echo esc($request->budget_omr); ?></div>
-        <div><strong>Fee (OMR):</strong> <?php echo esc($request->tender_fee); ?></div>
-        <div><strong>Type:</strong> <?php echo esc($request->tender_type); ?></div>
-        <div><strong>Status:</strong> <span class="badge bg-secondary"><?php echo esc($request->status); ?></span></div>
-      </div>
-    </div>
-
-    <?php if (($request->tender_type ?? "open") === "close") { ?>
-  <hr>
-  <h6>Close Tender Vendors from Request</h6>
-
-  <?php if (!empty($request_selected_vendors)) { ?>
-    <ul class="mb-2">
-      <?php foreach ($request_selected_vendors as $rv) { ?>
-        <li><?php echo esc($rv->vendor_name); ?></li>
-      <?php } ?>
-    </ul>
-    <div class="text-muted small">
-      These vendors were selected in the Tender Request. On save, Procurement will invite these vendors directly.
-      Category/Subcategory targeting becomes optional fallback.
-    </div>
-  <?php } else { ?>
-    <div class="text-muted small">
-      No vendors were selected in the Tender Request. Use category/subcategory targeting below if needed.
-    </div>
-  <?php } ?>
-<?php } ?>
-
-
-
-    <hr>
-
-
-
-
-<h5 class="mb-2">Target Vendors</h5>
-
-<div class="row">
-  <div class="col-md-6">
-    <label>Target By</label>
-    <?php echo form_dropdown(
-        "target_mode",
-        [
-          "specialty" => "Vendor Specialty",
-          "group" => "Vendor Group"
-        ],
-        $selected_target_mode ?? "specialty",
-        "class='form-control select2' id='target_mode'"
-    ); ?>
-  </div>
-</div>
-
-<div class="row mt-2" id="target-by-specialty-wrap">
-  <div class="col-md-6">
-    <label>Vendor Category</label>
-    <?php echo form_dropdown(
-        "vendor_category_id",
-        $vendor_categories_dropdown ?? ["" => "- " . app_lang("select") . " -"],
-        !empty($target_cat) ? (int)$target_cat->id : "",
-        "class='form-control select2' id='vendor_category_id'"
-    ); ?>
-  </div>
-
-  <div class="col-md-6">
-    <label>Vendor Subcategory</label>
-    <select name="vendor_sub_category_id" id="vendor_sub_category_id" class="form-control select2">
-      <option value=""><?php echo "- " . app_lang("select") . " -"; ?></option>
-    </select>
-  </div>
-</div>
-
-<div class="row mt-2" id="target-by-group-wrap" style="display:none;">
-  <div class="col-md-6">
-    <label>Vendor Group</label>
-    <?php echo form_dropdown(
-        "vendor_group_id",
-        $vendor_groups_dropdown ?? ["" => "- " . app_lang("select_vendor_group") . " -"],
-        (int) ($selected_vendor_group_id ?? 0),
-        "class='form-control select2' id='vendor_group_id'"
-    ); ?>
-    <small class="text-muted">Only approved vendors in selected group will be invited.</small>
-  </div>
-</div>
-
-<div class="mt-2">
-  <label class="form-check">
-    <input type="checkbox" class="form-check-input" name="publish_now" value="1" checked>
-    <span class="form-check-label">Publish after Save</span>
-  </label>
-</div>
-
-<script>
-  window.__target_sub_id = "<?php echo !empty($target_sub) ? (int)$target_sub->id : ""; ?>";
-</script>
-
- 
-
-<?php
-// preselect (controller passes $target_cat / $target_sub)
-if (!empty($target_cat)) { ?>
-  <script>
-    window.__target_cat = <?php echo (int)$target_cat->id; ?>;
-    window.__target_cat_text = "<?php echo esc($target_cat->name); ?>";
-  </script>
-<?php } ?>
-
-<?php if (!empty($target_sub)) { ?>
-  <script>
-    window.__target_sub = <?php echo (int)$target_sub->id; ?>;
-    window.__target_sub_text = "<?php echo esc($target_sub->name); ?>";
-  </script>
-<?php } ?>
- 
-
-<?php if (!empty($invited_vendors)) { ?>
-  <hr>
-  <h6>Invited Vendors</h6>
-  <div class="table-responsive">
-    <table class="table table-sm">
-      <thead>
-        <tr>
-          <th>Vendor</th>
-          <th>Email</th>
-          <th>Status</th>
-          <th>Invited At</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($invited_vendors as $iv) { ?>
-          <tr>
-            <td><?php echo esc($iv->vendor_name ?? "-"); ?></td>
-            <td><?php echo esc($iv->email ?? "-"); ?></td>
-            <td><span class="badge bg-secondary"><?php echo esc($iv->invite_status ?? "sent"); ?></span></td>
-            <td><?php echo esc($iv->invited_at ?? "-"); ?></td>
-          </tr>
+        <?php if (!empty($request->id)) { ?>
+            <div class="alert alert-info">
+                This tender is linked to request <strong><?php echo esc($request->reference); ?></strong>.
+                Procurement can still complete the tender setup here and publish it directly.
+            </div>
+        <?php } else { ?>
+            <div class="alert alert-info">
+                This is a procurement-led tender draft. If there is an offline internal request, upload it below as a supporting tender document.
+            </div>
         <?php } ?>
-      </tbody>
-    </table>
-  </div>
-<?php } else { ?>
-  <div class="text-muted mt-2">No invited vendors yet.</div>
-<?php } ?>
 
-    <hr>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Reference</label>
+                    <?php echo form_input([
+                        "name" => "reference",
+                        "value" => esc($tender->reference ?? $request->reference ?? ""),
+                        "class" => "form-control",
+                        "data-rule-required" => true,
+                    ]); ?>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Title</label>
+                    <?php echo form_input([
+                        "name" => "title",
+                        "value" => esc($tender->title ?? $request->subject ?? ""),
+                        "class" => "form-control",
+                        "data-rule-required" => true,
+                    ]); ?>
+                </div>
+            </div>
+        </div>
 
-    
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Company</label>
+                    <?php
+                    echo form_dropdown(
+                        "company_id",
+                        $company_dropdown ?? ["" => "- " . app_lang("select_company") . " -"],
+                        $company_id ?? "",
+                        "class='form-control select2'"
+                    );
+                    ?>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Department</label>
+                    <?php
+                    echo form_dropdown(
+                        "department_id",
+                        $department_dropdown ?? ["" => "- " . app_lang("select") . " -"],
+                        $department_id ?? "",
+                        "class='form-control select2'"
+                    );
+                    ?>
+                </div>
+            </div>
+        </div>
 
-    <div class="form-group">
-      <label>Reference (Tender)</label>
-      <?php echo form_input([
-        "name" => "reference",
-        "value" => esc($tender->reference ?? $request->reference),
-        "class" => "form-control",
-        "data-rule-required" => true,
-        "data-msg-required" => app_lang("field_required")
-      ]); ?>
-    </div>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Tender Type</label>
+                    <?php
+                    echo form_dropdown(
+                        "tender_type",
+                        ["open" => "Open", "close" => "Close"],
+                        $tender->tender_type ?? $request->tender_type ?? "open",
+                        "class='form-control select2'"
+                    );
+                    ?>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Publish After Save</label>
+                    <div class="mt10">
+                        <label class="form-check">
+                            <input type="checkbox" class="form-check-input" name="publish_now" value="1" <?php echo (($tender->status ?? "draft") === "published" ? "" : "checked"); ?>>
+                            <span class="form-check-label">Release tender immediately after saving</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    <div class="form-group">
-      <label>Title</label>
-      <?php echo form_input([
-        "name" => "title",
-        "value" => esc($tender->title ?? $request->subject),
-        "class" => "form-control",
-        "data-rule-required" => true,
-        "data-msg-required" => app_lang("field_required")
-      ]); ?>
-    </div>
+        <div class="form-group">
+            <label>Brief Description</label>
+            <textarea name="brief_description" class="form-control" rows="3"><?php echo esc($tender->brief_description ?? $request->brief_description ?? ""); ?></textarea>
+        </div>
 
-    <div class="form-group">
-      <label>Closing Date/Time</label>
-      <?php
-        $closing_val = "";
-        if (!empty($tender->closing_at)) {
-          $closing_val = date("Y-m-d\\TH:i", strtotime($tender->closing_at));
-        }
-      ?>
-      <input type="datetime-local" name="closing_at" class="form-control" value="<?php echo esc($closing_val); ?>" required />
-    </div>
+        <hr>
+        <h5 class="mb15">Milestones</h5>
 
-    <hr>
-    <h5 class="mb-2">Tender Documents</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Tender Release Date</label>
+                    <input type="datetime-local" name="release_at" class="form-control" value="<?php echo esc($dtValue($tender->release_at ?? "")); ?>">
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Last Date of Document Purchase</label>
+                    <input type="datetime-local" name="document_purchase_deadline" class="form-control" value="<?php echo esc($dtValue($tender->document_purchase_deadline ?? "")); ?>">
+                </div>
+            </div>
+        </div>
 
-    <div class="row">
-      <div class="col-md-4">
-        <label>Doc Type</label>
-        <?php echo form_dropdown("doc_type", [
-          "RFP" => "RFP",
-          "BOQ" => "BOQ",
-          "DRAWING" => "DRAWING",
-          "OTHER" => "OTHER",
-        ], "RFP", "class='form-control select2'"); ?>
-      </div>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Site Visit Date / Deadline</label>
+                    <input type="datetime-local" name="site_visit_at" class="form-control" value="<?php echo esc($dtValue($tender->site_visit_at ?? "")); ?>">
+                    <small class="text-muted">When set or changed, a site visit notice is logged for vendors in the tender communication history.</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Clarification Submission Deadline</label>
+                    <input type="datetime-local" name="clarification_deadline" class="form-control" value="<?php echo esc($dtValue($tender->clarification_deadline ?? "")); ?>">
+                </div>
+            </div>
+        </div>
 
-    
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Tender Submission Deadline</label>
+                    <input type="datetime-local" name="closing_at" class="form-control" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>" required>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Bid Opening Date</label>
+                    <input type="datetime-local" name="bid_opening_at" class="form-control" value="<?php echo esc($dtValue($tender->bid_opening_at ?? "")); ?>">
+                </div>
+            </div>
+        </div>
 
-      <div class="col-md-4">
-        <label class="d-block">&nbsp;</label>
-        <label class="form-check">
-          <input type="checkbox" class="form-check-input" name="time_limited" value="1">
-          <span class="form-check-label">Time-limited download</span>
-        </label>
-      </div>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Technical Evaluation Deadline</label>
+                    <input type="datetime-local" name="technical_eval_deadline" class="form-control" value="<?php echo esc($dtValue($tender->technical_eval_deadline ?? "")); ?>">
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Commercial Evaluation Deadline</label>
+                    <input type="datetime-local" name="commercial_eval_deadline" class="form-control" value="<?php echo esc($dtValue($tender->commercial_eval_deadline ?? "")); ?>">
+                </div>
+            </div>
+        </div>
 
-      <div class="col-md-4">
-        <label>Expires (hours)</label>
-        <?php echo form_input(["name"=>"expires_in_hours","value"=>"72","class"=>"form-control"]); ?>
-      </div>
-    </div>
+        <hr>
+        <h5 class="mb15">Team Assignment</h5>
 
-    <div class="mt-3">
-      <?php echo view("includes/multi_file_uploader", [
-        "max_files" => 10,
-        "description_placeholder" => "Document title (optional)"
-      ]); ?>
-    </div>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Technical Evaluation Team</label>
+                    <?php echo form_dropdown(
+                        "technical_user_ids[]",
+                        $technical_users_dropdown ?? [],
+                        $existing_team_ids["technical"] ?? [],
+                        "class='form-control select2' multiple='multiple'"
+                    ); ?>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Commercial Evaluation Team</label>
+                    <?php echo form_dropdown(
+                        "commercial_user_ids[]",
+                        $commercial_users_dropdown ?? [],
+                        $existing_team_ids["commercial"] ?? [],
+                        "class='form-control select2' multiple='multiple'"
+                    ); ?>
+                </div>
+            </div>
+        </div>
 
-    <?php if (!empty($docs)) { ?>
-      <hr>
-      <h6>Existing Documents</h6>
-      <div class="table-responsive">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Title</th>
-              <th>File</th>
-              <th>Size</th>
-              <th>Limited</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tender-docs-body">
-            <?php foreach ($docs as $d) { ?>
-              <tr id="doc-row-<?php echo (int)$d->id; ?>">
-                <td><?php echo esc($d->doc_type); ?></td>
-                <td><?php echo esc($d->title ?? "-"); ?></td>
-                <td><?php echo esc($d->original_name ?? "-"); ?></td>
-                <td><?php echo esc($d->size_bytes ? convert_file_size($d->size_bytes) : "-"); ?></td>
-                <td><?php echo ((int)$d->time_limited) ? ("Yes (" . (int)$d->expires_in_hours . "h)") : "No"; ?></td>
-                <td class="text-end">
-                  <a href="javascript:void(0)" class="delete-doc text-danger" data-id="<?php echo (int)$d->id; ?>">
-                    <i data-feather="trash-2" class="icon-16"></i>
-                  </a>
-                </td>
-              </tr>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Chairman</label>
+                    <?php echo form_dropdown(
+                        "chairman_user_id",
+                        ["" => "- " . app_lang("select") . " -"] + ($committee_users_dropdown ?? []),
+                        $existing_team_ids["chairman"] ?? "",
+                        "class='form-control select2'"
+                    ); ?>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Secretary</label>
+                    <?php echo form_dropdown(
+                        "secretary_user_id",
+                        ["" => "- " . app_lang("select") . " -"] + ($committee_users_dropdown ?? []),
+                        $existing_team_ids["secretary"] ?? "",
+                        "class='form-control select2'"
+                    ); ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>ITC Members</label>
+            <?php echo form_dropdown(
+                "itc_member_user_ids[]",
+                $committee_users_dropdown ?? [],
+                $existing_team_ids["itc_member"] ?? [],
+                "class='form-control select2' multiple='multiple'"
+            ); ?>
+        </div>
+
+        <hr>
+        <h5 class="mb15">Bid Submission Requirements</h5>
+        <div class="row">
+            <?php foreach ($bid_requirement_labels as $code => $label) { ?>
+                <div class="col-md-6">
+                    <label class="form-check mb10">
+                        <input type="checkbox" class="form-check-input" name="required_sections[]" value="<?php echo esc($code); ?>" <?php echo in_array($code, $existing_required_codes, true) ? "checked" : ""; ?>>
+                        <span class="form-check-label"><?php echo esc($label); ?></span>
+                    </label>
+                </div>
             <?php } ?>
-          </tbody>
-        </table>
-      </div>
-    <?php } ?>
+        </div>
 
-  </div>
+        <hr>
+        <h5 class="mb15">Target Vendors</h5>
+
+        <?php if (!empty($request_selected_vendors)) { ?>
+            <div class="alert alert-light">
+                Close tender vendors from request:
+                <?php echo esc(implode(", ", array_map(fn($v) => $v->vendor_name ?? "-", $request_selected_vendors))); ?>
+            </div>
+        <?php } ?>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Target By</label>
+                    <?php echo form_dropdown(
+                        "target_mode",
+                        ["specialty" => "Vendor Specialty", "group" => "Vendor Group"],
+                        $selected_target_mode ?? "specialty",
+                        "class='form-control select2' id='target_mode'"
+                    ); ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="target-by-specialty-wrap">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Vendor Category</label>
+                    <?php echo form_dropdown(
+                        "vendor_category_id",
+                        $vendor_categories_dropdown ?? ["" => "- " . app_lang("select") . " -"],
+                        !empty($target_cat->id) ? (int) $target_cat->id : "",
+                        "class='form-control select2' id='vendor_category_id'"
+                    ); ?>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Vendor Subcategory</label>
+                    <select name="vendor_sub_category_id" id="vendor_sub_category_id" class="form-control select2">
+                        <option value=""><?php echo "- " . app_lang("select") . " -"; ?></option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="target-by-group-wrap" style="display:none;">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Vendor Group</label>
+                    <?php echo form_dropdown(
+                        "vendor_group_id",
+                        $vendor_groups_dropdown ?? ["" => "- " . app_lang("select_vendor_group") . " -"],
+                        (int) ($selected_vendor_group_id ?? 0),
+                        "class='form-control select2' id='vendor_group_id'"
+                    ); ?>
+                </div>
+            </div>
+        </div>
+
+        <?php if (!empty($invited_vendors)) { ?>
+            <div class="table-responsive mb15">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Vendor</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Invited At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($invited_vendors as $vendor) { ?>
+                            <tr>
+                                <td><?php echo esc($vendor->vendor_name ?? "-"); ?></td>
+                                <td><?php echo esc($vendor->email ?? "-"); ?></td>
+                                <td><?php echo esc($vendor->invite_status ?? "-"); ?></td>
+                                <td><?php echo esc($vendor->invited_at ?? "-"); ?></td>
+                            </tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php } ?>
+
+        <hr>
+        <h5 class="mb15">Tender Documents</h5>
+
+        <div class="alert alert-light">
+            Add each tender document separately and choose its document type. Vendors will see all uploaded documents in the tender portal.
+        </div>
+
+        <button type="button" class="btn btn-default btn-sm mb10 tender-add-document-file">
+            <i data-feather="plus-circle" class="icon-14"></i> Add Document File
+        </button>
+
+        <div class="mt-3">
+            <?php
+            $document_extra_fields = '
+                <div class="row mt10 tender-document-file-meta">
+                    <div class="col-md-4">
+                        <label class="small text-muted mb5">Document Type</label>
+                        <select class="form-control" data-name-template="doc_type___SERIAL__">
+                            <option value="RFP">RFP</option>
+                            <option value="BOQ">BOQ</option>
+                            <option value="DRAWING">DRAWING</option>
+                            <option value="SUPPORTING">SUPPORTING</option>
+                            <option value="OTHER">OTHER</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="small text-muted mb5">Download Access</label>
+                        <label class="form-check mt5">
+                            <input type="checkbox" class="form-check-input" value="1" data-name-template="time_limited___SERIAL__">
+                            <span class="form-check-label">Time-limited</span>
+                        </label>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="small text-muted mb5">Expires (hours)</label>
+                        <input type="number" min="1" step="1" value="72" class="form-control" data-name-template="expires_in_hours___SERIAL__">
+                    </div>
+                </div>';
+
+            echo view("includes/multi_file_uploader", [
+                "max_files" => 10,
+                "description_placeholder" => "Document title (optional)",
+                "file_preview_extra_fields" => $document_extra_fields
+            ]); ?>
+        </div>
+
+        <?php if (!empty($docs)) { ?>
+            <hr>
+            <h6>Existing Documents</h6>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Title</th>
+                            <th>File</th>
+                            <th>Size</th>
+                            <th>Limited</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($docs as $doc) { ?>
+                            <tr id="doc-row-<?php echo (int) $doc->id; ?>">
+                                <td><?php echo esc($doc->doc_type); ?></td>
+                                <td><?php echo esc($doc->title ?? "-"); ?></td>
+                                <td><?php echo esc($doc->original_name ?? "-"); ?></td>
+                                <td><?php echo esc($doc->size_bytes ? convert_file_size($doc->size_bytes) : "-"); ?></td>
+                                <td><?php echo ((int) $doc->time_limited) ? ("Yes (" . (int) $doc->expires_in_hours . "h)") : "No"; ?></td>
+                                <td class="text-end">
+                                    <?php
+                                    echo js_anchor(
+                                        "<i data-feather='x' class='icon-16'></i>",
+                                        [
+                                            "title" => app_lang("delete"),
+                                            "class" => "delete-doc",
+                                            "data-id" => $doc->id,
+                                            "data-action-url" => get_uri("tender_procurement_inbox/delete_document"),
+                                        ]
+                                    );
+                                    ?>
+                                </td>
+                            </tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php } ?>
+    </div>
 </div>
 
 <div class="modal-footer">
-  <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
-  <button type="submit" class="btn btn-primary"><?php echo app_lang("save"); ?></button>
+    <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
+    <button type="submit" class="btn btn-primary"><?php echo !empty($tender->id) ? "Save Tender" : "Create Tender"; ?></button>
 </div>
 
 <?php echo form_close(); ?>
- 
-
 
 <script>
 $(document).ready(function () {
-  function tryParseResponse(res) {
-    if (typeof res === "object") {
-      return res;
-    }
-    try {
-      return JSON.parse(res);
-    } catch (e) {
-      return {success: false, message: "Unexpected server response."};
-    }
-  }
-
-  // init Select2 in modal (once)
-  $("#tender-procurement-form .select2").select2();
-
-  function loadSubCategories(catId, selectedSubId) {
-    $("#vendor_sub_category_id").html("<option value=''>- <?php echo app_lang('select'); ?> -</option>");
-
-    if (!catId) {
-      $("#vendor_sub_category_id").trigger("change");
-      return;
+    function toggleTargetMode() {
+        var mode = $("#target_mode").val();
+        $("#target-by-specialty-wrap").toggle(mode === "specialty");
+        $("#target-by-group-wrap").toggle(mode === "group");
     }
 
-    $.get("<?php echo_uri('tender_procurement_inbox/get_vendor_sub_categories_dropdown'); ?>",
-      { vendor_category_id: catId }
-    ).done(function (html) {
-      $("#vendor_sub_category_id").html(html);
+    function loadSubcategories() {
+        var categoryId = $("#vendor_category_id").val();
+        var selectedId = "<?php echo !empty($target_sub->id) ? (int) $target_sub->id : ""; ?>";
+        $("#vendor_sub_category_id").load("<?php echo get_uri('tender_procurement_inbox/get_vendor_sub_categories_dropdown'); ?>?vendor_category_id=" + categoryId, function () {
+            if (selectedId) {
+                $("#vendor_sub_category_id").val(selectedId).trigger("change");
+            }
+        });
+    }
 
-      if (selectedSubId) {
-        $("#vendor_sub_category_id").val(String(selectedSubId)).trigger("change");
-      } else {
-        $("#vendor_sub_category_id").trigger("change");
-      }
+    toggleTargetMode();
+    $("#target_mode").on("change", toggleTargetMode);
+    $("#vendor_category_id").on("change", loadSubcategories);
+    if ($("#vendor_category_id").val()) {
+        loadSubcategories();
+    }
+
+    function openTenderDocumentChooser() {
+        var dropzoneElement = document.getElementById("file-upload-dropzone");
+        var dropzoneInstance = dropzoneElement && dropzoneElement.dropzone ? dropzoneElement.dropzone : null;
+
+        if (dropzoneInstance && dropzoneInstance.hiddenFileInput) {
+            dropzoneInstance.hiddenFileInput.click();
+            return;
+        }
+
+        var fallbackInput = document.querySelector("#file-upload-dropzone input[type='file'], .dz-hidden-input");
+        if (fallbackInput) {
+            fallbackInput.click();
+            return;
+        }
+
+        $("#file-upload-dropzone").trigger("click");
+    }
+
+    $(".tender-add-document-file").on("click", function (event) {
+        event.preventDefault();
+        openTenderDocumentChooser();
     });
-  }
 
-  // change category -> reload subcategories
-  $("#vendor_category_id").on("change", function () {
-    loadSubCategories($(this).val(), "");
-  });
-
-  // preload on edit
-  var initialCat = $("#vendor_category_id").val();
-  if (initialCat) {
-    loadSubCategories(initialCat, window.__target_sub_id || "");
-  }
-
-  function toggleTargetMode() {
-    var mode = $("#target_mode").val() || "specialty";
-
-    if (mode === "group") {
-      $("#target-by-group-wrap").show();
-      $("#target-by-specialty-wrap").hide();
-      $("#vendor_category_id").val("").trigger("change");
-      $("#vendor_sub_category_id").val("").trigger("change");
-    } else {
-      $("#target-by-specialty-wrap").show();
-      $("#target-by-group-wrap").hide();
-      $("#vendor_group_id").val("").trigger("change");
-    }
-  }
-
-  $("#target_mode").on("change", toggleTargetMode);
-  toggleTargetMode();
-
-  $("#tender-procurement-form").appForm({
-    onSuccess: function (result) {
-      $("#tender-procurement-inbox-table").appTable({reload: true});
-      appAlert.success(result.message || "Saved", {duration: 3000});
-    }
-  });
-
-  $(document).on("click", ".delete-doc", function () {
-    var id = $(this).attr("data-id");
-    appLoader.show();
-    $.post("<?php echo_uri('tender_procurement_inbox/delete_document'); ?>", {id: id}, function (res) {
-      appLoader.hide();
-      var r = tryParseResponse(res);
-      if (r.success) {
-        $("#doc-row-" + id).remove();
-        appAlert.success(r.message, {duration: 3000});
-      } else {
-        appAlert.error(r.message || "Error", {duration: 3000});
-      }
-    }).fail(function () {
-      appLoader.hide();
-      appAlert.error("Request failed. Please try again.", {duration: 3000});
+    $("#tender-procurement-form").appForm({
+        onSuccess: function () {
+            $("#tender-procurement-inbox-table").appTable({reload: true});
+        }
     });
-  });
 
+    $(document).on("click", ".delete-doc", function () {
+        var id = $(this).attr("data-id");
+        var actionUrl = $(this).attr("data-action-url");
+        appLoader.show();
+        $.post(actionUrl, {id: id}, function (res) {
+            appLoader.hide();
+            if (res && res.success) {
+                $("#doc-row-" + id).remove();
+            } else {
+                appAlert.error((res && res.message) || "Unable to delete document.", {duration: 3000});
+            }
+        }, "json").fail(function () {
+            appLoader.hide();
+            appAlert.error("Unable to delete document.", {duration: 3000});
+        });
+    });
+
+    if (typeof feather !== "undefined") {
+        feather.replace();
+    }
 });
 </script>

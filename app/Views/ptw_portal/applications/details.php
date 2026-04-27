@@ -75,6 +75,9 @@ $format_audit_meta = static function ($meta) use ($format_meta_value): string {
         <?php if (!empty($can_edit)) {
             echo anchor(get_uri("ptw_portal/application_form/" . $app->id), "<i data-feather='edit' class='icon-14'></i> Edit", ["class" => "btn btn-primary"]);
         } ?>
+        <?php if (!empty($can_download_final_permit)) {
+            echo anchor(get_uri("ptw_portal/download_final_permit/" . $app->id), "<i data-feather='file-text' class='icon-14'></i> Issued Permit", ["class" => "btn btn-success", "target" => "_blank", "rel" => "noopener"]);
+        } ?>
     </div>
 </div>
 
@@ -147,7 +150,7 @@ $format_audit_meta = static function ($meta) use ($format_meta_value): string {
 
     <div class="col-md-4">
         <div class="card mb-3">
-            <div class="card-header"><h4 class="mb-0">Audit Trail</h4></div>
+            <div class="card-header"><h4 class="mb-0">PTW Approval Flow</h4></div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
                     <?php foreach (($audit_logs ?? []) as $log) { ?>

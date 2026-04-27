@@ -211,7 +211,7 @@ ALTER TABLE `pod_tender_request_approvals`
   CREATE TABLE `pod_tender_bid_openings` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `tender_id` bigint(20) UNSIGNED NOT NULL,
-  `stage` enum('commercial') NOT NULL DEFAULT 'commercial',
+  `stage` enum('technical','commercial') NOT NULL DEFAULT 'commercial',
   `status` enum('pending','codes_generated','unlocked','expired') NOT NULL DEFAULT 'pending',
   `chairman_code` varchar(20) DEFAULT NULL,
   `secretary_code` varchar(20) DEFAULT NULL,
@@ -255,22 +255,14 @@ CREATE TABLE `pod_tender_bid_opening_entries` (
 
 
 ALTER TABLE `pod_tenders`
-ADD COLUMN `workflow_stage` ENUM(
+MODIFY COLUMN `workflow_stage` ENUM(
   'bidding',
+  'technical_3key',
   'technical',
   'committee_3key',
   'commercial',
   'award_decision'
-) NOT NULL DEFAULT 'bidding' AFTER `status`,
-ADD COLUMN `technical_start_at` DATETIME NULL AFTER `closing_at`,
-ADD COLUMN `technical_end_at` DATETIME NULL AFTER `technical_start_at`,
-ADD COLUMN `technical_locked_at` DATETIME NULL AFTER `technical_end_at`,
-ADD COLUMN `committee_3key_start_at` DATETIME NULL AFTER `technical_locked_at`,
-ADD COLUMN `committee_3key_end_at` DATETIME NULL AFTER `committee_3key_start_at`,
-ADD COLUMN `commercial_start_at` DATETIME NULL AFTER `committee_3key_end_at`,
-ADD COLUMN `commercial_end_at` DATETIME NULL AFTER `commercial_start_at`,
-ADD COLUMN `commercial_unlocked_at` DATETIME NULL AFTER `commercial_end_at`,
-ADD COLUMN `award_ready_at` DATETIME NULL AFTER `commercial_unlocked_at`;
+) NOT NULL DEFAULT 'bidding' AFTER `status`;
 
 
 

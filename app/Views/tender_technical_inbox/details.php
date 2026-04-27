@@ -1,3 +1,57 @@
+<?php
+$tender_document_actions = function ($doc) {
+    $doc_id = (int) ($doc->id ?? 0);
+    if (!$doc_id) {
+        return "";
+    }
+
+    $preview = js_anchor(
+        "<i data-feather='eye' class='icon-14'></i> Preview",
+        [
+            "title" => "Preview Document",
+            "class" => "btn btn-primary btn-sm mb5 me-1",
+            "data-toggle" => "app-modal",
+            "data-sidebar" => "0",
+            "data-url" => get_uri("tender_technical_inbox/preview_tender_document/" . $doc_id),
+        ]
+    );
+
+    $download = anchor(
+        get_uri("tender_technical_inbox/download_tender_document/" . $doc_id),
+        "<i data-feather='download' class='icon-14'></i> Download",
+        ["class" => "btn btn-default btn-sm mb5"]
+    );
+
+    return "<div class='d-flex flex-wrap gap-1'>" . $preview . $download . "</div>";
+};
+
+$technical_bid_document_actions = function ($doc_id) {
+    $doc_id = (int) $doc_id;
+    if (!$doc_id) {
+        return "<span class='text-off'>No technical file</span>";
+    }
+
+    $preview = js_anchor(
+        "<i data-feather='eye' class='icon-14'></i> Preview",
+        [
+            "title" => "Preview Technical Proposal",
+            "class" => "btn btn-primary btn-sm mb5 me-1",
+            "data-toggle" => "app-modal",
+            "data-sidebar" => "0",
+            "data-url" => get_uri("tender_technical_inbox/preview_bid_document/" . $doc_id),
+        ]
+    );
+
+    $download = anchor(
+        get_uri("tender_technical_inbox/download_bid_document/" . $doc_id),
+        "<i data-feather='download' class='icon-14'></i> Download",
+        ["class" => "btn btn-default btn-sm mb5"]
+    );
+
+    return "<div class='d-flex flex-wrap gap-1'>" . $preview . $download . "</div>";
+};
+?>
+
 <div id="page-content" class="page-wrapper clearfix gp-pro-page">
     <div class="mb15">
         <a href="<?php echo get_uri('tender_technical_inbox'); ?>" class="btn btn-default">
@@ -41,6 +95,44 @@
 
     <div class="card gp-pro-card mb15">
         <div class="card-header">
+            <h4 class="mb0">Tender Documents</h4>
+        </div>
+        <div class="card-body p0">
+            <div class="table-responsive gp-pro-table-shell">
+                <table class="table table-bordered table-striped mb0">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Title</th>
+                            <th>File</th>
+                            <th>Size</th>
+                            <th class="text-center" style="width: 210px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($tender_documents)) { ?>
+                            <tr>
+                                <td colspan="5" class="text-center text-off p20">No tender documents uploaded.</td>
+                            </tr>
+                        <?php } else { ?>
+                            <?php foreach ($tender_documents as $doc) { ?>
+                                <tr>
+                                    <td><?php echo esc($doc->doc_type ?? "-"); ?></td>
+                                    <td><?php echo esc($doc->title ?? "-"); ?></td>
+                                    <td><?php echo esc($doc->original_name ?? "-"); ?></td>
+                                    <td><?php echo !empty($doc->size_bytes) ? esc(convert_file_size($doc->size_bytes)) : "-"; ?></td>
+                                    <td class="text-center"><?php echo $tender_document_actions($doc); ?></td>
+                                </tr>
+                            <?php } ?>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card gp-pro-card mb15">
+        <div class="card-header">
             <h4 class="mb0">Bids Pending Your Action</h4>
         </div>
         <div class="card-body p0">
@@ -66,14 +158,7 @@
                                     <td><?php echo esc($bid->vendor_name ?? '-'); ?></td>
                                     <td><?php echo !empty($bid->submitted_at) ? format_to_datetime($bid->submitted_at) : '-'; ?></td>
                                     <td>
-                                        <?php if (!empty($bid->technical_doc_id)) { ?>
-                                            <a href="<?php echo get_uri('tender_technical_inbox/download_bid_document/' . $bid->technical_doc_id); ?>" class="btn btn-default btn-sm">
-                                                <i data-feather="download" class="icon-14"></i>
-                                                Download
-                                            </a>
-                                        <?php } else { ?>
-                                            <span class="text-off">No technical file</span>
-                                        <?php } ?>
+                                        <?php echo $technical_bid_document_actions($bid->technical_doc_id ?? 0); ?>
                                     </td>
                                     <td><span class="badge bg-warning text-dark">Pending</span></td>
                                     <td class="text-center">
@@ -110,13 +195,14 @@
                             <th>Decision</th>
                             <th>Total Score</th>
                             <th>Finalized At</th>
+                            <th>Technical Document</th>
                             <th class="text-center" style="width: 120px;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($my_finalized_bids)) { ?>
                             <tr>
-                                <td colspan="5" class="text-center text-off p20">You have not finalized any bid in this tender yet.</td>
+                                <td colspan="6" class="text-center text-off p20">You have not finalized any bid in this tender yet.</td>
                             </tr>
                         <?php } else { ?>
                             <?php foreach ($my_finalized_bids as $bid) {
@@ -127,6 +213,7 @@
                                     <td><span class="badge <?php echo $decision_class; ?>"><?php echo esc(ucfirst($bid->status ?? '-')); ?></span></td>
                                     <td><?php echo $bid->decision_total_score !== null ? number_format((float) $bid->decision_total_score, 3) : '-'; ?></td>
                                     <td><?php echo !empty($bid->decision_submitted_at) ? format_to_datetime($bid->decision_submitted_at) : '-'; ?></td>
+                                    <td><?php echo $technical_bid_document_actions($bid->technical_doc_id ?? 0); ?></td>
                                     <td class="text-center">
                                         <?php echo modal_anchor(
                                             get_uri('tender_technical_inbox/bid_modal_form'),
@@ -161,13 +248,14 @@
                             <th>Decision</th>
                             <th>Finalized By</th>
                             <th>Finalized At</th>
+                            <th>Technical Document</th>
                             <th class="text-center" style="width: 120px;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($locked_bids)) { ?>
                             <tr>
-                                <td colspan="5" class="text-center text-off p20">No bids are locked by other evaluators.</td>
+                                <td colspan="6" class="text-center text-off p20">No bids are locked by other evaluators.</td>
                             </tr>
                         <?php } else { ?>
                             <?php foreach ($locked_bids as $bid) {
@@ -182,6 +270,7 @@
                                     <td><span class="badge <?php echo $decision_class; ?>"><?php echo esc(ucfirst($bid->status ?? '-')); ?></span></td>
                                     <td><?php echo esc($who); ?></td>
                                     <td><?php echo !empty($bid->decision_submitted_at) ? format_to_datetime($bid->decision_submitted_at) : '-'; ?></td>
+                                    <td><?php echo $technical_bid_document_actions($bid->technical_doc_id ?? 0); ?></td>
                                     <td class="text-center">
                                         <?php echo modal_anchor(
                                             get_uri('tender_technical_inbox/bid_modal_form'),

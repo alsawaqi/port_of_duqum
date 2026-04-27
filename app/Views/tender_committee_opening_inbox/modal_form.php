@@ -1,15 +1,16 @@
 <div class="modal-body">
-    <h5 class="mb-3">3-Key Commercial Opening</h5>
+    <h5 class="mb-3"><?php echo esc($opening_title ?? "3-Key Bid Opening"); ?></h5>
 
     <div><strong>Reference:</strong> <?php echo esc($tender->reference ?? "-"); ?></div>
     <div><strong>Title:</strong> <?php echo esc($tender->title ?? "-"); ?></div>
+    <div><strong>Opening Stage:</strong> <?php echo esc(ucfirst($opening_stage ?? "commercial")); ?></div>
     <div><strong>Your Role:</strong> <?php echo esc(ucwords(str_replace("_", " ", $my_role ?? "-"))); ?></div>
 
     <hr>
 
     <?php if (!$session) { ?>
         <div class="alert alert-warning">No active opening session exists yet.</div>
-        <button type="button" class="btn btn-primary" id="generate-3key-btn" data-tender-id="<?php echo (int) $tender->id; ?>">
+        <button type="button" class="btn btn-primary" id="generate-3key-btn" data-tender-id="<?php echo (int) $tender->id; ?>" data-opening-stage="<?php echo esc($opening_stage ?? "commercial"); ?>">
             Generate 3-Key Codes
         </button>
     <?php } else { ?>
@@ -36,6 +37,7 @@
 
         <?php echo form_open(get_uri("tender_committee_opening_inbox/confirm_codes"), ["id" => "tender-3key-confirm-form", "class" => "general-form"]); ?>
         <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+        <input type="hidden" name="opening_stage" value="<?php echo esc($opening_stage ?? "commercial"); ?>" />
 
         <div class="form-group">
             <label>Chairman Code</label>
@@ -77,7 +79,8 @@ $(document).ready(function () {
     $("#generate-3key-btn").on("click", function () {
         appLoader.show();
         $.post('<?php echo_uri("tender_committee_opening_inbox/generate_codes"); ?>', {
-            tender_id: $(this).data("tender-id")
+            tender_id: $(this).data("tender-id"),
+            opening_stage: $(this).data("opening-stage")
         }, function (res) {
             appLoader.hide();
             var r = tryParseResponse(res);

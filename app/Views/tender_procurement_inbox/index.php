@@ -1,104 +1,93 @@
 <div id="page-content" class="page-wrapper clearfix gp-pro-page">
-  <div class="card gp-pro-card">
-    <div class="page-title clearfix">
-      <h1><?php echo app_lang("tender_procurement_inbox"); ?></h1>
-    </div>
+    <div class="card gp-pro-card">
+        <div class="page-title clearfix">
+            <h1><?php echo app_lang("tender_procurement_inbox"); ?></h1>
+            <div class="title-button-group">
+                <?php
+                echo anchor(
+                    get_uri("tender_clarifications"),
+                    "<i data-feather='message-square' class='icon-16'></i> Clarifications",
+                    ["class" => "btn btn-default"]
+                );
+                echo anchor(
+                    get_uri("tender_reports"),
+                    "<i data-feather='bar-chart-2' class='icon-16'></i> Tender Register",
+                    ["class" => "btn btn-default"]
+                );
+                ?>
+                <?php
+                echo anchor(
+                    get_uri("tender_procurement_inbox/form"),
+                    "<i data-feather='plus-circle' class='icon-16'></i> New Tender",
+                    ["class" => "btn btn-default", "title" => "Create Tender"]
+                );
+                ?>
+            </div>
+        </div>
 
-    <div class="table-responsive gp-pro-table-shell">
-      <table id="tender-procurement-inbox-table" class="display" cellspacing="0" width="100%"></table>
+        <div class="table-responsive gp-pro-table-shell">
+            <table id="tender-procurement-inbox-table" class="display" cellspacing="0" width="100%"></table>
+        </div>
     </div>
-  </div>
 </div>
 
 <script>
 $(document).ready(function () {
-  function tryParseResponse(res) {
-    if (typeof res === "object") {
-      return res;
+    function reloadTable() {
+        $("#tender-procurement-inbox-table").appTable({reload: true});
     }
-    try {
-      return JSON.parse(res);
-    } catch (e) {
-      return {success: false, message: "Unexpected server response."};
+
+    function postAction($el, payload) {
+        appLoader.show();
+        $.post($el.attr("data-action-url"), payload, function (res) {
+            appLoader.hide();
+            if (res && res.success) {
+                reloadTable();
+                appAlert.success(res.message || "Done", {duration: 3000});
+            } else {
+                appAlert.error((res && res.message) || "Request failed.", {duration: 3000});
+            }
+        }, "json").fail(function () {
+            appLoader.hide();
+            appAlert.error("Request failed. Please try again.", {duration: 3000});
+        });
     }
-  }
 
-  function reloadTable() {
-    $("#tender-procurement-inbox-table").appTable({reload: true});
-  }
-
-  $("#tender-procurement-inbox-table").appTable({
-    source: '<?php echo_uri("tender_procurement_inbox/list_data"); ?>',
-    columns: [
-      {title: "Reference"},
-      {title: "Subject"},
-      {title: "Company"},
-      {title: "Department"},
-      {title: "Type"},
-      {title: "Req Status"},
-      {title: "Tender Status"},
-      {title: "Closing At"},
-      {title: '<i data-feather="menu" class="icon-16"></i>', class: "text-center option w120"}
-    ]
-  });
-
-  $(document).on("click", ".publish", function () {
-    var $el = $(this);
-    var requestId = $el.attr("data-request-id");
-
-    appLoader.show();
-    $.post($el.attr("data-action-url"), {tender_request_id: requestId}, function (res) {
-      appLoader.hide();
-      var r = tryParseResponse(res);
-      if (r.success) {
-        reloadTable();
-        appAlert.success(r.message, {duration: 3000});
-      } else {
-        appAlert.error(r.message || "Error", {duration: 3000});
-      }
-    }).fail(function () {
-      appLoader.hide();
-      appAlert.error("Request failed. Please try again.", {duration: 3000});
+    $("#tender-procurement-inbox-table").appTable({
+        source: '<?php echo_uri("tender_procurement_inbox/list_data"); ?>',
+        columns: [
+            {title: "Reference"},
+            {title: "Subject"},
+            {title: "Company"},
+            {title: "Department"},
+            {title: "Type"},
+            {title: "Request Source"},
+            {title: "Tender Status"},
+            {title: "Submission Deadline"},
+            {title: '<i data-feather="menu" class="icon-16"></i>', class: "text-center option w150"}
+        ]
     });
-  });
 
-  function postTenderAction($el, successReloadSelector) {
-    var tenderId = $el.attr("data-tender-id");
-    appLoader.show();
-    $.post($el.attr("data-action-url"), {tender_id: tenderId}, function (res) {
-      appLoader.hide();
-      var r = tryParseResponse(res);
-      if (r.success) {
-        $(successReloadSelector).appTable({reload: true});
-        appAlert.success(r.message || "Done", {duration: 3000});
-      } else {
-        appAlert.error(r.message || "Error", {duration: 3000});
-      }
-    }).fail(function () {
-      appLoader.hide();
-      appAlert.error("Request failed. Please try again.", {duration: 3000});
+    $(document).on("click", ".publish", function () {
+        postAction($(this), {tender_id: $(this).attr("data-tender-id")});
     });
-  }
 
-  $(document).on("click", ".award", function () {
-    if (!confirm("Finalize this tender as awarded?")) {
-      return;
-    }
-    postTenderAction($(this), "#tender-procurement-inbox-table");
-  });
+    $(document).on("click", ".award", function () {
+        if (confirm("Finalize this tender as awarded?")) {
+            postAction($(this), {tender_id: $(this).attr("data-tender-id")});
+        }
+    });
 
-  $(document).on("click", ".cancel-tender", function () {
-    if (!confirm("Cancel this tender?")) {
-      return;
-    }
-    postTenderAction($(this), "#tender-procurement-inbox-table");
-  });
+    $(document).on("click", ".cancel-tender", function () {
+        if (confirm("Cancel this tender?")) {
+            postAction($(this), {tender_id: $(this).attr("data-tender-id")});
+        }
+    });
 
-  $(document).on("click", ".retender", function () {
-    if (!confirm("Create a new retender draft from this tender?")) {
-      return;
-    }
-    postTenderAction($(this), "#tender-procurement-inbox-table");
-  });
+    $(document).on("click", ".retender", function () {
+        if (confirm("Create a new retender draft from this tender?")) {
+            postAction($(this), {tender_id: $(this).attr("data-tender-id")});
+        }
+    });
 });
 </script>

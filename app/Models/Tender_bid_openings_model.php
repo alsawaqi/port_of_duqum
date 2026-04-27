@@ -96,8 +96,12 @@ class Tender_bid_openings_model extends Crud_model
         return !!$row;
     }
 
-    public function create_new_session(int $tender_id, int $actor_id): int
+    public function create_new_session(int $tender_id, int $actor_id, string $stage = "commercial"): int
     {
+        if (!in_array($stage, ["technical", "commercial"], true)) {
+            $stage = "commercial";
+        }
+
         $tbo = $this->db->prefixTable("tender_bid_openings");
         $now = $this->get_tender_business_now();
         $expires = Time::parse($now, 'Asia/Muscat')->addMinutes(5)->toDateTimeString();
@@ -107,14 +111,14 @@ class Tender_bid_openings_model extends Crud_model
              SET status='expired', updated_at=?
              WHERE deleted=0
                AND tender_id=?
-               AND stage='commercial'
+               AND stage=?
                AND status='codes_generated'",
-            [$now, $tender_id]
+            [$now, $tender_id, $stage]
         );
 
         $data = [
             "tender_id"       => $tender_id,
-            "stage"           => "commercial",
+            "stage"           => $stage,
             "status"          => "codes_generated",
             "chairman_code"   => (string) random_int(100000, 999999),
             "secretary_code"  => (string) random_int(100000, 999999),

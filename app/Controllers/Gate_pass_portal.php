@@ -13,6 +13,7 @@ use App\Models\Gate_pass_rop_users_model;
 use App\Models\Gate_pass_fee_rules_model;
 use App\Models\Gate_passes_model;
 use App\Models\Gate_pass_scan_log_model;
+use App\Models\Gate_pass_blocked_visitors_model;
 use App\Libraries\Pdf;
 
 class Gate_pass_portal extends Security_Controller
@@ -28,6 +29,7 @@ class Gate_pass_portal extends Security_Controller
     protected $Gate_passes_model;
     protected $Gate_pass_fee_rules_model;
     protected $Gate_pass_scan_log_model;
+    protected $Gate_pass_blocked_visitors_model;
 
     function __construct()
     {
@@ -53,6 +55,7 @@ class Gate_pass_portal extends Security_Controller
 
         $this->Gate_passes_model = new Gate_passes_model();
         $this->Gate_pass_scan_log_model = new Gate_pass_scan_log_model();
+        $this->Gate_pass_blocked_visitors_model = new Gate_pass_blocked_visitors_model();
     }
 
     private function _require_gate_pass_access()
@@ -1031,15 +1034,15 @@ function calc_fee_preview()
             app_redirect("forbidden");
         }
 
-        $qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" . urlencode($gate_pass->qr_token);
-        $img = @file_get_contents($qr_url);
-        if ($img === false) {
+        $img = $this->_gate_pass_qr_png((string) $gate_pass->qr_token, 8);
+        if ($img === "") {
             app_redirect("forbidden");
         }
 
-        $this->_audit_gate_pass_print((int)$gate_pass->id, "download_png");
+        $inline = (int) $this->request->getGet("inline") === 1;
+        $this->_audit_gate_pass_print((int)$gate_pass->id, $inline ? "view_png" : "download_png");
         $this->response->setHeader("Content-Type", "image/png");
-        $this->response->setHeader("Content-Disposition", "attachment; filename=\"gate-pass-qr-" . (int)$request_id . ".png\"");
+        $this->response->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . "; filename=\"gate-pass-qr-" . (int)$request_id . ".png\"");
         return $this->response->setBody($img);
     }
 
@@ -1097,6 +1100,25 @@ function calc_fee_preview()
      * @param list<object> $visitors
      * @param list<object> $vehicles
      */
+    private function _gate_pass_qr_png(string $token, int $scale = 6): string
+    {
+        $token = trim($token);
+        if ($token === "") {
+            return "";
+        }
+
+        require_once APPPATH . "ThirdParty/tcpdf/tcpdf_barcodes_2d.php";
+
+        try {
+            $barcode = new \TCPDF2DBarcode($token, "QRCODE,H");
+            $png = $barcode->getBarcodePngData($scale, $scale, [0, 0, 0]);
+            return is_string($png) ? $png : "";
+        } catch (\Throwable $e) {
+            log_message("error", "Gate pass QR generation failed: " . $e->getMessage());
+            return "";
+        }
+    }
+
     private function _gate_pass_pdf_html($request, $gate_pass, array $visitors, array $vehicles): string
     {
         $h = static function ($v): string {
@@ -1118,10 +1140,9 @@ function calc_fee_preview()
             $feeDisp = $h(app_lang("waived"));
         }
 
-        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . urlencode((string)$gate_pass->qr_token);
-        $qrImg = @file_get_contents($qrUrl);
+        $qrImg = $this->_gate_pass_qr_png((string) $gate_pass->qr_token, 5);
         $qrTag = "";
-        if ($qrImg !== false && $qrImg !== "") {
+        if ($qrImg !== "") {
             $qrTag = '<img src="data:image/png;base64,' . base64_encode($qrImg) . '" width="120" height="120" alt="QR" />';
         }
 
@@ -1515,6 +1536,27 @@ HTML;
         echo json_encode(["data" => $result]);
     }
 
+    function check_blocked_visitor()
+    {
+        $id_number = trim((string) ($this->request->getGet("id_number") ?: $this->request->getPost("id_number")));
+        $blocked = $this->Gate_pass_blocked_visitors_model->find_active_by_id_number($id_number);
+
+        if (!$blocked) {
+            return $this->response->setJSON(["blocked" => false]);
+        }
+
+        return $this->response->setJSON([
+            "blocked" => true,
+            "message" => $this->_blocked_visitor_warning_message($blocked),
+            "visitor" => [
+                "id_number" => $blocked->id_number,
+                "visitor_name" => $blocked->visitor_name,
+                "reason" => $blocked->reason,
+                "blocked_at" => $blocked->blocked_at ? format_to_datetime($blocked->blocked_at) : "",
+            ],
+        ]);
+    }
+
     function visitor_modal_form()
     {
         $this->validate_submitted_data([
@@ -1588,17 +1630,55 @@ HTML;
             return;
         }
 
+        $id_number = trim((string) $this->request->getPost("id_number"));
+        $blocked_record = $this->Gate_pass_blocked_visitors_model->find_active_by_id_number($id_number);
+        $blocked_acknowledged = (int) ($this->request->getPost("blocked_visitor_acknowledged") ?? 0) === 1;
+        if ($blocked_record && !$blocked_acknowledged) {
+            echo json_encode([
+                "success" => false,
+                "blocked_visitor" => true,
+                "message" => $this->_blocked_visitor_warning_message($blocked_record),
+            ]);
+            return;
+        }
+
         $data = [
             "gate_pass_request_id" => $request_id,
             "full_name" => $this->request->getPost("full_name"),
             "id_type" => $this->request->getPost("id_type"),
-            "id_number" => $this->request->getPost("id_number"),
+            "id_number" => $id_number,
             "nationality" => $nationality,
             "phone" => $phone,
             "visitor_company" => $visitor_company,
             "role" => $role,
             "is_primary" => $this->request->getPost("is_primary") ? 1 : 0
         ];
+
+        if ($blocked_record) {
+            $data["is_blocked"] = 1;
+            $data["block_reason"] = $blocked_record->reason ?? null;
+            $data["blocked_by"] = $blocked_record->blocked_by ?? null;
+            $data["blocked_at"] = $blocked_record->blocked_at ?? null;
+        } elseif ($existing) {
+            $existing_norm = $this->Gate_pass_blocked_visitors_model->normalize_id_number((string) ($existing->id_number ?? ""));
+            $current_norm = $this->Gate_pass_blocked_visitors_model->normalize_id_number($id_number);
+            if ($existing_norm === $current_norm && (int) ($existing->is_blocked ?? 0) === 1) {
+                $data["is_blocked"] = 1;
+                $data["block_reason"] = $existing->block_reason ?? null;
+                $data["blocked_by"] = $existing->blocked_by ?? null;
+                $data["blocked_at"] = $existing->blocked_at ?? null;
+            } else {
+                $data["is_blocked"] = 0;
+                $data["block_reason"] = null;
+                $data["blocked_by"] = null;
+                $data["blocked_at"] = null;
+            }
+        } else {
+            $data["is_blocked"] = 0;
+            $data["block_reason"] = null;
+            $data["blocked_by"] = null;
+            $data["blocked_at"] = null;
+        }
 
         $upload_dir_rel = "gate_pass_visitors/request_" . $request_id . "/";
         $upload_dir = WRITEPATH . "uploads/" . $upload_dir_rel;
@@ -1711,6 +1791,35 @@ HTML;
     {
         $row = $this->Gate_pass_request_visitors_model->get_details(["id" => $id])->getRow();
         return $this->_make_visitor_row($row);
+    }
+
+    private function _blocked_visitor_warning_message($blocked_record): string
+    {
+        $name = trim((string) ($blocked_record->visitor_name ?? ""));
+        $id_number = trim((string) ($blocked_record->id_number ?? ""));
+        $reason = trim((string) ($blocked_record->reason ?? ""));
+        $blocked_at = !empty($blocked_record->blocked_at) ? format_to_datetime($blocked_record->blocked_at) : "";
+
+        $message = app_lang("gate_pass_blocked_visitor_warning");
+        if ($message === "gate_pass_blocked_visitor_warning") {
+            $message = "This visitor has been blocked. Are you sure you want to continue?";
+        }
+
+        $details = [];
+        if ($name !== "") {
+            $details[] = app_lang("full_name") . ": " . $name;
+        }
+        if ($id_number !== "") {
+            $details[] = app_lang("id_number") . ": " . $id_number;
+        }
+        if ($reason !== "") {
+            $details[] = app_lang("reason") . ": " . $reason;
+        }
+        if ($blocked_at !== "") {
+            $details[] = app_lang("gate_pass_blocked_at") . ": " . $blocked_at;
+        }
+
+        return $details ? $message . "\n\n" . implode("\n", $details) : $message;
     }
 
     private function _make_request_row($row)

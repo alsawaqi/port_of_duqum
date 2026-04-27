@@ -66,6 +66,7 @@ $gp_render_existing_visitor_preview = static function (
 <div class="modal-body clearfix gp-pro-modal-body">
   <input type="hidden" name="id" value="<?php echo esc($model_info?->id ?? ''); ?>"/>
   <input type="hidden" name="gate_pass_request_id" value="<?php echo esc($gate_pass_request_id); ?>"/>
+  <input type="hidden" name="blocked_visitor_acknowledged" id="gp-blocked-visitor-ack" value="0"/>
 
   <div class="form-group">
     <label><?php echo app_lang("full_name"); ?> <span class="text-danger">*</span></label>
@@ -124,7 +125,7 @@ $gp_render_existing_visitor_preview = static function (
     </div>
     <div class="col-md-6">
       <label><?php echo app_lang("id_number"); ?></label>
-      <input name="id_number" class="form-control" value="<?php echo esc($model_info?->id_number ?? ''); ?>" required>
+      <input name="id_number" id="gp-visitor-id-number" class="form-control" value="<?php echo esc($model_info?->id_number ?? ''); ?>" required>
     </div>
   </div>
 
@@ -301,9 +302,69 @@ $(document).ready(function () {
   $("#gp-visitor-role").on("change", gpSyncDrivingLicenseSection);
   gpSyncDrivingLicenseSection();
 
+  $("#gp-visitor-id-number").on("input change", function () {
+    $("#gp-blocked-visitor-ack").val("0");
+  });
+
+  function gpReplacePostValue(data, name, value) {
+    var found = false;
+    $.each(data, function (idx, item) {
+      if (item.name === name) {
+        item.value = value;
+        found = true;
+      }
+    });
+    if (!found) {
+      data.push({ name: name, value: value });
+    }
+  }
+
   $("#gp-visitor-form").appForm({
     onSubmit: function () {
       $("#gp-dl-file").prop("disabled", false);
+    },
+    beforeAjaxSubmit: function (data) {
+      var idNumber = $.trim($("#gp-visitor-id-number").val() || "");
+      if (!idNumber || $("#gp-blocked-visitor-ack").val() === "1") {
+        return true;
+      }
+
+      var allowSubmit = true;
+      $.ajax({
+        url: "<?php echo get_uri('gate_pass_portal/check_blocked_visitor'); ?>",
+        type: "GET",
+        dataType: "json",
+        async: false,
+        data: { id_number: idNumber },
+        success: function (result) {
+          if (result && result.blocked) {
+            allowSubmit = window.confirm(result.message || <?php echo json_encode(app_lang("gate_pass_blocked_visitor_warning")); ?>);
+            if (allowSubmit) {
+              $("#gp-blocked-visitor-ack").val("1");
+              gpReplacePostValue(data, "blocked_visitor_acknowledged", "1");
+            } else {
+              gpSyncDrivingLicenseSection();
+            }
+          }
+        },
+        error: function () {
+          allowSubmit = true;
+        }
+      });
+
+      return allowSubmit;
+    },
+    onError: function (result) {
+      if (result && result.blocked_visitor) {
+        if (window.confirm(result.message || <?php echo json_encode(app_lang("gate_pass_blocked_visitor_warning")); ?>)) {
+          $("#gp-blocked-visitor-ack").val("1");
+          setTimeout(function () {
+            $("#gp-visitor-form").submit();
+          }, 20);
+        }
+        return false;
+      }
+      return true;
     },
     onSuccess: function (result) {
       $("#gp-visitors-table").appTable({ newData: result.data, dataId: result.id });

@@ -1,3 +1,8 @@
+<?php
+$profile_checklist = $profile_checklist ?? ["items" => [], "completed" => 0, "total" => 0, "percent" => 0, "expiring_documents" => []];
+$expiring_documents = $profile_checklist["expiring_documents"] ?? [];
+?>
+
 <div class="vp-overview ps-ready p15">
 
     <div class="ps-shell">
@@ -87,6 +92,57 @@
 
             </div>
 
+            <div class="row mt20">
+                <div class="col-md-7 mb15">
+                    <div class="vp-profile-card">
+                        <div class="d-flex justify-content-between align-items-start gap-2 mb10">
+                            <div>
+                                <h4 class="vp-card-title">Profile Checklist</h4>
+                                <div class="text-muted">Required onboarding readiness for procurement review.</div>
+                            </div>
+                            <div class="vp-progress-score"><?php echo (int) ($profile_checklist["percent"] ?? 0); ?>%</div>
+                        </div>
+                        <div class="progress mb15" style="height:8px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo (int) ($profile_checklist["percent"] ?? 0); ?>%;"></div>
+                        </div>
+                        <div class="vp-checklist">
+                            <?php foreach (($profile_checklist["items"] ?? []) as $item) { ?>
+                                <div class="vp-checklist-row">
+                                    <span class="<?php echo !empty($item["done"]) ? "is-done" : "is-pending"; ?>">
+                                        <i data-feather="<?php echo !empty($item["done"]) ? "check" : "clock"; ?>" class="icon-14"></i>
+                                    </span>
+                                    <div>
+                                        <strong><?php echo esc($item["label"]); ?></strong>
+                                        <small><?php echo esc($item["hint"]); ?></small>
+                                    </div>
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5 mb15">
+                    <div class="vp-profile-card">
+                        <h4 class="vp-card-title">Document Expiry</h4>
+                        <?php if (!$expiring_documents) { ?>
+                            <div class="text-muted">No documents expiring within the next 30 days.</div>
+                        <?php } ?>
+                        <?php foreach ($expiring_documents as $doc) {
+                            $expires_ts = strtotime((string) ($doc->expires_at ?? ""));
+                            $days = $expires_ts ? (int) floor(($expires_ts - strtotime(date("Y-m-d"))) / 86400) : null;
+                            $badge = $days !== null && $days < 0 ? "bg-danger" : "bg-warning text-dark";
+                        ?>
+                            <div class="vp-expiry-row">
+                                <div>
+                                    <strong><?php echo esc($doc->document_type_name ?? $doc->original_name ?? "-"); ?></strong>
+                                    <small><?php echo !empty($doc->expires_at) ? format_to_date($doc->expires_at, false) : "-"; ?></small>
+                                </div>
+                                <span class="badge <?php echo $badge; ?>"><?php echo $days !== null && $days < 0 ? "Expired" : $days . "d"; ?></span>
+                            </div>
+                        <?php } ?>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -97,3 +153,68 @@ $(document).ready(function () {
     if (typeof feather !== "undefined") feather.replace();
 });
 </script>
+
+<style>
+.vp-profile-card {
+    border: 1px solid rgba(15, 23, 42, .08);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    padding: 16px;
+    min-height: 100%;
+}
+.vp-card-title {
+    margin: 0 0 5px;
+    font-size: 16px;
+    color: #0f172a;
+}
+.vp-progress-score {
+    border: 1px solid rgba(34, 197, 94, .24);
+    border-radius: 999px;
+    background: rgba(34, 197, 94, .08);
+    color: #166534;
+    font-weight: 800;
+    padding: 6px 10px;
+}
+.vp-checklist {
+    display: grid;
+    gap: 10px;
+}
+.vp-checklist-row,
+.vp-expiry-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid rgba(15, 23, 42, .07);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: #fbfdff;
+}
+.vp-checklist-row {
+    justify-content: flex-start;
+}
+.vp-checklist-row span:first-child {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.vp-checklist-row .is-done {
+    background: rgba(34, 197, 94, .12);
+    color: #15803d;
+}
+.vp-checklist-row .is-pending {
+    background: rgba(245, 158, 11, .14);
+    color: #a16207;
+}
+.vp-checklist-row small,
+.vp-expiry-row small {
+    display: block;
+    color: #64748b;
+    margin-top: 2px;
+}
+</style>

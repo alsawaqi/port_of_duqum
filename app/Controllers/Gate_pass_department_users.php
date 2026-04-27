@@ -215,25 +215,14 @@ class Gate_pass_department_users extends Security_Controller
             "id" => "numeric",
             "company_id" => "required|numeric",
             "department_id" => "required|numeric",
-            "first_name" => "required",
-            "last_name" => "required",
             "email" => "required|valid_email",
-        ]);
-        $id = (int) $this->request->getPost("id");
-        $this->access_only_gate_pass("department_users", $id ? "update" : "create");
-        $this->validate_submitted_data([
             "status" => "required"
         ]);
 
         $id = (int) $this->request->getPost("id");
+        $this->access_only_gate_pass("department_users", $id ? "update" : "create");
         $company_id = (int) $this->request->getPost("company_id");
         $department_id = (int) $this->request->getPost("department_id");
-
-        $first_name = trim($this->request->getPost("first_name"));
-        $last_name = trim($this->request->getPost("last_name"));
-        $email = trim($this->request->getPost("email"));
-        $phone = trim($this->request->getPost("phone"));
-        $status = $this->request->getPost("status");
 
         // Validate department belongs to company
         $dept = $this->Gate_pass_departments_model->get_one($department_id);
@@ -241,101 +230,12 @@ class Gate_pass_department_users extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("invalid_department")]);
         }
 
-        $this->db->transStart();
-
-        if (!$id) {
-            // create user
-            $password = $this->request->getPost("password");
-            if (!$password) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("password_is_required")]);
-            }
-
-            // ensure unique email
-            if ($this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_data = [
-                "email" => $email,
-                "password" => password_hash($password, PASSWORD_DEFAULT),
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "user_type" => "staff",
-                "is_admin" => 0,
-                "role_id" => 0,
-                "disable_login" => 0,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "job_title" => "Gate Pass Department User",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0
-            ];
-
-            $user_id = $this->Users_model->ci_save($user_data);
-            if (!$user_id) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-            }
-
-            $pivot_data = [
-                "user_id" => $user_id,
-                "company_id" => $company_id,
-                "department_id" => $department_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0
-            ];
-
-            $save_id = $this->Gate_pass_department_users_model->ci_save($pivot_data);
-        } else {
-            // update pivot + related user
-            $pivot = $this->Gate_pass_department_users_model->get_one($id);
-            if (!$pivot || (int) $pivot->deleted) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
-            }
-
-            $user = $this->Users_model->get_one($pivot->user_id);
-            if ($user && $user->email !== $email && $this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_update = [
-                "email" => $email,
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "disable_login" => ($status === "active") ? 0 : 1
-            ];
-
-            $password = $this->request->getPost("password");
-            if ($password) {
-                $user_update["password"] = password_hash($password, PASSWORD_DEFAULT);
-            }
-
-            $this->Users_model->ci_save($user_update, $pivot->user_id);
-
-            $pivot_update = [
-                "company_id" => $company_id,
-                "department_id" => $department_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "updated_at" => get_current_utc_time()
-            ];
-
-            $save_id = $this->Gate_pass_department_users_model->ci_save($pivot_update, $id);
-        }
-
-        $this->db->transComplete();
-
-        if ($this->db->transStatus() === false || !$save_id) {
-            return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-        }
-
-        return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);
+        return $this->save_operational_user_assignment(
+            $this->Gate_pass_department_users_model,
+            "gate_pass_department_users",
+            ["company_id" => $company_id, "department_id" => $department_id],
+            ["job_title" => "Gate Pass Department User"]
+        );
     }
 
     public function delete()
@@ -352,11 +252,6 @@ class Gate_pass_department_users extends Security_Controller
         $this->db->transStart();
 
         $this->Gate_pass_department_users_model->delete($id);
-
-        // disable user login too
-        if ($pivot->user_id) {
-            $this->Users_model->ci_save(["disable_login" => 1, "status" => "inactive"], $pivot->user_id);
-        }
 
         $this->db->transComplete();
 

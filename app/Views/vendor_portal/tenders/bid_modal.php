@@ -1,3 +1,23 @@
+<?php
+$bid = $bid ?? null;
+$required_sections = $required_sections ?? [];
+$documents_map = $documents_map ?? [];
+
+$section_labels = [
+    "technical" => "Technical Proposal",
+    "commercial_priced" => "Commercial Proposal (With Price)",
+    "commercial_unpriced" => "Commercial Proposal (Without Price)",
+    "bank_guarantee" => "Bank Guarantee Documents",
+];
+
+$section_fields = [
+    "technical" => "technical_file",
+    "commercial_priced" => "commercial_priced_file",
+    "commercial_unpriced" => "commercial_unpriced_file",
+    "bank_guarantee" => "bank_guarantee_file",
+];
+?>
+
 <?php echo form_open_multipart(get_uri("vendor_portal/save_bid"), [
     "id" => "vendor-bid-form",
     "class" => "general-form",
@@ -13,8 +33,7 @@
     </div>
 
     <div class="alert alert-info">
-        Submit both files before the tender closing date.
-        You can update your submission until the tender closes.
+        Upload the required bid documents before the submission deadline. You can replace your files until the tender closes.
     </div>
 
     <div class="row">
@@ -35,37 +54,36 @@
         </div>
     </div>
 
-    <hr>
-    <h5>Technical Proposal</h5>
+    <?php foreach ($section_labels as $section => $label) {
+        $field_name = $section_fields[$section];
+        $current_doc = $documents_map[$section] ?? null;
+        $is_required = in_array($section, $required_sections, true);
+    ?>
+        <hr>
+        <h5 class="mb10">
+            <?php echo esc($label); ?>
+            <?php if ($is_required) { ?>
+                <span class="badge bg-danger ms-2">Required</span>
+            <?php } else { ?>
+                <span class="badge bg-secondary ms-2">Optional</span>
+            <?php } ?>
+        </h5>
 
-    <div class="form-group">
-        <label>Technical Proposal File</label>
-        <input type="file" name="technical_file" class="form-control" <?php echo empty($technical_doc) ? "required" : ""; ?> />
-        <?php if (!empty($technical_doc)) { ?>
-            <small class="text-muted d-block mt5">
-                Current: <?php echo esc($technical_doc->original_name); ?>
-            </small>
-            <a href="<?php echo get_uri('vendor_portal/download_bid_document/' . $technical_doc->id); ?>" class="btn btn-default btn-sm mt5">
-                <i data-feather="download" class="icon-14"></i> Download Current Technical File
-            </a>
-        <?php } ?>
-    </div>
-
-    <hr>
-    <h5>Commercial Proposal</h5>
-
-    <div class="form-group">
-        <label>Commercial Proposal File</label>
-        <input type="file" name="commercial_file" class="form-control" <?php echo empty($commercial_doc) ? "required" : ""; ?> />
-        <?php if (!empty($commercial_doc)) { ?>
-            <small class="text-muted d-block mt5">
-                Current: <?php echo esc($commercial_doc->original_name); ?>
-            </small>
-            <a href="<?php echo get_uri('vendor_portal/download_bid_document/' . $commercial_doc->id); ?>" class="btn btn-default btn-sm mt5">
-                <i data-feather="download" class="icon-14"></i> Download Current Commercial File
-            </a>
-        <?php } ?>
-    </div>
+        <div class="form-group">
+            <label><?php echo esc($label); ?> File</label>
+            <input type="file" name="<?php echo esc($field_name); ?>" class="form-control" <?php echo ($is_required && empty($current_doc)) ? "required" : ""; ?> />
+            <?php if (!empty($current_doc)) { ?>
+                <small class="text-muted d-block mt5">
+                    Current: <?php echo esc($current_doc->original_name ?? "-"); ?>
+                </small>
+                <a href="<?php echo get_uri('vendor_portal/download_bid_document/' . (int) $current_doc->id); ?>" class="btn btn-default btn-sm mt5">
+                    <i data-feather="download" class="icon-14"></i> Download Current File
+                </a>
+            <?php } elseif (!$is_required) { ?>
+                <small class="text-muted d-block mt5">No file uploaded.</small>
+            <?php } ?>
+        </div>
+    <?php } ?>
 </div>
 
 <div class="modal-footer">
@@ -83,8 +101,11 @@
 <script>
 $(document).ready(function () {
     $("#vendor-bid-form").appForm({
-        onSuccess: function (result) {
+        onSuccess: function () {
             $("#vendor-tenders-table").appTable({reload: true});
+            setTimeout(function () {
+                window.location.reload();
+            }, 400);
         }
     });
 

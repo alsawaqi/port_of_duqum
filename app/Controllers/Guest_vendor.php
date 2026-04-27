@@ -25,6 +25,7 @@ class Guest_vendor extends App_Controller
         $this->Vendor_documents_model    = new Vendor_documents_model();
         $this->Vendor_update_requests_model = new Vendor_update_requests_model();
         $this->db = db_connect();
+        $this->_ensure_vendor_onboarding_columns();
     }
 
 
@@ -89,6 +90,10 @@ class Guest_vendor extends App_Controller
                 "vendor_group_id" => "required|numeric",
                 "vendor_name"     => "required",
                 "email"           => "required|valid_email",
+                "cr_number"       => "required",
+                "phone"           => "required",
+                "contact_person"  => "required",
+                "contact_designation" => "permit_empty",
 
                 // optional numeric (if empty, CI may fail numeric, so handle below)
                 "country_id"      => "numeric",
@@ -164,6 +169,10 @@ class Guest_vendor extends App_Controller
                 "vendor_group_id" => (int) $this->request->getPost("vendor_group_id"),
                 "vendor_name"     => $this->request->getPost("vendor_name"),
                 "email"           => $vendor_email,
+                "cr_number"       => $this->request->getPost("cr_number"),
+                "phone"           => $this->request->getPost("phone"),
+                "contact_person"  => $this->request->getPost("contact_person"),
+                "contact_designation" => $this->request->getPost("contact_designation"),
 
                 "country_id"      => $country_id ? (int) $country_id : null,
                 "region_id"       => $region_id  ? (int) $region_id  : null,
@@ -176,7 +185,7 @@ class Guest_vendor extends App_Controller
                 "postal_code" => $this->request->getPost("postal_code"),
 
                 // ✅ public submission always new
-                "status"          => "pending",
+                "status"          => "submitted",
 
                 // ✅ public: no login user
                 "created_by"      => 0
@@ -414,6 +423,34 @@ class Guest_vendor extends App_Controller
             ]);
             return;
         }
+    }
+
+    private function _ensure_vendor_onboarding_columns(): void
+    {
+        $table = $this->db->prefixTable("vendors");
+        $columns = [
+            "cr_number" => "ALTER TABLE `$table` ADD COLUMN `cr_number` VARCHAR(100) DEFAULT NULL AFTER `email`",
+            "phone" => "ALTER TABLE `$table` ADD COLUMN `phone` VARCHAR(50) DEFAULT NULL AFTER `cr_number`",
+            "contact_person" => "ALTER TABLE `$table` ADD COLUMN `contact_person` VARCHAR(255) DEFAULT NULL AFTER `phone`",
+            "contact_designation" => "ALTER TABLE `$table` ADD COLUMN `contact_designation` VARCHAR(255) DEFAULT NULL AFTER `contact_person`",
+        ];
+
+        foreach ($columns as $column => $sql) {
+            if (!$this->_column_exists($table, $column)) {
+                $this->db->query($sql);
+            }
+        }
+
+        $this->db->query("UPDATE `$table` SET status='submitted' WHERE deleted=0 AND (status='' OR status IS NULL)");
+    }
+
+    private function _column_exists(string $table, string $column): bool
+    {
+        $row = $this->db->query(
+            "SHOW COLUMNS FROM `$table` LIKE " . $this->db->escape($column)
+        )->getRow();
+
+        return (bool) $row;
     }
 
     // AJAX: regions by country (public)

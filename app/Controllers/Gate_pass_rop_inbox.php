@@ -9,6 +9,7 @@ use App\Models\Gate_pass_request_visitors_model;
 use App\Models\Gate_pass_request_vehicles_model;
 use App\Models\Gate_passes_model;
 use App\Models\Gate_pass_reasons_model;
+use App\Models\Gate_pass_blocked_visitors_model;
 
 class Gate_pass_rop_inbox extends Security_Controller
 {
@@ -19,6 +20,7 @@ class Gate_pass_rop_inbox extends Security_Controller
     protected $Gate_pass_request_vehicles_model;
     protected $Gate_passes_model;
     protected $Gate_pass_reasons_model;
+    protected $Gate_pass_blocked_visitors_model;
 
     public function __construct()
     {
@@ -32,6 +34,7 @@ class Gate_pass_rop_inbox extends Security_Controller
         $this->Gate_pass_request_vehicles_model = new Gate_pass_request_vehicles_model();
         $this->Gate_passes_model = new Gate_passes_model();
         $this->Gate_pass_reasons_model = new Gate_pass_reasons_model();
+        $this->Gate_pass_blocked_visitors_model = new Gate_pass_blocked_visitors_model();
 
         if (!$this->login_user->is_admin && !$this->Gate_pass_rop_users_model->is_rop_user($this->login_user->id)) {
             app_redirect("forbidden");
@@ -560,6 +563,30 @@ class Gate_pass_rop_inbox extends Security_Controller
         $ok = $this->Gate_pass_request_visitors_model->ci_save($data, $visitor_id);
         if (!$ok) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
+        }
+
+        if ($block_action === "block") {
+            $this->Gate_pass_blocked_visitors_model->block_visitor([
+                "id_number" => $visitor->id_number ?? "",
+                "id_type" => $visitor->id_type ?? "",
+                "visitor_name" => $visitor->full_name ?? "",
+                "nationality" => $visitor->nationality ?? "",
+                "visitor_company" => $visitor->visitor_company ?? "",
+                "source_request_id" => $request_id,
+                "source_visitor_id" => $visitor_id,
+                "reason" => $block_reason,
+            ], (int) $this->login_user->id, $this->request->getIPAddress(), $this->request->getUserAgent()->getAgentString());
+        } else {
+            $blocked = $this->Gate_pass_blocked_visitors_model->find_by_id_number((string) ($visitor->id_number ?? ""));
+            if ($blocked) {
+                $this->Gate_pass_blocked_visitors_model->unblock_visitor(
+                    (int) $blocked->id,
+                    (int) $this->login_user->id,
+                    $block_reason,
+                    $this->request->getIPAddress(),
+                    $this->request->getUserAgent()->getAgentString()
+                );
+            }
         }
 
         gate_pass_audit_log_visitor_block(

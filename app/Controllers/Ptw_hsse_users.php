@@ -54,8 +54,6 @@ class Ptw_hsse_users extends Security_Controller
         $this->validate_submitted_data([
             "id" => "numeric",
             "company_id" => "required|numeric",
-            "first_name" => "required",
-            "last_name" => "required",
             "email" => "required|valid_email",
             "status" => "required",
         ]);
@@ -64,107 +62,13 @@ class Ptw_hsse_users extends Security_Controller
         $this->access_only_ptw("hsse_users", $id ? "update" : "create");
 
         $company_id = (int)$this->request->getPost("company_id");
-        $first_name = trim((string)$this->request->getPost("first_name"));
-        $last_name = trim((string)$this->request->getPost("last_name"));
-        $email = trim((string)$this->request->getPost("email"));
-        $phone = trim((string)$this->request->getPost("phone"));
-        $status = trim((string)$this->request->getPost("status"));
 
-        $this->db->transStart();
-
-        if (!$id) {
-            $password = (string)$this->request->getPost("password");
-            if ($password === "") {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("password_is_required")]);
-            }
-
-            if ($this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_data = [
-                "email" => $email,
-                "password" => password_hash($password, PASSWORD_DEFAULT),
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "user_type" => "staff",
-                "is_admin" => 0,
-                "role_id" => 0,
-                "disable_login" => ($status === "active") ? 0 : 1,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "job_title" => "PTW HSSE User",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0,
-            ];
-
-            $user_id = $this->Users_model->ci_save($user_data);
-            if (!$user_id) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-            }
-
-            $pivot_data = [
-                "user_id" => $user_id,
-                "company_id" => $company_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0,
-            ];
-
-            $save_id = $this->Ptw_hsse_users_model->ci_save($pivot_data);
-        } else {
-            $pivot = $this->Ptw_hsse_users_model->get_one($id);
-            if (!$pivot || (int)$pivot->deleted) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
-            }
-
-            $existing_user = $this->Users_model->get_one($pivot->user_id);
-            if (!$existing_user || (int)$existing_user->deleted) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
-            }
-
-            if ($existing_user->email !== $email && $this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_update = [
-                "email" => $email,
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "disable_login" => ($status === "active") ? 0 : 1,
-                "status" => ($status === "active") ? "active" : "inactive",
-            ];
-
-            $password = (string)$this->request->getPost("password");
-            if ($password !== "") {
-                $user_update["password"] = password_hash($password, PASSWORD_DEFAULT);
-            }
-
-            $this->Users_model->ci_save($user_update, $pivot->user_id);
-
-            $pivot_update = [
-                "company_id" => $company_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "updated_at" => get_current_utc_time(),
-            ];
-
-            $save_id = $this->Ptw_hsse_users_model->ci_save($pivot_update, $id);
-        }
-
-        $this->db->transComplete();
-
-        if ($this->db->transStatus() === false || !$save_id) {
-            return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-        }
-
-        return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);
+        return $this->save_operational_user_assignment(
+            $this->Ptw_hsse_users_model,
+            "ptw_hsse_users",
+            ["company_id" => $company_id],
+            ["job_title" => "PTW HSSE User"]
+        );
     }
 
     public function delete()
@@ -182,9 +86,6 @@ class Ptw_hsse_users extends Security_Controller
         $this->db->transStart();
 
         $this->Ptw_hsse_users_model->delete($id);
-        if ($pivot->user_id) {
-            $this->Users_model->ci_save(["disable_login" => 1, "status" => "inactive"], $pivot->user_id);
-        }
 
         $this->db->transComplete();
 

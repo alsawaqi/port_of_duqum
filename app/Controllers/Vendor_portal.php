@@ -22,7 +22,11 @@ use App\Models\Tenders_model;
 use App\Models\Tender_documents_model;
 use App\Models\Tender_bids_model;
 use App\Models\Tender_bid_documents_model;
+use App\Models\Tender_bid_requirements_model;
+use App\Models\Tender_communications_model;
 use App\Models\Tender_evaluations_model;
+use App\Models\Tender_rfq_details_model;
+use App\Models\Tender_rfq_items_model;
 
 
 class Vendor_portal extends Security_Controller
@@ -44,6 +48,10 @@ class Vendor_portal extends Security_Controller
     protected $Vendor_update_requests_model;
     protected $Tender_bids_model;
     protected $Tender_bid_documents_model;
+    protected $Tender_bid_requirements_model;
+    protected $Tender_communications_model;
+    protected $Tender_rfq_details_model;
+    protected $Tender_rfq_items_model;
 
     protected $Tender_evaluations_model;
 
@@ -83,7 +91,11 @@ class Vendor_portal extends Security_Controller
 
         $this->Tender_bids_model = new Tender_bids_model();
         $this->Tender_bid_documents_model = new Tender_bid_documents_model();
+        $this->Tender_bid_requirements_model = new Tender_bid_requirements_model();
+        $this->Tender_communications_model = new Tender_communications_model();
         $this->Tender_evaluations_model = new Tender_evaluations_model();
+        $this->Tender_rfq_details_model = new Tender_rfq_details_model();
+        $this->Tender_rfq_items_model = new Tender_rfq_items_model();
     }
 
 
@@ -136,6 +148,8 @@ class Vendor_portal extends Security_Controller
         ])->getResult();
 
         $bid = $this->Tender_bids_model->get_vendor_bid($tender_id, $vendor_id);
+        $required_sections = $this->Tender_bid_requirements_model->get_required_codes($tender_id);
+        $clarifications = $this->Tender_communications_model->get_clarification_conversation($tender_id, $vendor_id, true);
 
         $latest_commercial_evaluation = null;
         $is_awarded_to_vendor = false;
@@ -154,9 +168,14 @@ class Vendor_portal extends Security_Controller
             "tender"                       => $tender,
             "docs"                         => $docs,
             "bid"                          => $bid,
+            "required_sections"            => $required_sections,
+            "clarifications"               => $clarifications,
+            "clarification_open"           => $this->_is_tender_clarification_open($tender),
             "latest_commercial_evaluation" => $latest_commercial_evaluation,
             "is_awarded_to_vendor"         => $is_awarded_to_vendor,
-            "is_regretted_vendor"          => $is_regretted_vendor
+            "is_regretted_vendor"          => $is_regretted_vendor,
+            "rfq_detail"                   => $this->Tender_rfq_details_model->get_by_tender($tender_id),
+            "rfq_items"                    => $this->Tender_rfq_items_model->get_by_tender($tender_id),
         ]);
     }
 
@@ -219,20 +238,21 @@ class Vendor_portal extends Security_Controller
         }
 
         $bid = $this->Tender_bids_model->get_vendor_bid($tender_id, $vendor_id);
-
-        $technical_doc = null;
-        $commercial_doc = null;
+        $required_sections = $this->Tender_bid_requirements_model->get_required_codes($tender_id);
+        $documents_map = [];
 
         if ($bid) {
-            $technical_doc = $this->Tender_bid_documents_model->get_bid_document_by_section((int) $bid->id, "technical");
-            $commercial_doc = $this->Tender_bid_documents_model->get_bid_document_by_section((int) $bid->id, "commercial");
+            $documents_map = $this->Tender_bid_documents_model->get_bid_documents_map((int) $bid->id);
+            if (!isset($documents_map["commercial_priced"]) && isset($documents_map["commercial"])) {
+                $documents_map["commercial_priced"] = $documents_map["commercial"];
+            }
         }
 
         return $this->template->view("vendor_portal/tenders/bid_modal", [
             "tender" => $tender,
             "bid" => $bid,
-            "technical_doc" => $technical_doc,
-            "commercial_doc" => $commercial_doc
+            "required_sections" => $required_sections,
+            "documents_map" => $documents_map
         ]);
     }
 
@@ -264,40 +284,36 @@ class Vendor_portal extends Security_Controller
         }
 
         $existing_bid = $this->Tender_bids_model->get_vendor_bid($tender_id, $vendor_id);
+        $required_sections = $this->Tender_bid_requirements_model->get_required_codes($tender_id);
+        $upload_fields = [
+            "technical" => "technical_file",
+            "commercial_priced" => "commercial_priced_file",
+            "commercial_unpriced" => "commercial_unpriced_file",
+            "bank_guarantee" => "bank_guarantee_file",
+        ];
+        $section_labels = $this->Tender_bid_requirements_model->get_default_labels();
+        $uploaded_files = [];
+        $existing_documents = [];
 
-        $technical_file = $this->request->getFile("technical_file");
-        $commercial_file = $this->request->getFile("commercial_file");
-
-        $has_technical_upload = $technical_file && $technical_file->isValid() && !$technical_file->hasMoved();
-        $has_commercial_upload = $commercial_file && $commercial_file->isValid() && !$commercial_file->hasMoved();
-
-        $existing_technical = null;
-        $existing_commercial = null;
-
-        if ($existing_bid) {
-            $existing_technical = $this->Tender_bid_documents_model->get_bid_document_by_section((int) $existing_bid->id, "technical");
-            $existing_commercial = $this->Tender_bid_documents_model->get_bid_document_by_section((int) $existing_bid->id, "commercial");
-        }
-
-        if (!$existing_bid && (!$has_technical_upload || !$has_commercial_upload)) {
-            return $this->response->setJSON([
-                "success" => false,
-                "message" => "Both Technical Proposal and Commercial Proposal are required."
-            ]);
+        foreach ($upload_fields as $section => $field_name) {
+            $file = $this->request->getFile($field_name);
+            $uploaded_files[$section] = ($file && $file->isValid() && !$file->hasMoved()) ? $file : null;
         }
 
         if ($existing_bid) {
-            if (!$existing_technical && !$has_technical_upload) {
-                return $this->response->setJSON([
-                    "success" => false,
-                    "message" => "Technical Proposal is required."
-                ]);
+            $existing_documents = $this->Tender_bid_documents_model->get_bid_documents_map((int) $existing_bid->id);
+            if (!isset($existing_documents["commercial_priced"]) && isset($existing_documents["commercial"])) {
+                $existing_documents["commercial_priced"] = $existing_documents["commercial"];
             }
+        }
 
-            if (!$existing_commercial && !$has_commercial_upload) {
+        foreach ($required_sections as $section) {
+            $has_existing = !empty($existing_documents[$section]);
+            $has_new_upload = !empty($uploaded_files[$section]);
+            if (!$has_existing && !$has_new_upload) {
                 return $this->response->setJSON([
                     "success" => false,
-                    "message" => "Commercial Proposal is required."
+                    "message" => ($section_labels[$section] ?? "Required document") . " is required."
                 ]);
             }
         }
@@ -330,17 +346,69 @@ class Vendor_portal extends Security_Controller
             mkdir($upload_dir, 0775, true);
         }
 
-        if ($has_technical_upload) {
-            $this->_replace_bid_document((int) $bid_id, "technical", $technical_file, $upload_dir, $tender_id, $vendor_id);
-        }
-
-        if ($has_commercial_upload) {
-            $this->_replace_bid_document((int) $bid_id, "commercial", $commercial_file, $upload_dir, $tender_id, $vendor_id);
+        foreach ($uploaded_files as $section => $file) {
+            if ($file) {
+                $this->_replace_bid_document((int) $bid_id, $section, $file, $upload_dir, $tender_id, $vendor_id);
+            }
         }
 
         return $this->response->setJSON([
             "success" => true,
             "message" => "Bid submitted successfully."
+        ]);
+    }
+
+    public function save_clarification()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+            "message" => "required",
+        ]);
+
+        $vendor_id = $this->_require_vendor_access();
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $message = trim((string) $this->request->getPost("message"));
+
+        $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
+        if (!$tender) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Tender not found or not accessible."
+            ]);
+        }
+
+        if (!$this->_is_tender_clarification_open($tender)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Clarification submissions are closed for this tender."
+            ]);
+        }
+
+        $saved = $this->Tender_communications_model->ci_save(clean_data([
+            "tender_id" => $tender_id,
+            "vendor_id" => $vendor_id,
+            "type" => "clarification",
+            "subject" => null,
+            "message" => $message,
+            "parent_id" => null,
+            "status" => "open",
+            "is_vendor_visible" => 1,
+            "created_by" => $this->login_user->id,
+            "created_at" => date("Y-m-d H:i:s"),
+            "published_at" => date("Y-m-d H:i:s"),
+            "deleted" => 0,
+        ]));
+
+        if (!$saved) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => app_lang("error_occurred")
+            ]);
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Clarification submitted successfully."
         ]);
     }
 
@@ -410,6 +478,23 @@ class Vendor_portal extends Security_Controller
     private function _is_tender_submission_open($tender): bool
     {
         return $this->Tenders_model->is_vendor_submission_open($tender);
+    }
+
+    private function _is_tender_clarification_open($tender): bool
+    {
+        if (($tender->status ?? "") !== "published") {
+            return false;
+        }
+
+        if (!empty($tender->clarification_deadline) && strtotime((string) $tender->clarification_deadline) <= time()) {
+            return false;
+        }
+
+        if (!empty($tender->closing_at) && strtotime((string) $tender->closing_at) <= time()) {
+            return false;
+        }
+
+        return true;
     }
 
     private function _make_tender_row($row)
@@ -1006,8 +1091,101 @@ class Vendor_portal extends Security_Controller
     {
         $vendor_id = $this->_require_vendor_access();
         $view_data["vendor_info"] = $this->Vendors_model->get_one($vendor_id);
+        $view_data["profile_checklist"] = $this->_get_vendor_profile_checklist($vendor_id);
 
         return $this->template->view("vendor_portal/overview/index", $view_data);
+    }
+
+    private function _get_vendor_profile_checklist(int $vendor_id): array
+    {
+        $db = db_connect();
+        $vendors = $db->prefixTable("vendors");
+        $contacts = $db->prefixTable("vendor_contacts");
+        $bank = $db->prefixTable("vendor_bank_accounts");
+        $specialties = $db->prefixTable("vendor_specialties");
+        $documents = $db->prefixTable("vendor_documents");
+        $doc_types = $db->prefixTable("vendor_document_types");
+
+        $vendor = $db->query("SELECT * FROM $vendors WHERE id=? AND deleted=0 LIMIT 1", [$vendor_id])->getRow();
+        $vendor_group_id = (int) ($vendor->vendor_group_id ?? 0);
+
+        $profile_complete = $vendor
+            && trim((string) ($vendor->vendor_name ?? "")) !== ""
+            && trim((string) ($vendor->email ?? "")) !== ""
+            && trim((string) ($vendor->cr_number ?? "")) !== ""
+            && trim((string) ($vendor->phone ?? "")) !== "";
+
+        $contact_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $contacts WHERE vendor_id=? AND deleted=0", [$vendor_id])->getRow()->total ?? 0);
+        $bank_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $bank WHERE vendor_id=? AND deleted=0 AND status='approved'", [$vendor_id])->getRow()->total ?? 0);
+        $specialty_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $specialties WHERE vendor_id=? AND deleted=0 AND status='approved'", [$vendor_id])->getRow()->total ?? 0);
+        $approved_doc_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $documents WHERE vendor_id=? AND deleted=0 AND status='approved'", [$vendor_id])->getRow()->total ?? 0);
+
+        $required_rows = $db->query(
+            "SELECT id, name
+             FROM $doc_types
+             WHERE deleted=0
+               AND is_active=1
+               AND is_required=1
+               AND (vendor_group_id IS NULL OR vendor_group_id=0 OR vendor_group_id=?)
+             ORDER BY name ASC",
+            [$vendor_group_id]
+        )->getResult();
+
+        $required_doc_total = count($required_rows);
+        $approved_required_docs = 0;
+        foreach ($required_rows as $row) {
+            $has_doc = $db->query(
+                "SELECT id
+                 FROM $documents
+                 WHERE vendor_id=?
+                   AND vendor_document_type_id=?
+                   AND deleted=0
+                   AND status='approved'
+                 LIMIT 1",
+                [$vendor_id, (int) $row->id]
+            )->getRow();
+            if ($has_doc) {
+                $approved_required_docs++;
+            }
+        }
+
+        $required_docs_complete = $required_doc_total === 0 ? $approved_doc_count > 0 : $approved_required_docs >= $required_doc_total;
+
+        $expiry_rows = $db->query(
+            "SELECT vd.*, vdt.name AS document_type_name
+             FROM $documents vd
+             LEFT JOIN $doc_types vdt ON vdt.id=vd.vendor_document_type_id
+             WHERE vd.vendor_id=?
+               AND vd.deleted=0
+               AND vd.expires_at IS NOT NULL
+               AND vd.expires_at <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+             ORDER BY vd.expires_at ASC
+             LIMIT 8",
+            [$vendor_id]
+        )->getResult();
+
+        $items = [
+            ["label" => "Company profile", "done" => (bool) $profile_complete, "hint" => "Name, email, CR number, and phone"],
+            ["label" => "Primary contacts", "done" => $contact_count > 0, "hint" => $contact_count . " contact(s) recorded"],
+            ["label" => "Approved bank account", "done" => $bank_count > 0, "hint" => $bank_count . " approved account(s)"],
+            ["label" => "Approved specialties", "done" => $specialty_count > 0, "hint" => $specialty_count . " approved specialty record(s)"],
+            ["label" => "Required documents", "done" => (bool) $required_docs_complete, "hint" => $approved_required_docs . "/" . max(1, $required_doc_total) . " approved"],
+        ];
+
+        $completed = 0;
+        foreach ($items as $item) {
+            if (!empty($item["done"])) {
+                $completed++;
+            }
+        }
+
+        return [
+            "items" => $items,
+            "completed" => $completed,
+            "total" => count($items),
+            "percent" => count($items) ? (int) round(($completed / count($items)) * 100) : 0,
+            "expiring_documents" => $expiry_rows,
+        ];
     }
 
     function contacts()
@@ -2056,7 +2234,7 @@ class Vendor_portal extends Security_Controller
         );
 
         $issued  = $data->issued_at ? format_to_date($data->issued_at, false) : "-";
-        $expires = $data->expires_at ? format_to_date($data->expires_at, false) : "-";
+        $expires = $this->_document_expiry_badge($data->expires_at ?? null);
 
         $approval = $this->_approval_badge($data->status ?? "pending");
 
@@ -2096,6 +2274,32 @@ class Vendor_portal extends Security_Controller
             $uploaded_by,
             $actions,
         ];
+    }
+
+    private function _document_expiry_badge($expires_at): string
+    {
+        if (empty($expires_at)) {
+            return "-";
+        }
+
+        $date = format_to_date($expires_at, false);
+        $expiry_ts = strtotime((string) $expires_at);
+        if (!$expiry_ts) {
+            return esc($date);
+        }
+
+        $today = strtotime(date("Y-m-d"));
+        $days = (int) floor(($expiry_ts - $today) / 86400);
+
+        if ($days < 0) {
+            return "<span class='badge bg-danger'>" . esc($date) . " (Expired)</span>";
+        }
+
+        if ($days <= 30) {
+            return "<span class='badge bg-warning text-dark'>" . esc($date) . " (" . $days . "d)</span>";
+        }
+
+        return "<span class='badge bg-success'>" . esc($date) . "</span>";
     }
 
 

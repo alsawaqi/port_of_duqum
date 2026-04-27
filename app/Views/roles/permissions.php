@@ -15,6 +15,42 @@
 
                 <div class="row">
 
+                <?php
+                $shared_master_sections = array(
+                    "companies" => "Companies",
+                    "departments" => "Departments",
+                );
+                foreach ($shared_master_sections as $key => $label) {
+                    $v = isset(${"can_view_" . $key}) ? ${"can_view_" . $key} : false;
+                    $c = isset(${"can_create_" . $key}) ? ${"can_create_" . $key} : false;
+                    $u = isset(${"can_update_" . $key}) ? ${"can_update_" . $key} : false;
+                    $d = isset(${"can_delete_" . $key}) ? ${"can_delete_" . $key} : false;
+                ?>
+                <div class="col-md-6 mb-3">
+                    <div class="fw-semibold"><?php echo $label; ?></div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_view_" . $key, "1", $v ? true : false, "id='can_view_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_<?php echo $key; ?>">View</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_create_" . $key, "1", $c ? true : false, "id='can_create_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_create_<?php echo $key; ?>">Create</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_update_" . $key, "1", $u ? true : false, "id='can_update_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_update_<?php echo $key; ?>">Update</label>
+                    </div>
+
+                    <div class="form-check">
+                    <?php echo form_checkbox("can_delete_" . $key, "1", $d ? true : false, "id='can_delete_" . $key . "' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_delete_<?php echo $key; ?>">Delete</label>
+                    </div>
+                </div>
+                <?php } ?>
+
                 <!-- Countries -->
                 <div class="col-md-6 mb-3">
                     <div class="fw-semibold">Countries</div>
@@ -390,8 +426,6 @@
                     <div class="row">
                         <?php
                         $gate_pass_sections = array(
-                            'companies' => 'Companies',
-                            'departments' => 'Departments',
                             'visitors' => 'Visitors',
                             'purposes' => 'Purposes',
                             'reasons' => 'Reasons',

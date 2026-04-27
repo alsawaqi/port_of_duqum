@@ -39,4 +39,19 @@ class Tender_bid_documents_model extends Crud_model
 
         return $this->db->query($sql, [$tender_bid_id, $section])->getRow();
     }
+
+    public function get_bid_documents_map(int $tender_bid_id): array
+    {
+        $rows = $this->get_bid_documents($tender_bid_id);
+        $map = [];
+
+        foreach ($rows as $row) {
+            $section = (string) ($row->section ?? "");
+            if ($section !== "" && !isset($map[$section])) {
+                $map[$section] = $row;
+            }
+        }
+
+        return $map;
+    }
 }

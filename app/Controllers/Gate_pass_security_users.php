@@ -54,8 +54,6 @@ class Gate_pass_security_users extends Security_Controller
         $this->validate_submitted_data([
             "id" => "numeric",
             "company_id" => "required|numeric",
-            "first_name" => "required",
-            "last_name" => "required",
             "email" => "required|valid_email",
             "status" => "required",
         ]);
@@ -63,92 +61,13 @@ class Gate_pass_security_users extends Security_Controller
         $id = (int)$this->request->getPost("id");
         $this->access_only_gate_pass("security_users", $id ? "update" : "create");
         $company_id = (int)$this->request->getPost("company_id");
-        $first_name = trim($this->request->getPost("first_name"));
-        $last_name = trim($this->request->getPost("last_name"));
-        $email = trim($this->request->getPost("email"));
-        $phone = trim($this->request->getPost("phone"));
-        $status = $this->request->getPost("status");
 
-        $this->db->transStart();
-
-        if (!$id) {
-            $password = $this->request->getPost("password");
-            if (!$password) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("password_is_required")]);
-            }
-            if ($this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_data = [
-                "email" => $email,
-                "password" => password_hash($password, PASSWORD_DEFAULT),
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "user_type" => "staff",
-                "is_admin" => 0,
-                "role_id" => 0,
-                "disable_login" => 0,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "job_title" => "Gate Pass Security User",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0,
-            ];
-            $user_id = $this->Users_model->ci_save($user_data);
-            if (!$user_id) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-            }
-
-            $pivot_data = [
-                "user_id" => $user_id,
-                "company_id" => $company_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "created_at" => get_current_utc_time(),
-                "deleted" => 0,
-            ];
-            $save_id = $this->Gate_pass_security_users_model->ci_save($pivot_data);
-        } else {
-            $pivot = $this->Gate_pass_security_users_model->get_one($id);
-            if (!$pivot || (int)$pivot->deleted) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
-            }
-            if ($this->Users_model->get_one($pivot->user_id)->email !== $email && $this->Users_model->is_email_exists($email)) {
-                $this->db->transComplete();
-                return $this->response->setJSON(["success" => false, "message" => app_lang("duplicate_email")]);
-            }
-
-            $user_update = [
-                "email" => $email,
-                "first_name" => $first_name,
-                "last_name" => $last_name,
-                "phone" => $phone,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "disable_login" => ($status === "active") ? 0 : 1,
-            ];
-            $password = $this->request->getPost("password");
-            if ($password) {
-                $user_update["password"] = password_hash($password, PASSWORD_DEFAULT);
-            }
-            $this->Users_model->ci_save($user_update, $pivot->user_id);
-
-            $pivot_update = [
-                "company_id" => $company_id,
-                "status" => ($status === "active") ? "active" : "inactive",
-                "updated_at" => get_current_utc_time(),
-            ];
-            $save_id = $this->Gate_pass_security_users_model->ci_save($pivot_update, $id);
-        }
-
-        $this->db->transComplete();
-        if ($this->db->transStatus() === false || !$save_id) {
-            return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
-        }
-        return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);
+        return $this->save_operational_user_assignment(
+            $this->Gate_pass_security_users_model,
+            "gate_pass_security_users",
+            ["company_id" => $company_id],
+            ["job_title" => "Gate Pass Security User"]
+        );
     }
 
     public function delete()
@@ -164,9 +83,6 @@ class Gate_pass_security_users extends Security_Controller
 
         $this->db->transStart();
         $this->Gate_pass_security_users_model->delete($id);
-        if ($pivot->user_id) {
-            $this->Users_model->ci_save(["disable_login" => 1, "status" => "inactive"], $pivot->user_id);
-        }
         $this->db->transComplete();
 
         return $this->response->setJSON(["success" => true, "message" => app_lang("record_deleted")]);

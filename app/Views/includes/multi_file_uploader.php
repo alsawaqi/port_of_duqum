@@ -32,6 +32,10 @@
                                 "data-msg-required" => app_lang("field_required"),
                             ));
                         }
+
+                        if (isset($file_preview_extra_fields)) {
+                            echo $file_preview_extra_fields;
+                        }
                         ?>
                     </div>
                 </div>
@@ -52,11 +56,27 @@ if (!isset($validation_url)) {
 
 
 <script type="text/javascript">
+    if (window.Dropzone) {
+        window.Dropzone.autoDiscover = false;
+    }
+
     $(document).ready(function () {
-        fileSerial = 0;
+        var fileSerial = 0;
+
+        var dropzoneElement = document.getElementById("file-upload-dropzone");
+        if (!dropzoneElement) {
+            return;
+        }
+
+        if (dropzoneElement.dropzone) {
+            return;
+        }
 
         // Get the template HTML and remove it from the doumenthe template HTML and remove it from the doument
         var previewNode = document.querySelector("#file-upload-row");
+        if (!previewNode) {
+            return;
+        }
         previewNode.id = "";
         var previewTemplate = previewNode.parentNode.innerHTML;
         previewNode.parentNode.removeChild(previewNode);
@@ -107,6 +127,12 @@ if (!isset($validation_url)) {
                         if (response.success) {
                             fileSerial++;
                             $(file.previewTemplate).find(".description-field").attr("name", "description_" + fileSerial);
+                            $(file.previewTemplate).find("[data-name-template]").each(function () {
+                                var nameTemplate = $(this).attr("data-name-template");
+                                if (nameTemplate) {
+                                    $(this).attr("name", nameTemplate.replace("__SERIAL__", fileSerial));
+                                }
+                            });
                             $(file.previewTemplate).append('<input type="hidden" name="file_name_' + fileSerial + '" value="' + file.name + '" />\n\
                                 <input type="hidden" name="file_size_' + fileSerial + '" value="' + file.size + '" />');
                             $(file.previewTemplate).find(".file-count-field").val(fileSerial);
@@ -161,16 +187,23 @@ if (!isset($validation_url)) {
             }
         });
 
-        document.querySelector(".start-upload").onclick = function () {
-            projectFilesDropzone.enqueueFiles(projectFilesDropzone.getFilesWithStatus(Dropzone.ADDED));
-        };
-        document.querySelector(".cancel-upload").onclick = function () {
-            projectFilesDropzone.removeAllFiles(true);
-        };
+        var startUploadButton = document.querySelector(".start-upload");
+        if (startUploadButton) {
+            startUploadButton.onclick = function () {
+                projectFilesDropzone.enqueueFiles(projectFilesDropzone.getFilesWithStatus(Dropzone.ADDED));
+            };
+        }
+
+        var cancelUploadButton = document.querySelector(".cancel-upload");
+        if (cancelUploadButton) {
+            cancelUploadButton.onclick = function () {
+                projectFilesDropzone.removeAllFiles(true);
+            };
+        }
         initScrollbar("#file-upload-dropzone-scrollbar", {setHeight: 280});
 
     });
 
 
 
-</script>  
+</script>

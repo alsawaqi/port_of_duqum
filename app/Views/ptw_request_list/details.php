@@ -24,6 +24,9 @@ $format_audit_meta = static function ($meta): string {
 
             <div class="title-button-group">
                 <?php echo anchor(get_uri("ptw_request_list"), "<i data-feather='arrow-left' class='icon-16'></i> " . app_lang("back"), ["class" => "btn btn-default"]); ?>
+                <?php if (strtolower((string)($app->status ?? "")) === "approved" && strtolower((string)($app->stage ?? "")) === "completed") {
+                    echo anchor(get_uri("ptw_portal/download_final_permit/" . (int)$app->id), "<i data-feather='file-text' class='icon-16'></i> Issued Permit", ["class" => "btn btn-success", "target" => "_blank", "rel" => "noopener"]);
+                } ?>
             </div>
         </div>
 

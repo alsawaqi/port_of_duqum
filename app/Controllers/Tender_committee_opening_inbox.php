@@ -37,21 +37,25 @@ class Tender_committee_opening_inbox extends Security_Controller
         $result = [];
 
         foreach ($rows as $row) {
-            $session = $this->Tender_bid_openings_model->get_active_session((int) $row->id);
+            $opening_stage = (string) ($row->opening_stage ?? "commercial");
+            $session = $this->Tender_bid_openings_model->get_active_session((int) $row->id, $opening_stage);
             $status = $session ? $session->status : "pending";
+            $stage_label = $opening_stage === "technical" ? "Technical Opening" : "Commercial Opening";
 
             $result[] = [
                 esc($row->reference),
                 esc($row->title),
+                esc($stage_label),
                 (int) $row->bids_count,
                 "<span class='badge bg-secondary'>" . esc(ucfirst($status)) . "</span>",
-                !empty($row->committee_3key_end_at) ? format_to_datetime($row->committee_3key_end_at) : "-",
+                !empty($row->opening_end_at) ? format_to_datetime($row->opening_end_at) : "-",
                 modal_anchor(
                     get_uri("tender_committee_opening_inbox/modal_form"),
                     "<i data-feather='unlock' class='icon-16'></i>",
                     [
-                        "title" => "3-Key Commercial Opening",
+                        "title" => "3-Key " . $stage_label,
                         "data-post-id" => $row->id,
+                        "data-post-stage" => $opening_stage,
                         "class" => "edit"
                     ]
                 )
@@ -68,13 +72,14 @@ class Tender_committee_opening_inbox extends Security_Controller
         $this->Tenders_model->auto_progress_workflow();
 
         $tender_id = (int) $this->request->getPost("id");
-        $tender = $this->_get_committee_stage_tender($tender_id);
+        $stage = $this->_normalize_opening_stage($this->request->getPost("stage"));
+        $tender = $this->_get_committee_stage_tender($tender_id, $stage);
 
         if (!$tender) {
             show_404();
         }
 
-        $session = $this->Tender_bid_openings_model->get_active_session($tender_id);
+        $session = $this->Tender_bid_openings_model->get_active_session($tender_id, $stage);
         $confirm_map = $session ? $this->Tender_bid_openings_model->get_confirmation_map((int) $session->id) : [
             "chairman" => 0,
             "secretary" => 0,
@@ -87,13 +92,18 @@ class Tender_committee_opening_inbox extends Security_Controller
             "tender" => $tender,
             "session" => $session,
             "confirm_map" => $confirm_map,
-            "my_role" => $role
+            "my_role" => $role,
+            "opening_stage" => $stage,
+            "opening_title" => $stage === "technical" ? "3-Key Technical Opening" : "3-Key Commercial Opening",
         ]);
     }
 
     function generate_codes()
     {
-        $this->validate_submitted_data(["tender_id" => "required|numeric"]);
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+            "opening_stage" => "required",
+        ]);
         $this->access_only_tender("committee", "update");
 
         if (!$this->can_tender_3key_opening()) {
@@ -102,25 +112,26 @@ class Tender_committee_opening_inbox extends Security_Controller
 
         $this->Tenders_model->auto_progress_workflow();
         $tender_id = (int) $this->request->getPost("tender_id");
+        $stage = $this->_normalize_opening_stage($this->request->getPost("opening_stage"));
 
         if (!$this->_get_current_committee_role($tender_id)) {
             return $this->response->setJSON(["success" => false, "message" => "You are not assigned to this ITC opening."]);
         }
 
-        $tender = $this->_get_committee_stage_tender($tender_id);
+        $tender = $this->_get_committee_stage_tender($tender_id, $stage);
         if (!$tender) {
-            return $this->response->setJSON(["success" => false, "message" => "This tender is not currently in the committee 3-key stage."]);
+            return $this->response->setJSON(["success" => false, "message" => "This tender is not currently in the requested 3-key stage."]);
         }
 
-        if (!$this->Tender_bids_model->is_technical_evaluation_complete($tender_id)) {
+        if ($stage === "commercial" && !$this->Tender_bids_model->is_technical_evaluation_complete($tender_id)) {
             return $this->response->setJSON(["success" => false, "message" => "Technical evaluation is not completed yet."]);
         }
 
-        $id = $this->Tender_bid_openings_model->create_new_session($tender_id, (int) $this->login_user->id);
+        $id = $this->Tender_bid_openings_model->create_new_session($tender_id, (int) $this->login_user->id, $stage);
 
         return $this->response->setJSON([
             "success" => true,
-            "message" => "3-key codes generated.",
+            "message" => "3-key " . $stage . " opening codes generated.",
             "opening_id" => $id
         ]);
     }
@@ -129,6 +140,7 @@ class Tender_committee_opening_inbox extends Security_Controller
     {
         $this->validate_submitted_data([
             "tender_id" => "required|numeric",
+            "opening_stage" => "required",
             "chairman_code" => "required",
             "secretary_code" => "required",
             "member_code" => "required"
@@ -141,18 +153,19 @@ class Tender_committee_opening_inbox extends Security_Controller
 
         $this->Tenders_model->auto_progress_workflow();
         $tender_id = (int) $this->request->getPost("tender_id");
+        $stage = $this->_normalize_opening_stage($this->request->getPost("opening_stage"));
         $role = $this->_get_current_committee_role($tender_id);
 
         if (!$role) {
             return $this->response->setJSON(["success" => false, "message" => "You are not assigned to this ITC opening."]);
         }
 
-        $tender = $this->_get_committee_stage_tender($tender_id);
+        $tender = $this->_get_committee_stage_tender($tender_id, $stage);
         if (!$tender) {
-            return $this->response->setJSON(["success" => false, "message" => "This tender is not currently in the committee 3-key stage."]);
+            return $this->response->setJSON(["success" => false, "message" => "This tender is not currently in the requested 3-key stage."]);
         }
 
-        $session = $this->Tender_bid_openings_model->get_active_session($tender_id);
+        $session = $this->Tender_bid_openings_model->get_active_session($tender_id, $stage);
         if (!$session || $session->status !== "codes_generated") {
             return $this->response->setJSON(["success" => false, "message" => "No active 3-key session found."]);
         }
@@ -188,7 +201,9 @@ class Tender_committee_opening_inbox extends Security_Controller
 
             return $this->response->setJSON([
                 "success" => true,
-                "message" => "Commercial bids unlocked successfully. Tender moved to commercial stage."
+                "message" => $stage === "technical"
+                    ? "Technical proposals unlocked successfully. Tender moved to technical evaluation stage."
+                    : "Commercial bids unlocked successfully. Tender moved to commercial stage."
             ]);
         }
 
@@ -198,16 +213,22 @@ class Tender_committee_opening_inbox extends Security_Controller
         ]);
     }
 
-    private function _get_committee_stage_tender(int $tender_id)
+    private function _get_committee_stage_tender(int $tender_id, string $stage)
     {
         $rows = $this->Tender_bids_model->get_tenders_ready_for_3key_opening((int) $this->login_user->id);
         foreach ($rows as $row) {
-            if ((int) $row->id === $tender_id) {
+            if ((int) $row->id === $tender_id && (string) ($row->opening_stage ?? "") === $stage) {
                 return $row;
             }
         }
 
         return null;
+    }
+
+    private function _normalize_opening_stage($stage): string
+    {
+        $stage = strtolower(trim((string) $stage));
+        return in_array($stage, ["technical", "commercial"], true) ? $stage : "commercial";
     }
 
     private function _get_current_committee_role(int $tender_id): ?string

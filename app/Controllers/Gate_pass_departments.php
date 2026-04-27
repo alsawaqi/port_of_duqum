@@ -20,7 +20,7 @@ class Gate_pass_departments extends Security_Controller
 
     function index()
     {
-        $this->access_only_gate_pass("departments", "view");
+        $this->access_only_master_data("departments", "view");
         return $this->template->rander("gate_pass_departments/index");
     }
 
@@ -28,7 +28,7 @@ class Gate_pass_departments extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
         $id = $this->request->getPost("id");
-        $this->access_only_gate_pass("departments", $id ? "update" : "create");
+        $this->access_only_master_data("departments", $id ? "update" : "create");
 
         $model_info = $this->Gate_pass_departments_model->get_one($id);
 
@@ -55,7 +55,7 @@ class Gate_pass_departments extends Security_Controller
         ]);
 
         $id = $this->request->getPost("id");
-        $this->access_only_gate_pass("departments", $id ? "update" : "create");
+        $this->access_only_master_data("departments", $id ? "update" : "create");
 
         $data = [
             "company_id" => (int)$this->request->getPost("company_id"),
@@ -81,7 +81,7 @@ class Gate_pass_departments extends Security_Controller
 
     function list_data()
     {
-        $this->access_only_gate_pass("departments", "view");
+        $this->access_only_master_data("departments", "view");
         $list_data = $this->Gate_pass_departments_model->get_details()->getResult();
         $result = [];
 
@@ -95,7 +95,7 @@ class Gate_pass_departments extends Security_Controller
     function delete()
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
-        $this->access_only_gate_pass("departments", "delete");
+        $this->access_only_master_data("departments", "delete");
         $id = $this->request->getPost("id");
 
         if ($this->Gate_pass_departments_model->delete($id)) {
