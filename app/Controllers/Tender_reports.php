@@ -28,6 +28,7 @@ class Tender_reports extends Security_Controller
         $this->Tender_communications_model = new Tender_communications_model();
         $this->Tender_rfq_details_model = new Tender_rfq_details_model();
         $this->Tender_rfq_items_model = new Tender_rfq_items_model();
+        $this->_ensure_workflow_history_table();
     }
 
     public function index()
@@ -165,9 +166,11 @@ class Tender_reports extends Security_Controller
             "commercial_evaluations" => $this->_get_evaluations($tender_id, "commercial"),
             "communications" => $this->_get_communications($tender_id),
             "extensions" => $this->_get_extensions($tender_id),
+            "workflow_history" => $this->_get_workflow_history($tender_id),
             "opening_audit" => $this->_get_opening_audit($tender_id),
             "tender_documents" => $this->_get_tender_documents($tender_id),
             "document_access" => $this->_get_document_access_map($tender),
+            "can_override_workflow" => $this->can_tender("procurement", "update"),
             "rfq_detail" => $this->Tender_rfq_details_model->get_by_tender($tender_id),
             "rfq_items" => $this->Tender_rfq_items_model->get_by_tender($tender_id),
         ]);
@@ -231,6 +234,118 @@ class Tender_reports extends Security_Controller
         ]);
     }
 
+    public function save_stage_override()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+            "workflow_stage" => "required",
+        ]);
+        $this->access_only_tender("procurement", "update");
+
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $target_stage = $this->_normalize_workflow_stage($this->request->getPost("workflow_stage"));
+        $reason = trim((string) $this->request->getPost("reason"));
+        $open_until = $this->_normalize_override_until($this->request->getPost("open_until"));
+
+        if (!$target_stage) {
+            return $this->response->setJSON(["success" => false, "message" => "Select a valid workflow stage."]);
+        }
+
+        $tender = $this->_get_tender_report($tender_id);
+        if (!$tender) {
+            return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
+        }
+
+        if ((string) ($tender->status ?? "") === "cancelled") {
+            return $this->response->setJSON(["success" => false, "message" => "Cancelled tenders cannot be reopened by workflow override."]);
+        }
+
+        $bid_counts = $this->_get_bid_counts($tender_id);
+        if ($target_stage !== "bidding" && (int) ($bid_counts["total_count"] ?? 0) < 1) {
+            return $this->response->setJSON(["success" => false, "message" => "At least one submitted bid is required before opening post-submission stages."]);
+        }
+
+        if (in_array($target_stage, ["committee_3key", "commercial"], true) && (int) ($bid_counts["accepted_count"] ?? 0) < 1) {
+            return $this->response->setJSON(["success" => false, "message" => "At least one technically accepted bid is required before opening the commercial stages."]);
+        }
+
+        $now = date("Y-m-d H:i:s");
+        $payload = [
+            "workflow_stage" => $target_stage,
+            "updated_at" => $now,
+        ];
+
+        $this->db->transStart();
+
+        switch ($target_stage) {
+            case "bidding":
+                $payload["status"] = "published";
+                $payload["closing_at"] = $open_until;
+                $this->_expire_opening_sessions($tender_id, "technical");
+                $this->_expire_opening_sessions($tender_id, "commercial");
+                break;
+
+            case "technical_3key":
+                $payload["status"] = "closed";
+                $payload["bid_opening_at"] = $open_until;
+                $this->_expire_opening_sessions($tender_id, "technical");
+                $this->_expire_opening_sessions($tender_id, "commercial");
+                break;
+
+            case "technical":
+                $payload["status"] = "closed";
+                $payload["technical_start_at"] = $now;
+                $payload["technical_end_at"] = $open_until;
+                $payload["technical_eval_deadline"] = $open_until;
+                $payload["technical_locked_at"] = null;
+                $this->_ensure_override_opening($tender_id, "technical", $now);
+                $this->_expire_opening_sessions($tender_id, "commercial");
+                break;
+
+            case "committee_3key":
+                $payload["status"] = "closed";
+                $payload["technical_locked_at"] = $now;
+                $payload["committee_3key_start_at"] = $now;
+                $payload["committee_3key_end_at"] = $open_until;
+                $this->_expire_opening_sessions($tender_id, "commercial");
+                break;
+
+            case "commercial":
+                $payload["status"] = "closed";
+                $payload["commercial_unlocked_at"] = $now;
+                $payload["commercial_start_at"] = $now;
+                $payload["commercial_end_at"] = $open_until;
+                $payload["commercial_eval_deadline"] = $open_until;
+                $payload["award_ready_at"] = null;
+                $this->_ensure_override_opening($tender_id, "commercial", $now);
+                break;
+
+            case "award_decision":
+                $payload["status"] = "closed";
+                $payload["award_ready_at"] = $now;
+                break;
+        }
+
+        $alignment = $this->_align_stage_schedule($tender, $target_stage, $payload);
+        $payload = $alignment["payload"];
+        $adjustments = $alignment["adjustments"];
+
+        $this->Tenders_model->ci_save($payload, $tender_id);
+        $this->_record_workflow_history($tender, $payload, $target_stage, $open_until, $reason, $adjustments, $now);
+        $this->_record_stage_override($tender, $target_stage, $open_until, $reason, $now, $adjustments);
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setJSON(["success" => false, "message" => "Database error."]);
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Workflow stage opened: " . $this->_workflow_stage_label($target_stage) . ".",
+            "redirect_url" => get_uri("tender_reports/details/" . $tender_id),
+        ]);
+    }
+
     public function bid_opening_form($id = 0, $stage = "commercial")
     {
         $this->_access_reports();
@@ -288,6 +403,347 @@ class Tender_reports extends Security_Controller
     private function _access_reports(): void
     {
         $this->access_only_tender("procurement", "view");
+    }
+
+    private function _ensure_workflow_history_table(): void
+    {
+        $table = $this->db->prefixTable("tender_workflow_history");
+
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS `$table` (
+                `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+                `tender_id` bigint(20) UNSIGNED NOT NULL,
+                `action_type` varchar(50) NOT NULL DEFAULT 'stage_override',
+                `from_status` varchar(50) DEFAULT NULL,
+                `to_status` varchar(50) DEFAULT NULL,
+                `from_stage` varchar(50) DEFAULT NULL,
+                `to_stage` varchar(50) DEFAULT NULL,
+                `open_until` datetime DEFAULT NULL,
+                `reason` text DEFAULT NULL,
+                `details` text DEFAULT NULL,
+                `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+                `created_at` datetime DEFAULT NULL,
+                `deleted` tinyint(1) NOT NULL DEFAULT 0,
+                PRIMARY KEY (`id`),
+                KEY `idx_tender_workflow_history_tender` (`tender_id`),
+                KEY `idx_tender_workflow_history_action` (`action_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    private function _workflow_stage_options(): array
+    {
+        return [
+            "bidding" => "Bid Submission / Bidding",
+            "technical_3key" => "3-Key Technical Opening",
+            "technical" => "Technical Evaluation",
+            "committee_3key" => "3-Key Commercial Opening",
+            "commercial" => "Commercial Evaluation",
+            "award_decision" => "Award Decision",
+        ];
+    }
+
+    private function _workflow_stage_label(string $stage): string
+    {
+        $options = $this->_workflow_stage_options();
+        return $options[$stage] ?? ucwords(str_replace("_", " ", $stage));
+    }
+
+    private function _normalize_workflow_stage($stage): ?string
+    {
+        $stage = strtolower(trim((string) $stage));
+        return array_key_exists($stage, $this->_workflow_stage_options()) ? $stage : null;
+    }
+
+    private function _normalize_override_until($value): string
+    {
+        $value = trim((string) $value);
+        $timestamp = $value !== "" ? strtotime($value) : false;
+        if (!$timestamp || $timestamp <= time()) {
+            $timestamp = strtotime("+1 day");
+        }
+
+        return date("Y-m-d H:i:s", $timestamp);
+    }
+
+    private function _get_bid_counts(int $tender_id): array
+    {
+        $tb = $this->db->prefixTable("tender_bids");
+        $row = $this->db->query(
+            "SELECT
+                COUNT(DISTINCT id) AS total_count,
+                SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END) AS submitted_count,
+                SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) AS accepted_count
+             FROM $tb
+             WHERE deleted=0
+               AND tender_id=?
+               AND status <> 'draft'",
+            [$tender_id]
+        )->getRowArray();
+
+        return $row ?: ["total_count" => 0, "submitted_count" => 0, "accepted_count" => 0];
+    }
+
+    private function _expire_opening_sessions(int $tender_id, string $stage): void
+    {
+        $tbo = $this->db->prefixTable("tender_bid_openings");
+        $now = date("Y-m-d H:i:s");
+
+        $this->db->query(
+            "UPDATE $tbo
+             SET status='expired',
+                 updated_at=?
+             WHERE deleted=0
+               AND tender_id=?
+               AND stage=?
+               AND status IN ('codes_generated', 'unlocked')",
+            [$now, $tender_id, $stage]
+        );
+    }
+
+    private function _ensure_override_opening(int $tender_id, string $stage, string $now): void
+    {
+        $tbo = $this->db->prefixTable("tender_bid_openings");
+
+        $existing = $this->db->query(
+            "SELECT id
+             FROM $tbo
+             WHERE deleted=0
+               AND tender_id=?
+               AND stage=?
+               AND status='unlocked'
+             ORDER BY id DESC
+             LIMIT 1",
+            [$tender_id, $stage]
+        )->getRow();
+
+        if ($existing) {
+            return;
+        }
+
+        $this->db->query(
+            "UPDATE $tbo
+             SET status='expired',
+                 updated_at=?
+             WHERE deleted=0
+               AND tender_id=?
+               AND stage=?
+               AND status='codes_generated'",
+            [$now, $tender_id, $stage]
+        );
+
+        $this->db->query(
+            "INSERT INTO $tbo
+                (tender_id, stage, status, chairman_code, secretary_code, member_code, generated_by, generated_at, expires_at, unlocked_at, created_at, updated_at, deleted)
+             VALUES
+                (?, ?, 'unlocked', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            [
+                $tender_id,
+                $stage,
+                "OVERRIDE",
+                "OVERRIDE",
+                "OVERRIDE",
+                $this->login_user->id,
+                $now,
+                $now,
+                $now,
+                $now,
+                $now,
+            ]
+        );
+    }
+
+    private function _stage_date_label(string $field): string
+    {
+        $labels = [
+            "closing_at" => "Submission Deadline",
+            "bid_opening_at" => "Technical 3-Key Opening Deadline",
+            "technical_start_at" => "Technical Evaluation Start",
+            "technical_end_at" => "Technical Evaluation End",
+            "technical_eval_deadline" => "Technical Evaluation Deadline",
+            "technical_locked_at" => "Technical Lock",
+            "committee_3key_start_at" => "Commercial 3-Key Opening Start",
+            "committee_3key_end_at" => "Commercial 3-Key Opening Deadline",
+            "commercial_unlocked_at" => "Commercial Unlock",
+            "commercial_start_at" => "Commercial Evaluation Start",
+            "commercial_end_at" => "Commercial Evaluation End",
+            "commercial_eval_deadline" => "Commercial Evaluation Deadline",
+            "award_ready_at" => "Award Decision Ready",
+        ];
+
+        return $labels[$field] ?? ucwords(str_replace("_", " ", $field));
+    }
+
+    private function _stage_date_value($tender, array $payload, string $field): ?string
+    {
+        if (array_key_exists($field, $payload)) {
+            return $payload[$field] ?: null;
+        }
+
+        return !empty($tender->{$field}) ? (string) $tender->{$field} : null;
+    }
+
+    private function _push_stage_field_after($tender, array &$payload, array &$adjustments, string $field, string $after, int $gap_minutes = 5): string
+    {
+        $minimum = date("Y-m-d H:i:s", strtotime($after . " +" . $gap_minutes . " minutes"));
+        $current = $this->_stage_date_value($tender, $payload, $field);
+
+        if (!$current || strtotime((string) $current) <= strtotime($after)) {
+            $payload[$field] = $minimum;
+            $adjustments[] = $this->_stage_date_label($field) . " adjusted to " . date("Y-m-d H:i", strtotime($minimum));
+            return $minimum;
+        }
+
+        return date("Y-m-d H:i:s", strtotime((string) $current));
+    }
+
+    private function _align_stage_schedule($tender, string $target_stage, array $payload): array
+    {
+        $adjustments = [];
+
+        if (in_array($target_stage, ["bidding", "technical_3key"], true)) {
+            $closing_at = $this->_stage_date_value($tender, $payload, "closing_at");
+            if ($closing_at) {
+                $bid_opening_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "bid_opening_at", $closing_at);
+            } else {
+                $bid_opening_at = $this->_stage_date_value($tender, $payload, "bid_opening_at");
+            }
+        } else {
+            $bid_opening_at = $this->_stage_date_value($tender, $payload, "bid_opening_at");
+        }
+
+        if (in_array($target_stage, ["bidding", "technical_3key", "technical"], true)) {
+            if (!$bid_opening_at) {
+                $bid_opening_at = date("Y-m-d H:i:s");
+            }
+
+            $technical_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "technical_eval_deadline", $bid_opening_at);
+            $payload["technical_end_at"] = $technical_end_at;
+
+            $committee_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "committee_3key_start_at", $technical_end_at);
+            $committee_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "committee_3key_end_at", $committee_start_at);
+            $commercial_unlocked_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_unlocked_at", $committee_end_at);
+            $commercial_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_start_at", $commercial_unlocked_at);
+            $commercial_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_eval_deadline", $commercial_start_at);
+            $payload["commercial_end_at"] = $commercial_end_at;
+            $this->_push_stage_field_after($tender, $payload, $adjustments, "award_ready_at", $commercial_end_at);
+        } elseif ($target_stage === "committee_3key") {
+            $committee_end_at = $this->_stage_date_value($tender, $payload, "committee_3key_end_at") ?: date("Y-m-d H:i:s");
+            $commercial_unlocked_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_unlocked_at", $committee_end_at);
+            $commercial_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_start_at", $commercial_unlocked_at);
+            $commercial_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_eval_deadline", $commercial_start_at);
+            $payload["commercial_end_at"] = $commercial_end_at;
+            $this->_push_stage_field_after($tender, $payload, $adjustments, "award_ready_at", $commercial_end_at);
+        } elseif ($target_stage === "commercial") {
+            $commercial_end_at = $this->_stage_date_value($tender, $payload, "commercial_eval_deadline") ?: $this->_stage_date_value($tender, $payload, "commercial_end_at");
+            if ($commercial_end_at) {
+                $payload["commercial_end_at"] = $commercial_end_at;
+                $this->_push_stage_field_after($tender, $payload, $adjustments, "award_ready_at", $commercial_end_at);
+            }
+        }
+
+        return [
+            "payload" => $payload,
+            "adjustments" => $adjustments,
+        ];
+    }
+
+    private function _workflow_history_details($tender, array $payload, array $adjustments): string
+    {
+        $fields = [
+            "closing_at",
+            "bid_opening_at",
+            "technical_start_at",
+            "technical_end_at",
+            "technical_eval_deadline",
+            "technical_locked_at",
+            "committee_3key_start_at",
+            "committee_3key_end_at",
+            "commercial_unlocked_at",
+            "commercial_start_at",
+            "commercial_end_at",
+            "commercial_eval_deadline",
+            "award_ready_at",
+        ];
+
+        $lines = [];
+        foreach ($fields as $field) {
+            if (!array_key_exists($field, $payload)) {
+                continue;
+            }
+
+            $old = !empty($tender->{$field}) ? date("Y-m-d H:i", strtotime((string) $tender->{$field})) : "-";
+            $new = !empty($payload[$field]) ? date("Y-m-d H:i", strtotime((string) $payload[$field])) : "-";
+            if ($old !== $new) {
+                $lines[] = $this->_stage_date_label($field) . ": " . $old . " to " . $new;
+            }
+        }
+
+        if ($adjustments) {
+            $lines[] = "Automatic downstream alignment:";
+            foreach ($adjustments as $adjustment) {
+                $lines[] = "- " . $adjustment;
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function _record_workflow_history($tender, array $payload, string $target_stage, string $open_until, string $reason, array $adjustments, string $now): void
+    {
+        $table = $this->db->prefixTable("tender_workflow_history");
+
+        $this->db->table($table)->insert(clean_data([
+            "tender_id" => (int) ($tender->id ?? 0),
+            "action_type" => "stage_override",
+            "from_status" => (string) ($tender->status ?? ""),
+            "to_status" => (string) ($payload["status"] ?? ($tender->status ?? "")),
+            "from_stage" => (string) ($tender->workflow_stage ?? ""),
+            "to_stage" => $target_stage,
+            "open_until" => $open_until,
+            "reason" => $reason ?: null,
+            "details" => $this->_workflow_history_details($tender, $payload, $adjustments) ?: null,
+            "created_by" => $this->login_user->id,
+            "created_at" => $now,
+            "deleted" => 0,
+        ]));
+    }
+
+    private function _record_stage_override($tender, string $target_stage, string $open_until, string $reason, string $now, array $adjustments = []): void
+    {
+        $from = $this->_workflow_stage_label((string) ($tender->workflow_stage ?? ""));
+        $to = $this->_workflow_stage_label($target_stage);
+        $message = "Workflow stage manually opened by procurement.\n";
+        $message .= "From: " . $from . "\n";
+        $message .= "To: " . $to . "\n";
+
+        if (in_array($target_stage, ["bidding", "technical", "committee_3key", "commercial"], true)) {
+            $message .= "Open until: " . date("Y-m-d H:i", strtotime($open_until)) . "\n";
+        }
+
+        if ($reason !== "") {
+            $message .= "Reason: " . $reason . "\n";
+        }
+
+        if ($adjustments) {
+            $message .= "Downstream schedule alignment:\n" . implode("\n", $adjustments);
+        }
+
+        $this->Tender_communications_model->ci_save(clean_data([
+            "tender_id" => (int) ($tender->id ?? 0),
+            "vendor_id" => null,
+            "parent_id" => null,
+            "type" => "circular",
+            "subject" => "Internal Workflow Override - " . ($tender->reference ?? "Tender"),
+            "message" => $message,
+            "sent_to_all" => 0,
+            "is_vendor_visible" => 0,
+            "published_at" => $now,
+            "created_by" => $this->login_user->id,
+            "status" => "internal",
+            "created_at" => $now,
+            "deleted" => 0,
+        ]));
     }
 
     private function _make_register_row($row): array
@@ -632,6 +1088,26 @@ class Tender_reports extends Security_Controller
              WHERE $ext.deleted = 0
                AND $ext.tender_id = ?
              ORDER BY $ext.created_at DESC, $ext.id DESC",
+            [$tender_id]
+        )->getResult();
+    }
+
+    private function _get_workflow_history(int $tender_id): array
+    {
+        $history = $this->db->prefixTable("tender_workflow_history");
+        $users = $this->db->prefixTable("users");
+
+        return $this->db->query(
+            "SELECT
+                $history.*,
+                TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS created_by_name,
+                $users.email AS created_by_email
+             FROM $history
+             LEFT JOIN $users
+                ON $users.id = $history.created_by
+             WHERE $history.deleted = 0
+               AND $history.tender_id = ?
+             ORDER BY $history.created_at DESC, $history.id DESC",
             [$tender_id]
         )->getResult();
     }

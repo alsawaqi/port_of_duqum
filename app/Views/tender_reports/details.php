@@ -7,11 +7,13 @@ $technical_evaluations = $technical_evaluations ?? [];
 $commercial_evaluations = $commercial_evaluations ?? [];
 $communications = $communications ?? [];
 $extensions = $extensions ?? [];
+$workflow_history = $workflow_history ?? [];
 $opening_audit = $opening_audit ?? [];
 $tender_documents = $tender_documents ?? [];
 $document_access = $document_access ?? [];
 $rfq_detail = $rfq_detail ?? null;
 $rfq_items = $rfq_items ?? [];
+$can_override_workflow = $can_override_workflow ?? false;
 
 $date_value = function ($value) {
     return !empty($value) ? format_to_datetime($value) : "-";
@@ -114,6 +116,17 @@ $milestone_label = function ($code) {
     $code = (string) $code;
     return $labels[$code] ?? ucwords(str_replace("_", " ", $code ?: "Milestone"));
 };
+
+$workflow_stage_options = [
+    "bidding" => "Bid Submission / Bidding",
+    "technical_3key" => "3-Key Technical Opening",
+    "technical" => "Technical Evaluation",
+    "committee_3key" => "3-Key Commercial Opening",
+    "commercial" => "Commercial Evaluation",
+    "award_decision" => "Award Decision",
+];
+
+$default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
 ?>
 
 <div id="page-content" class="page-wrapper clearfix gp-pro-page tender-report-page">
@@ -176,6 +189,61 @@ $milestone_label = function ($code) {
             </div>
         </div>
     </div>
+
+    <?php if ($can_override_workflow && (string) ($tender->status ?? "") !== "cancelled") { ?>
+        <div class="card gp-pro-card mb15 tender-workflow-control">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb15">
+                    <div>
+                        <h4 class="mb5">Workflow Stage Control</h4>
+                        <div class="text-off">Use this only when procurement needs to reopen or manually move a delayed tender stage. Later stage dates are pushed forward automatically if needed.</div>
+                    </div>
+                    <i data-feather="unlock" class="icon-24"></i>
+                </div>
+
+                <?php echo form_open(get_uri("tender_reports/save_stage_override"), [
+                    "id" => "tender-stage-override-form",
+                    "class" => "general-form",
+                    "role" => "form"
+                ]); ?>
+                    <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+
+                    <div class="row align-items-end">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Open Workflow Stage</label>
+                                <?php echo form_dropdown(
+                                    "workflow_stage",
+                                    $workflow_stage_options,
+                                    $tender->workflow_stage ?? "bidding",
+                                    "class='form-control select2'"
+                                ); ?>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Stage Open Until</label>
+                                <input type="datetime-local" name="open_until" class="form-control" value="<?php echo esc($default_open_until); ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Reason / Note</label>
+                                <input type="text" name="reason" class="form-control" maxlength="255" placeholder="Reason for reopening this stage">
+                            </div>
+                        </div>
+                        <div class="col-md-1">
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary w-100" title="Open selected stage">
+                                    <i data-feather="unlock" class="icon-16"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                <?php echo form_close(); ?>
+            </div>
+        </div>
+    <?php } ?>
 
     <div class="card gp-pro-card">
         <div class="card-body p0">
@@ -531,6 +599,50 @@ $milestone_label = function ($code) {
                         </table>
                     </div>
 
+                    <h4 class="mb15">Workflow History</h4>
+                    <div class="table-responsive mb20">
+                        <table class="table table-bordered table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Action</th>
+                                    <th>Status</th>
+                                    <th>Stage</th>
+                                    <th>Open Until</th>
+                                    <th>Reason / Details</th>
+                                    <th>By</th>
+                                    <th>When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (!$workflow_history) { ?>
+                                    <tr><td colspan="7" class="text-center text-off p20">No workflow history records.</td></tr>
+                                <?php } ?>
+                                <?php foreach ($workflow_history as $history) { ?>
+                                    <tr>
+                                        <td><?php echo esc(ucwords(str_replace("_", " ", $history->action_type ?? "-"))); ?></td>
+                                        <td>
+                                            <?php echo esc(ucwords(str_replace("_", " ", $history->from_status ?? "-"))); ?>
+                                            <i data-feather="arrow-right" class="icon-14"></i>
+                                            <?php echo esc(ucwords(str_replace("_", " ", $history->to_status ?? "-"))); ?>
+                                        </td>
+                                        <td>
+                                            <?php echo esc($workflow_stage_options[$history->from_stage] ?? ucwords(str_replace("_", " ", $history->from_stage ?? "-"))); ?>
+                                            <i data-feather="arrow-right" class="icon-14"></i>
+                                            <?php echo esc($workflow_stage_options[$history->to_stage] ?? ucwords(str_replace("_", " ", $history->to_stage ?? "-"))); ?>
+                                        </td>
+                                        <td><?php echo $date_value($history->open_until ?? null); ?></td>
+                                        <td>
+                                            <strong><?php echo esc($history->reason ?: "-"); ?></strong>
+                                            <div class="text-off mt5"><?php echo nl2br(esc($history->details ?? "")); ?></div>
+                                        </td>
+                                        <td><?php echo esc(trim((string) ($history->created_by_name ?? "")) ?: ($history->created_by_email ?? "-")); ?></td>
+                                        <td><?php echo $date_value($history->created_at ?? null); ?></td>
+                                    </tr>
+                                <?php } ?>
+                            </tbody>
+                        </table>
+                    </div>
+
                     <h4 class="mb15">3-Key Opening Audit</h4>
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped">
@@ -583,6 +695,22 @@ $(document).ready(function () {
         }
     });
 
+    if ($("#tender-stage-override-form").length) {
+        $("#tender-stage-override-form").appForm({
+            isModal: false,
+            beforeAjaxSubmit: function () {
+                return confirm("Open the selected workflow stage for this tender?");
+            },
+            onSuccess: function (response) {
+                appAlert.success(response.message || "Workflow stage updated.", {duration: 2000});
+                setTimeout(function () {
+                    window.location.href = response.redirect_url || window.location.href;
+                    window.location.reload();
+                }, 450);
+            }
+        });
+    }
+
     $('button[data-bs-toggle="tab"]').on("shown.bs.tab", function () {
         if (typeof feather !== "undefined") {
             feather.replace();
@@ -625,6 +753,9 @@ $(document).ready(function () {
     background: #fbfdff;
     border-radius: 12px;
     padding: 16px;
+}
+.tender-workflow-control {
+    border-left: 4px solid #2f66f2;
 }
 .tender-timeline {
     position: relative;

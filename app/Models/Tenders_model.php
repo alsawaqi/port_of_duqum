@@ -12,6 +12,7 @@ class Tenders_model extends Crud_model
     {
         $this->table = "tenders";
         parent::__construct($this->table);
+        $this->ensure_workflow_history_table();
     }
 
     private function get_tender_business_now(): string
@@ -35,6 +36,63 @@ class Tenders_model extends Crud_model
         }
     }
 
+    private function ensure_workflow_history_table(): void
+    {
+        $table = $this->db->prefixTable("tender_workflow_history");
+
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS `$table` (
+                `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+                `tender_id` bigint(20) UNSIGNED NOT NULL,
+                `action_type` varchar(50) NOT NULL DEFAULT 'stage_override',
+                `from_status` varchar(50) DEFAULT NULL,
+                `to_status` varchar(50) DEFAULT NULL,
+                `from_stage` varchar(50) DEFAULT NULL,
+                `to_stage` varchar(50) DEFAULT NULL,
+                `open_until` datetime DEFAULT NULL,
+                `reason` text DEFAULT NULL,
+                `details` text DEFAULT NULL,
+                `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+                `created_at` datetime DEFAULT NULL,
+                `deleted` tinyint(1) NOT NULL DEFAULT 0,
+                PRIMARY KEY (`id`),
+                KEY `idx_tender_workflow_history_tender` (`tender_id`),
+                KEY `idx_tender_workflow_history_action` (`action_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    private function record_auto_workflow_history(string $source_sql, array $source_params, ?string $to_status, ?string $to_stage, string $details, string $now): void
+    {
+        $history = $this->db->prefixTable("tender_workflow_history");
+
+        $params = array_merge([
+            "auto_progress",
+            $to_status,
+            $to_stage,
+            $details,
+            $now,
+        ], $source_params);
+
+        $this->db->query(
+            "INSERT INTO $history
+                (tender_id, action_type, from_status, to_status, from_stage, to_stage, details, created_by, created_at, deleted)
+             SELECT
+                source.id,
+                ?,
+                source.status,
+                COALESCE(?, source.status),
+                source.workflow_stage,
+                COALESCE(?, source.workflow_stage),
+                ?,
+                NULL,
+                ?,
+                0
+             FROM ($source_sql) source",
+            $params
+        );
+    }
+
     public function auto_close_expired_tenders(): int
     {
         return $this->auto_progress_workflow();
@@ -53,6 +111,21 @@ class Tenders_model extends Crud_model
         $commercialDays = $this->get_stage_days('commercial');
 
         // 1) Close released tenders once bid closing time has passed.
+        $closeExpiredSql = "SELECT id, status, workflow_stage
+                            FROM $t
+                            WHERE deleted = 0
+                              AND status = 'published'
+                              AND (release_at IS NULL OR release_at <= ?)
+                              AND closing_at IS NOT NULL
+                              AND closing_at <= ?";
+        $this->record_auto_workflow_history(
+            $closeExpiredSql,
+            [$now, $now],
+            "closed",
+            null,
+            "Submission deadline passed; tender closed by the system.",
+            $now
+        );
         $this->db->query(
             "UPDATE $t
              SET status = 'closed',
@@ -66,6 +139,21 @@ class Tenders_model extends Crud_model
         );
         $affected += max(0, (int) $this->db->affectedRows());
         // 2) Move closed tenders from bidding -> technical 3-key opening.
+        $technical3KeySql = "SELECT id, status, workflow_stage
+                             FROM $t
+                             WHERE deleted = 0
+                               AND status = 'closed'
+                               AND workflow_stage = 'bidding'
+                               AND closing_at IS NOT NULL
+                               AND closing_at <= ?";
+        $this->record_auto_workflow_history(
+            $technical3KeySql,
+            [$now],
+            null,
+            "technical_3key",
+            "Bid submission window ended; technical 3-key opening started by the system.",
+            $now
+        );
         $this->db->query(
             "UPDATE $t
              SET workflow_stage = 'technical_3key',
@@ -79,6 +167,28 @@ class Tenders_model extends Crud_model
         );
         $affected += max(0, (int) $this->db->affectedRows());
         // 3) If committee successfully unlocks the technical opening, start the technical stage.
+        $technicalSql = "SELECT $t.id, $t.status, $t.workflow_stage
+                         FROM $t
+                         INNER JOIN (
+                             SELECT tender_id, MAX(id) AS max_id
+                             FROM $tbo
+                             WHERE deleted = 0
+                               AND stage = 'technical'
+                               AND status = 'unlocked'
+                             GROUP BY tender_id
+                         ) latest_opening ON latest_opening.tender_id = $t.id
+                         INNER JOIN $tbo opening ON opening.id = latest_opening.max_id
+                         WHERE $t.deleted = 0
+                           AND $t.status = 'closed'
+                           AND $t.workflow_stage = 'technical_3key'";
+        $this->record_auto_workflow_history(
+            $technicalSql,
+            [],
+            null,
+            "technical",
+            "Technical proposals unlocked through 3-key opening; technical evaluation started by the system.",
+            $now
+        );
         $this->db->query(
             "UPDATE $t
              INNER JOIN (
@@ -122,6 +232,29 @@ class Tenders_model extends Crud_model
         $affected += max(0, (int) $this->db->affectedRows());
 
         // 5) Once technical review is complete or deadline is reached, lock technical and open the commercial 3-key stage.
+        $committee3KeySql = "SELECT id, status, workflow_stage
+                             FROM $t
+                             WHERE deleted = 0
+                               AND status = 'closed'
+                               AND workflow_stage = 'technical'
+                               AND (
+                                    (technical_end_at IS NOT NULL AND technical_end_at <= ?)
+                                    OR NOT EXISTS (
+                                        SELECT 1
+                                        FROM $tb pending_bids
+                                        WHERE pending_bids.deleted = 0
+                                          AND pending_bids.tender_id = $t.id
+                                          AND pending_bids.status = 'submitted'
+                                    )
+                               )";
+        $this->record_auto_workflow_history(
+            $committee3KeySql,
+            [$now],
+            null,
+            "committee_3key",
+            "Technical review completed or deadline reached; commercial 3-key opening started by the system.",
+            $now
+        );
         $this->db->query(
             "UPDATE $t
              SET workflow_stage = 'committee_3key',
@@ -147,6 +280,28 @@ class Tenders_model extends Crud_model
         $affected += max(0, (int) $this->db->affectedRows());
 
         // 6) If committee successfully unlocks the commercial opening, start the commercial stage.
+        $commercialSql = "SELECT $t.id, $t.status, $t.workflow_stage
+                          FROM $t
+                          INNER JOIN (
+                              SELECT tender_id, MAX(id) AS max_id
+                              FROM $tbo
+                              WHERE deleted = 0
+                                AND stage = 'commercial'
+                                AND status = 'unlocked'
+                              GROUP BY tender_id
+                          ) latest_opening ON latest_opening.tender_id = $t.id
+                          INNER JOIN $tbo opening ON opening.id = latest_opening.max_id
+                          WHERE $t.deleted = 0
+                            AND $t.status = 'closed'
+                            AND $t.workflow_stage = 'committee_3key'";
+        $this->record_auto_workflow_history(
+            $commercialSql,
+            [],
+            null,
+            "commercial",
+            "Commercial bids unlocked through 3-key opening; commercial evaluation started by the system.",
+            $now
+        );
         $this->db->query(
             "UPDATE $t
              INNER JOIN (
@@ -174,6 +329,21 @@ class Tenders_model extends Crud_model
         $affected += max(0, (int) $this->db->affectedRows());
 
         // 7) Once commercial window ends, move the tender to award decision stage.
+        $awardDecisionSql = "SELECT id, status, workflow_stage
+                             FROM $t
+                             WHERE deleted = 0
+                               AND status = 'closed'
+                               AND workflow_stage = 'commercial'
+                               AND commercial_end_at IS NOT NULL
+                               AND commercial_end_at <= ?";
+        $this->record_auto_workflow_history(
+            $awardDecisionSql,
+            [$now],
+            null,
+            "award_decision",
+            "Commercial evaluation window ended; tender moved to award decision by the system.",
+            $now
+        );
         $this->db->query(
             "UPDATE $t
              SET workflow_stage = 'award_decision',
