@@ -6,6 +6,7 @@ use App\Models\Gate_pass_requests_model;
 use App\Models\Gate_pass_companies_model;
 use App\Models\Gate_pass_departments_model;
 use App\Models\Gate_pass_purposes_model;
+use App\Models\Gate_pass_request_visitors_model;
 
 class Gate_pass_request_list extends Security_Controller
 {
@@ -13,6 +14,7 @@ class Gate_pass_request_list extends Security_Controller
     protected $Gate_pass_companies_model;
     protected $Gate_pass_departments_model;
     protected $Gate_pass_purposes_model;
+    protected $Gate_pass_request_visitors_model;
 
     public function __construct()
     {
@@ -23,6 +25,7 @@ class Gate_pass_request_list extends Security_Controller
         $this->Gate_pass_companies_model = new Gate_pass_companies_model();
         $this->Gate_pass_departments_model = new Gate_pass_departments_model();
         $this->Gate_pass_purposes_model = new Gate_pass_purposes_model();
+        $this->Gate_pass_request_visitors_model = new Gate_pass_request_visitors_model();
     }
 
     public function index()
@@ -31,11 +34,13 @@ class Gate_pass_request_list extends Security_Controller
         $companies = $this->Gate_pass_companies_model->get_details()->getResult();
         $departments = $this->Gate_pass_departments_model->get_details()->getResult();
         $purposes = $this->Gate_pass_purposes_model->get_details()->getResult();
+        $nationalities = $this->Gate_pass_request_visitors_model->get_distinct_nationalities()->getResult();
 
         $view_data = [
             "companies" => $companies,
             "departments" => $departments,
             "purposes" => $purposes,
+            "nationalities" => $nationalities,
         ];
         return $this->template->rander("gate_pass_request_list/index", $view_data);
     }
@@ -47,6 +52,7 @@ class Gate_pass_request_list extends Security_Controller
         $department_id = $this->request->getGet("department_id");
         $status = $this->request->getGet("status");
         $gate_pass_purpose_id = $this->request->getGet("gate_pass_purpose_id");
+        $nationality = $this->request->getGet("nationality");
         $date_from = $this->request->getGet("date_from");
         $date_to = $this->request->getGet("date_to");
 
@@ -62,6 +68,9 @@ class Gate_pass_request_list extends Security_Controller
         }
         if ($gate_pass_purpose_id !== null && $gate_pass_purpose_id !== "") {
             $options["gate_pass_purpose_id"] = (int)$gate_pass_purpose_id;
+        }
+        if ($nationality !== null && $nationality !== "") {
+            $options["nationality"] = $nationality;
         }
         if ($date_from) {
             $options["date_from"] = $date_from;
@@ -95,6 +104,7 @@ class Gate_pass_request_list extends Security_Controller
             $row->department_name ?? "-",
             $requester_name,
             ($row->requester_phone ?? '') ?: '-',
+            ($row->visitor_nationalities ?? '') ?: '-',
             $row->purpose_name ?? "-",
             $row->visit_from ? format_to_datetime($row->visit_from) : "-",
             $row->visit_to ? format_to_datetime($row->visit_to) : "-",

@@ -178,27 +178,26 @@ public function lookup_by_qr()
         return $this->response->setJSON(["success" => false, "message" => "Gate pass is not active."]);
     }
 
-    $now = time();
-    // Pass is scannable from issuance (ROP approval), not only from scheduled visit_from
-    $valid_from = null;
-    if (!empty($gate_pass->issued_at)) {
-        $valid_from = strtotime($gate_pass->issued_at);
-    }
-    if (!$valid_from && !empty($gate_pass->valid_from)) {
-        $valid_from = strtotime($gate_pass->valid_from);
-    }
-    $valid_to = $gate_pass->valid_to ? strtotime($gate_pass->valid_to) : null;
-
-    if ($valid_from && $now < $valid_from) {
-        return $this->response->setJSON(["success" => false, "message" => "Gate pass is not valid yet."]);
-    }
-    if ($valid_to && $now > $valid_to) {
-        return $this->response->setJSON(["success" => false, "message" => "Gate pass has expired."]);
+    $valid_from_raw = ($request->visit_from ?? null) ?: $gate_pass->valid_from;
+    $valid_to_raw = ($request->visit_to ?? null) ?: $gate_pass->valid_to;
+    $validity = gate_pass_validity_status($valid_from_raw, $valid_to_raw);
+    if (empty($validity["is_valid"])) {
+        return $this->response->setJSON(["success" => false, "message" => $validity["message"]]);
     }
 
     $visitor_rows = $this->Gate_pass_request_visitors_model
         ->get_details(["gate_pass_request_id" => (int)$request->id])
         ->getResult();
+    $assigned_visitor = null;
+    $assigned_visitor_id = (int)($gate_pass->gate_pass_request_visitor_id ?? 0);
+    if ($assigned_visitor_id > 0) {
+        foreach ($visitor_rows as $vr) {
+            if ((int)($vr->id ?? 0) === $assigned_visitor_id) {
+                $assigned_visitor = $vr;
+                break;
+            }
+        }
+    }
     $blocked_visitors = [];
     $blocked_reasons = [];
     foreach ($visitor_rows as $vr) {
@@ -212,6 +211,17 @@ public function lookup_by_qr()
     }
     $blocked_visitors_count = count($blocked_visitors);
     $blocked_reasons = array_values(array_unique($blocked_reasons));
+    $visitor_options = [];
+    foreach ($visitor_rows as $vr) {
+        $visitor_options[] = [
+            "id" => (int)($vr->id ?? 0),
+            "name" => trim((string)($vr->full_name ?? "")) ?: ("Visitor #" . (int)($vr->id ?? 0)),
+            "id_number" => trim((string)($vr->id_number ?? "")),
+            "nationality" => trim((string)($vr->nationality ?? "")),
+            "is_blocked" => (int)($vr->is_blocked ?? 0),
+            "is_assigned_pass_holder" => $assigned_visitor_id > 0 && (int)($vr->id ?? 0) === $assigned_visitor_id,
+        ];
+    }
 
     return $this->response->setJSON([
         "success" => true,
@@ -220,10 +230,13 @@ public function lookup_by_qr()
             "request_id" => (int)$request->id,
             "gate_pass_no" => $gate_pass->gate_pass_no,
             "reference" => $request->reference,
+            "pass_holder" => $assigned_visitor ? ($assigned_visitor->full_name ?? "-") : app_lang("gate_pass_request_level_pass"),
+            "pass_holder_id_number" => $assigned_visitor ? ($assigned_visitor->id_number ?? "") : "",
+            "pass_holder_nationality" => $assigned_visitor ? ($assigned_visitor->nationality ?? "") : "",
 
             "company" => $request->company_name ?? "-",
             "department" => $request->department_name ?? "-",
-            "purpose" => $request->purpose_title ?? "-",
+            "purpose" => $request->purpose_name ?? "-",
 
             "visit_from" => $request->visit_from ? format_to_datetime($request->visit_from) : "-",
             "visit_to" => $request->visit_to ? format_to_datetime($request->visit_to) : "-",
@@ -235,10 +248,15 @@ public function lookup_by_qr()
 
             "status" => $request->status,
             "status_label" => gate_pass_request_status_display($request),
-            "valid_from" => $gate_pass->valid_from ? format_to_datetime($gate_pass->valid_from) : "-",
-            "valid_to" => $gate_pass->valid_to ? format_to_datetime($gate_pass->valid_to) : "-",
+            "valid_from" => $valid_from_raw ? format_to_datetime($valid_from_raw) : "-",
+            "valid_to" => $valid_to_raw ? format_to_datetime($valid_to_raw) : "-",
+            "validity_status" => $validity["status"],
+            "validity_label" => $validity["label"],
+            "validity_badge_class" => $validity["badge_class"],
             "blocked_visitors_count" => $blocked_visitors_count,
             "blocked_reasons" => $blocked_reasons,
+            "assigned_visitor_id" => $assigned_visitor_id,
+            "visitors" => $visitor_options,
         ]
     ]);
 }
@@ -499,8 +517,44 @@ public function save_scan_action()
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
+    if (($request->stage ?? "") !== "issued") {
+        return $this->response->setJSON(["success" => false, "message" => "This request is not issued yet."]);
+    }
+    if (($gate_pass->status ?? "") !== "active") {
+        return $this->response->setJSON(["success" => false, "message" => "Gate pass is not active."]);
+    }
+
+    $validity = gate_pass_validity_status(
+        ($request->visit_from ?? null) ?: $gate_pass->valid_from,
+        ($request->visit_to ?? null) ?: $gate_pass->valid_to
+    );
+    if (empty($validity["is_valid"])) {
+        return $this->response->setJSON(["success" => false, "message" => $validity["message"]]);
+    }
+
     $request_id = (int)$request->id;
     $recorded_at = get_current_utc_time();
+
+    $visitor_rows = $this->Gate_pass_request_visitors_model
+        ->get_details(["gate_pass_request_id" => $request_id])
+        ->getResult();
+    $request_visitor_ids = array_map(static function ($visitor) {
+        return (int)($visitor->id ?? 0);
+    }, $visitor_rows);
+    $posted_visitor_ids = $this->request->getPost("visitor_ids");
+    if ($posted_visitor_ids === null || $posted_visitor_ids === "") {
+        $posted_visitor_ids = [];
+    } elseif (!is_array($posted_visitor_ids)) {
+        $posted_visitor_ids = [$posted_visitor_ids];
+    }
+    $visitor_ids_to_log = gate_pass_scan_visitor_ids_to_log(
+        $posted_visitor_ids,
+        (int)($gate_pass->gate_pass_request_visitor_id ?? 0) ?: null,
+        $request_visitor_ids
+    );
+    if (!$visitor_ids_to_log) {
+        return $this->response->setJSON(["success" => false, "message" => "Select at least one visitor for this scan action."]);
+    }
 
     // Resolve security_user_id (id from pod_gate_pass_security_users for current user)
     $security_user_id = null;
@@ -517,20 +571,29 @@ public function save_scan_action()
         }
     }
 
-    $scan_log_data = [
-        "gate_pass_request_id" => $request_id,
-        "gate_pass_id" => $gate_pass_id,
-        "security_user_id" => $security_user_id,
-        "action" => $action,
-        "note" => $note !== "" ? $note : null,
-        "recorded_at" => $recorded_at,
-        "performed_by" => (int)$this->login_user->id,
-        "ip_address" => $this->request->getIPAddress(),
-        "user_agent" => substr($this->request->getUserAgent()->getAgentString(), 0, 500),
-        "created_at" => $recorded_at,
-    ];
+    $log_saved = true;
+    $saved_count = 0;
+    foreach ($visitor_ids_to_log as $visitor_id) {
+        $scan_log_data = [
+            "gate_pass_request_id" => $request_id,
+            "gate_pass_id" => $gate_pass_id,
+            "gate_pass_request_visitor_id" => $visitor_id,
+            "security_user_id" => $security_user_id,
+            "action" => $action,
+            "note" => $note !== "" ? $note : null,
+            "recorded_at" => $recorded_at,
+            "performed_by" => (int)$this->login_user->id,
+            "ip_address" => $this->request->getIPAddress(),
+            "user_agent" => substr($this->request->getUserAgent()->getAgentString(), 0, 500),
+            "created_at" => $recorded_at,
+        ];
 
-    $log_saved = $this->Gate_pass_scan_log_model->ci_save($scan_log_data);
+        $saved_id = $this->Gate_pass_scan_log_model->ci_save($scan_log_data);
+        $log_saved = $log_saved && (bool)$saved_id;
+        if ($saved_id) {
+            $saved_count++;
+        }
+    }
 
     $meta = [];
     if (!empty($gate_pass->meta)) {
@@ -542,11 +605,13 @@ public function save_scan_action()
     $meta["security"]["scan_count"] = (int)($meta["security"]["scan_count"] ?? 0) + 1;
     $meta["security"]["last_scan_at"] = $recorded_at;
     $meta["security"]["last_scan_by"] = (int)$this->login_user->id;
+    $meta["security"]["last_scan_visitor_ids"] = array_values(array_filter($visitor_ids_to_log));
 
     $meta["security"]["logs"] = $meta["security"]["logs"] ?? [];
     $meta["security"]["logs"][] = [
         "action" => $action,
         "note" => $note,
+        "visitor_ids" => array_values(array_filter($visitor_ids_to_log)),
         "by" => (int)$this->login_user->id,
         "at" => $recorded_at,
         "ip" => $this->request->getIPAddress()
@@ -560,7 +625,9 @@ public function save_scan_action()
 
     return $this->response->setJSON([
         "success" => (bool)($log_saved && $ok),
-        "message" => ($log_saved && $ok) ? app_lang("record_saved") : app_lang("error_occurred")
+        "message" => ($log_saved && $ok)
+            ? app_lang("record_saved") . " (" . $saved_count . " visitor" . ($saved_count === 1 ? "" : "s") . ")"
+            : app_lang("error_occurred")
     ]);
 }
 
@@ -615,9 +682,9 @@ public function save_request_patch()
         "updated_at" => get_current_utc_time()
     ], $request_id);
 
-    // Keep gate_pass validity in sync (if exists)
-    $gp = $this->Gate_passes_model->get_by_request_id($request_id);
-    if ($gp) {
+    // Keep all generated QR/pass validity windows in sync.
+    $passes = $this->Gate_passes_model->get_all_by_request_id($request_id)->getResult();
+    foreach ($passes as $gp) {
         $this->Gate_passes_model->ci_save([
             "valid_from" => $from_dt,
             "valid_to" => $to_dt,

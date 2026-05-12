@@ -205,6 +205,15 @@
 
              </li>
 
+             <li>
+                <span data-feather="bar-chart-2" class="icon-14 ml-20"></span>
+                <h5>Operational Reports Permissions:</h5>
+                <div class="form-check">
+                    <?php echo form_checkbox("can_view_pod_reports", "1", ($can_view_pod_reports ?? false) ? true : false, "id='can_view_pod_reports' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="can_view_pod_reports">View POD Operational Reports</label>
+                </div>
+             </li>
+
 
              <li>
     <span data-feather="briefcase" class="icon-14 ml-20"></span>
@@ -221,7 +230,16 @@
             "technical_eval"  => "Technical Evaluation",
             "commercial_eval" => "Commercial Evaluation",
             "reports"         => "Tender Reports",
-            "portal"          => "Tender Vendor Portal"
+            "portal"          => "Tender Vendor Portal",
+            "department_users" => "Tender Department Users",
+            "department_manager_users" => "Tender Department Manager Users",
+            "finance_users" => "Tender Finance Users",
+            "procurement_manager_users" => "Tender Procurement Manager Users",
+            "committee_users" => "Tender Committee Users",
+            "procurement_users" => "Tender Procurement Users",
+            "technical_users" => "Tender Technical Users",
+            "commercial_users" => "Tender Commercial Users",
+            "procurement_manager_inbox" => "Procurement Manager Inbox (Tender Approval)"
         ];
 
         foreach ($tender_sections as $key => $label) {
@@ -262,7 +280,7 @@
     <div class="form-check">
         <?php echo form_checkbox("can_tender_open_bids_3key", "1", ($can_tender_open_bids_3key ?? false) ? true : false, "id='can_tender_open_bids_3key' class='form-check-input'"); ?>
         <label class="form-check-label" for="can_tender_open_bids_3key">
-            Allow 3-Key Bid Opening (Committee)
+            Allow Bid Opening (Committee)
         </label>
     </div>
 </li>
@@ -294,6 +312,31 @@
                             <div class="form-check">
                                 <?php echo form_checkbox("can_delete_vendor_groups", "1", ($can_delete_vendor_groups ?? false) ? true : false, "id='can_delete_vendor_groups' class='form-check-input'"); ?>
                                 <label class="form-check-label" for="can_delete_vendor_groups">Delete</label>
+                            </div>
+                        </div>
+
+                        <!-- Vendor Grades -->
+                        <div class="col-md-6 mb-3">
+                            <div class="fw-semibold">Vendor Grades</div>
+
+                            <div class="form-check">
+                                <?php echo form_checkbox("can_view_vendor_grades", "1", ($can_view_vendor_grades ?? false) ? true : false, "id='can_view_vendor_grades' class='form-check-input'"); ?>
+                                <label class="form-check-label" for="can_view_vendor_grades">View</label>
+                            </div>
+
+                            <div class="form-check">
+                                <?php echo form_checkbox("can_create_vendor_grades", "1", ($can_create_vendor_grades ?? false) ? true : false, "id='can_create_vendor_grades' class='form-check-input'"); ?>
+                                <label class="form-check-label" for="can_create_vendor_grades">Create</label>
+                            </div>
+
+                            <div class="form-check">
+                                <?php echo form_checkbox("can_update_vendor_grades", "1", ($can_update_vendor_grades ?? false) ? true : false, "id='can_update_vendor_grades' class='form-check-input'"); ?>
+                                <label class="form-check-label" for="can_update_vendor_grades">Update</label>
+                            </div>
+
+                            <div class="form-check">
+                                <?php echo form_checkbox("can_delete_vendor_grades", "1", ($can_delete_vendor_grades ?? false) ? true : false, "id='can_delete_vendor_grades' class='form-check-input'"); ?>
+                                <label class="form-check-label" for="can_delete_vendor_grades">Delete</label>
                             </div>
                         </div>
 
@@ -433,8 +476,10 @@
                             'commercial_users' => 'Commercial Users',
                             'security_users' => 'Security Users',
                             'rop_users' => 'ROP Users',
+                            'blocked_visitors' => 'Blocked Visitors',
                             'request_list' => 'Filter Requests',
                             'fee_rules' => 'Fee Rules',
+                            'activity_logs' => 'Activity Logs',
                         );
                         foreach ($gate_pass_sections as $key => $label) {
                             $v = isset(${'can_view_gate_pass_'.$key}) ? ${'can_view_gate_pass_'.$key} : false;

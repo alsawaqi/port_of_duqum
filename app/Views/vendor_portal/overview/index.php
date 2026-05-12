@@ -1,6 +1,9 @@
 <?php
 $profile_checklist = $profile_checklist ?? ["items" => [], "completed" => 0, "total" => 0, "percent" => 0, "expiring_documents" => []];
 $expiring_documents = $profile_checklist["expiring_documents"] ?? [];
+$vendor_status = strtolower((string)($vendor_info->status ?? ""));
+$profile_complete = (int)($profile_checklist["completed"] ?? 0) >= (int)($profile_checklist["total"] ?? 0);
+$can_submit_for_review = in_array($vendor_status, ["new", "pending_payment", "revise"], true);
 ?>
 
 <div class="vp-overview ps-ready p15">
@@ -118,6 +121,18 @@ $expiring_documents = $profile_checklist["expiring_documents"] ?? [];
                                 </div>
                             <?php } ?>
                         </div>
+                        <?php if ($can_submit_for_review) { ?>
+                            <div class="mt15">
+                                <button type="button" id="vendor-submit-review-btn" class="btn btn-primary" <?php echo $profile_complete ? "" : "disabled"; ?>>
+                                    <i data-feather="send" class="icon-16"></i> <?php echo app_lang("submit_for_review"); ?>
+                                </button>
+                                <?php if (!$profile_complete) { ?>
+                                    <div class="text-muted mt10"><?php echo app_lang("vendor_profile_incomplete"); ?></div>
+                                <?php } ?>
+                            </div>
+                        <?php } else if ($vendor_status === "submitted") { ?>
+                            <div class="alert alert-info mt15 mb0"><?php echo app_lang("vendor_profile_pending_review"); ?></div>
+                        <?php } ?>
                     </div>
                 </div>
                 <div class="col-md-5 mb15">
@@ -151,6 +166,35 @@ $expiring_documents = $profile_checklist["expiring_documents"] ?? [];
 <script>
 $(document).ready(function () {
     if (typeof feather !== "undefined") feather.replace();
+
+    $("#vendor-submit-review-btn").on("click", function () {
+        var $btn = $(this);
+        $btn.prop("disabled", true);
+
+        $.ajax({
+            url: "<?php echo get_uri('vendor_portal/submit_for_review'); ?>",
+            type: "POST",
+            dataType: "json",
+            data: {
+                "<?php echo csrf_token(); ?>": "<?php echo csrf_hash(); ?>"
+            },
+            success: function (result) {
+                if (result && result.success) {
+                    appAlert.success(result.message || "<?php echo app_lang('record_saved'); ?>");
+                    setTimeout(function () {
+                        location.reload();
+                    }, 600);
+                } else {
+                    appAlert.error((result && result.message) ? result.message : "<?php echo app_lang('error_occurred'); ?>");
+                    $btn.prop("disabled", false);
+                }
+            },
+            error: function () {
+                appAlert.error("<?php echo app_lang('error_occurred'); ?>");
+                $btn.prop("disabled", false);
+            }
+        });
+    });
 });
 </script>
 

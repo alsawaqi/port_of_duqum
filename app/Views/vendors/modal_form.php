@@ -23,6 +23,22 @@
 
         <div class="form-group">
             <div class="row">
+                <label for="vendor_grade_id" class=" col-md-3"><?php echo app_lang('vendor_grade'); ?></label>
+                <div class=" col-md-9">
+                    <?php
+                    echo form_dropdown(
+                        "vendor_grade_id",
+                        $vendor_grades_dropdown,
+                        $model_info->vendor_grade_id ?? "",
+                        "class='select2' id='vendor_grade_id'"
+                    );
+                    ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="row">
                 <label for="vendor_name" class=" col-md-3"><?php echo app_lang('vendor_name'); ?></label>
                 <div class=" col-md-9">
                     <?php

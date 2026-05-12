@@ -139,7 +139,36 @@ class Roles extends Security_Controller {
 
             $view_data['permissions'] = $permissions;
 
+            $view_data['can_view_pod_reports'] = get_array_value($permissions, "can_view_pod_reports");
 
+            // Tender permissions (workflow and master user pages)
+            $tender_sections = array(
+                'requests',
+                'manager_inbox',
+                'finance_inbox',
+                'procurement',
+                'committee',
+                'technical_eval',
+                'commercial_eval',
+                'reports',
+                'portal',
+                'department_users',
+                'department_manager_users',
+                'finance_users',
+                'procurement_manager_users',
+                'committee_users',
+                'procurement_users',
+                'technical_users',
+                'commercial_users',
+                'procurement_manager_inbox',
+            );
+            foreach ($tender_sections as $section) {
+                $view_data['can_view_tender_' . $section]   = get_array_value($permissions, 'can_view_tender_' . $section);
+                $view_data['can_create_tender_' . $section] = get_array_value($permissions, 'can_create_tender_' . $section);
+                $view_data['can_update_tender_' . $section] = get_array_value($permissions, 'can_update_tender_' . $section);
+                $view_data['can_delete_tender_' . $section] = get_array_value($permissions, 'can_delete_tender_' . $section);
+            }
+            $view_data['can_tender_open_bids_3key'] = get_array_value($permissions, "can_tender_open_bids_3key");
 
             // Master Data permissions
 // ---------------------------------------------------------
@@ -187,6 +216,12 @@ $view_data['can_create_vendor_groups'] = get_array_value($permissions, "can_crea
 $view_data['can_update_vendor_groups'] = get_array_value($permissions, "can_update_vendor_groups");
 $view_data['can_delete_vendor_groups'] = get_array_value($permissions, "can_delete_vendor_groups");
 
+// Vendor Grades
+$view_data['can_view_vendor_grades']   = get_array_value($permissions, "can_view_vendor_grades");
+$view_data['can_create_vendor_grades'] = get_array_value($permissions, "can_create_vendor_grades");
+$view_data['can_update_vendor_grades'] = get_array_value($permissions, "can_update_vendor_grades");
+$view_data['can_delete_vendor_grades'] = get_array_value($permissions, "can_delete_vendor_grades");
+
 // Vendor Group Fees
 $view_data['can_view_vendor_group_fees']   = get_array_value($permissions, "can_view_vendor_group_fees");
 $view_data['can_create_vendor_group_fees'] = get_array_value($permissions, "can_create_vendor_group_fees");
@@ -229,7 +264,7 @@ $view_data['can_update_departments'] = get_array_value($permissions, "can_update
 $view_data['can_delete_departments'] = get_array_value($permissions, "can_delete_departments") ?: get_array_value($permissions, "can_delete_gate_pass_departments");
 
 // Gate Pass Master (granular: view/create/update/delete per section)
-$gate_pass_sections = array('visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'request_list', 'fee_rules');
+$gate_pass_sections = array('visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'blocked_visitors', 'request_list', 'fee_rules', 'activity_logs');
 foreach ($gate_pass_sections as $section) {
     $view_data['can_view_gate_pass_' . $section]   = get_array_value($permissions, 'can_view_gate_pass_' . $section);
     $view_data['can_create_gate_pass_' . $section] = get_array_value($permissions, 'can_create_gate_pass_' . $section);
@@ -411,6 +446,38 @@ foreach ($ptw_sections as $section) {
         $can_view_files = $this->request->getPost('can_view_files');
         $can_comment_on_projects = $this->request->getPost('can_comment_on_projects');
 
+        $can_view_pod_reports = $this->request->getPost('can_view_pod_reports');
+
+        // Tender permissions (workflow and master user pages)
+        $tender_sections = array(
+            'requests',
+            'manager_inbox',
+            'finance_inbox',
+            'procurement',
+            'committee',
+            'technical_eval',
+            'commercial_eval',
+            'reports',
+            'portal',
+            'department_users',
+            'department_manager_users',
+            'finance_users',
+            'procurement_manager_users',
+            'committee_users',
+            'procurement_users',
+            'technical_users',
+            'commercial_users',
+            'procurement_manager_inbox',
+        );
+        $tender_permissions = array(
+            'can_tender_open_bids_3key' => $this->request->getPost('can_tender_open_bids_3key'),
+        );
+        foreach ($tender_sections as $section) {
+            $tender_permissions['can_view_tender_' . $section]   = $this->request->getPost('can_view_tender_' . $section);
+            $tender_permissions['can_create_tender_' . $section] = $this->request->getPost('can_create_tender_' . $section);
+            $tender_permissions['can_update_tender_' . $section] = $this->request->getPost('can_update_tender_' . $section);
+            $tender_permissions['can_delete_tender_' . $section] = $this->request->getPost('can_delete_tender_' . $section);
+        }
 
         // Master Data permissions
         // ---------------------------------------------------------
@@ -458,6 +525,12 @@ foreach ($ptw_sections as $section) {
         $can_update_vendor_groups = $this->request->getPost('can_update_vendor_groups');
         $can_delete_vendor_groups = $this->request->getPost('can_delete_vendor_groups');
 
+        // Vendor Grades
+        $can_view_vendor_grades   = $this->request->getPost('can_view_vendor_grades');
+        $can_create_vendor_grades = $this->request->getPost('can_create_vendor_grades');
+        $can_update_vendor_grades = $this->request->getPost('can_update_vendor_grades');
+        $can_delete_vendor_grades = $this->request->getPost('can_delete_vendor_grades');
+
         // Vendor Group Fees
         $can_view_vendor_group_fees   = $this->request->getPost('can_view_vendor_group_fees');
         $can_create_vendor_group_fees = $this->request->getPost('can_create_vendor_group_fees');
@@ -500,7 +573,7 @@ foreach ($ptw_sections as $section) {
         $can_delete_departments = $this->request->getPost('can_delete_departments');
 
         // Gate Pass Master (granular)
-        $gate_pass_sections = array('visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'request_list', 'fee_rules');
+        $gate_pass_sections = array('visitors', 'purposes', 'reasons', 'department_users', 'commercial_users', 'security_users', 'rop_users', 'blocked_visitors', 'request_list', 'fee_rules', 'activity_logs');
         $gate_pass_permissions = array();
         foreach ($gate_pass_sections as $section) {
             $gate_pass_permissions['can_view_gate_pass_' . $section]   = $this->request->getPost('can_view_gate_pass_' . $section);
@@ -581,6 +654,7 @@ foreach ($ptw_sections as $section) {
             "can_upload_and_edit_files" => $can_upload_and_edit_files,
             "can_view_files" => $can_view_files,
             "can_comment_on_projects" => $can_comment_on_projects,
+            "can_view_pod_reports" => $can_view_pod_reports,
 
             "can_view_countries"   => $can_view_countries,
             "can_create_countries" => $can_create_countries,
@@ -622,6 +696,12 @@ foreach ($ptw_sections as $section) {
             "can_create_vendor_groups" => $can_create_vendor_groups,
             "can_update_vendor_groups" => $can_update_vendor_groups,
             "can_delete_vendor_groups" => $can_delete_vendor_groups,
+
+            // Vendor Grades
+            "can_view_vendor_grades"   => $can_view_vendor_grades,
+            "can_create_vendor_grades" => $can_create_vendor_grades,
+            "can_update_vendor_grades" => $can_update_vendor_grades,
+            "can_delete_vendor_grades" => $can_delete_vendor_grades,
 
             // Vendor Group Fees
             "can_view_vendor_group_fees"   => $can_view_vendor_group_fees,
@@ -665,6 +745,7 @@ foreach ($ptw_sections as $section) {
 
             // Gate Pass Master (granular)
         );
+        $permissions = array_merge($permissions, $tender_permissions);
         $permissions = array_merge($permissions, $gate_pass_permissions);
 
         // PTW Master (granular)

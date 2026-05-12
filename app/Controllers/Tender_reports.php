@@ -3,7 +3,10 @@
 namespace App\Controllers;
 
 use App\Models\Tender_bid_documents_model;
+use App\Models\Tender_bid_openings_model;
 use App\Models\Tender_communications_model;
+use App\Models\Tender_evaluation_attachments_model;
+use App\Models\Tender_evaluations_model;
 use App\Models\Tender_rfq_details_model;
 use App\Models\Tender_rfq_items_model;
 use App\Models\Tenders_model;
@@ -13,7 +16,10 @@ class Tender_reports extends Security_Controller
     protected $db;
     protected $Tenders_model;
     protected $Tender_bid_documents_model;
+    protected $Tender_bid_openings_model;
     protected $Tender_communications_model;
+    protected $Tender_evaluation_attachments_model;
+    protected $Tender_evaluations_model;
     protected $Tender_rfq_details_model;
     protected $Tender_rfq_items_model;
 
@@ -25,7 +31,10 @@ class Tender_reports extends Security_Controller
         $this->db = db_connect();
         $this->Tenders_model = new Tenders_model();
         $this->Tender_bid_documents_model = new Tender_bid_documents_model();
+        $this->Tender_bid_openings_model = new Tender_bid_openings_model();
         $this->Tender_communications_model = new Tender_communications_model();
+        $this->Tender_evaluation_attachments_model = new Tender_evaluation_attachments_model();
+        $this->Tender_evaluations_model = new Tender_evaluations_model();
         $this->Tender_rfq_details_model = new Tender_rfq_details_model();
         $this->Tender_rfq_items_model = new Tender_rfq_items_model();
         $this->_ensure_workflow_history_table();
@@ -59,7 +68,7 @@ class Tender_reports extends Security_Controller
             $params[] = $type;
         }
 
-        if (in_array($stage, ["bidding", "technical_3key", "technical", "committee_3key", "commercial", "award_decision"], true)) {
+        if (in_array($stage, ["bidding", "technical_3key", "technical", "commercial", "award_decision"], true)) {
             $where[] = "t.workflow_stage = ?";
             $params[] = $stage;
         }
@@ -156,18 +165,26 @@ class Tender_reports extends Security_Controller
             show_404();
         }
 
+        $vendors = $this->_get_vendor_participation($tender_id);
+
         return $this->template->rander("tender_reports/details", [
             "tender" => $tender,
             "summary" => $this->_get_summary($tender_id),
             "timeline" => $this->_get_stage_timeline($tender),
             "teams" => $this->_get_team_members($tender_id),
-            "vendors" => $this->_get_vendor_participation($tender_id),
+            "vendors" => $vendors,
+            "weighted_evaluation_scores" => $this->_get_weighted_evaluation_scores($tender, $vendors),
             "technical_evaluations" => $this->_get_evaluations($tender_id, "technical"),
+            "technical_evaluation_attachments" => $this->Tender_evaluation_attachments_model->get_by_tender_grouped_by_evaluation_id($tender_id, "technical"),
             "commercial_evaluations" => $this->_get_evaluations($tender_id, "commercial"),
+            "commercial_evaluation_attachments" => $this->Tender_evaluation_attachments_model->get_by_tender_grouped_by_evaluation_id($tender_id, "commercial"),
             "communications" => $this->_get_communications($tender_id),
             "extensions" => $this->_get_extensions($tender_id),
             "workflow_history" => $this->_get_workflow_history($tender_id),
             "opening_audit" => $this->_get_opening_audit($tender_id),
+            "opening_session" => $this->Tender_bid_openings_model->get_active_session($tender_id, "technical"),
+            "opening_signatures" => $this->_get_opening_signatures($tender_id),
+            "proposal_review" => $this->_get_latest_proposal_review($tender_id),
             "tender_documents" => $this->_get_tender_documents($tender_id),
             "document_access" => $this->_get_document_access_map($tender),
             "can_override_workflow" => $this->can_tender("procurement", "update"),
@@ -234,6 +251,82 @@ class Tender_reports extends Security_Controller
         ]);
     }
 
+    public function approve_vendor_participation()
+    {
+        return $this->_save_vendor_participation_decision("approved");
+    }
+
+    public function reject_vendor_participation()
+    {
+        return $this->_save_vendor_participation_decision("rejected");
+    }
+
+    private function _save_vendor_participation_decision(string $decision)
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+            "vendor_id" => "required|numeric",
+        ]);
+        $this->access_only_tender("procurement", "update");
+
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $vendor_id = (int) $this->request->getPost("vendor_id");
+        $tender = $this->_get_tender_report($tender_id);
+
+        if (!$tender) {
+            return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
+        }
+
+        if ((string) ($tender->status ?? "") === "cancelled") {
+            return $this->response->setJSON(["success" => false, "message" => "Cancelled tenders cannot receive participation decisions."]);
+        }
+
+        $target_status = $decision === "approved" ? "approved" : "rejected";
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $now = date("Y-m-d H:i:s");
+
+        $this->db->query(
+            "UPDATE $tiv
+             SET invite_status=?,
+                 invited_by=?,
+                 invited_at=COALESCE(invited_at, ?)
+             WHERE tender_id=?
+               AND vendor_id=?
+               AND deleted=0
+               AND invite_status='pending_approval'",
+            [$target_status, $this->login_user->id, $now, $tender_id, $vendor_id]
+        );
+
+        if ((int) $this->db->affectedRows() < 1) {
+            $existing = $this->db->query(
+                "SELECT invite_status
+                 FROM $tiv
+                 WHERE tender_id=? AND vendor_id=? AND deleted=0
+                 LIMIT 1",
+                [$tender_id, $vendor_id]
+            )->getRow();
+
+            if ($existing && strtolower((string) $existing->invite_status) === $target_status) {
+                return $this->response->setJSON([
+                    "success" => true,
+                    "message" => "Vendor participation is already " . $target_status . ".",
+                    "redirect_url" => get_uri("tender_reports/details/" . $tender_id . "#tender-report-vendors"),
+                ]);
+            }
+
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Only pending approval requests can be " . $target_status . "."
+            ]);
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Vendor participation " . $target_status . ".",
+            "redirect_url" => get_uri("tender_reports/details/" . $tender_id . "#tender-report-vendors"),
+        ]);
+    }
+
     public function save_stage_override()
     {
         $this->validate_submitted_data([
@@ -265,7 +358,7 @@ class Tender_reports extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "At least one submitted bid is required before opening post-submission stages."]);
         }
 
-        if (in_array($target_stage, ["committee_3key", "commercial"], true) && (int) ($bid_counts["accepted_count"] ?? 0) < 1) {
+        if ($target_stage === "commercial" && (int) ($bid_counts["accepted_count"] ?? 0) < 1) {
             return $this->response->setJSON(["success" => false, "message" => "At least one technically accepted bid is required before opening the commercial stages."]);
         }
 
@@ -281,15 +374,11 @@ class Tender_reports extends Security_Controller
             case "bidding":
                 $payload["status"] = "published";
                 $payload["closing_at"] = $open_until;
-                $this->_expire_opening_sessions($tender_id, "technical");
-                $this->_expire_opening_sessions($tender_id, "commercial");
                 break;
 
             case "technical_3key":
                 $payload["status"] = "closed";
                 $payload["bid_opening_at"] = $open_until;
-                $this->_expire_opening_sessions($tender_id, "technical");
-                $this->_expire_opening_sessions($tender_id, "commercial");
                 break;
 
             case "technical":
@@ -298,16 +387,6 @@ class Tender_reports extends Security_Controller
                 $payload["technical_end_at"] = $open_until;
                 $payload["technical_eval_deadline"] = $open_until;
                 $payload["technical_locked_at"] = null;
-                $this->_ensure_override_opening($tender_id, "technical", $now);
-                $this->_expire_opening_sessions($tender_id, "commercial");
-                break;
-
-            case "committee_3key":
-                $payload["status"] = "closed";
-                $payload["technical_locked_at"] = $now;
-                $payload["committee_3key_start_at"] = $now;
-                $payload["committee_3key_end_at"] = $open_until;
-                $this->_expire_opening_sessions($tender_id, "commercial");
                 break;
 
             case "commercial":
@@ -317,7 +396,6 @@ class Tender_reports extends Security_Controller
                 $payload["commercial_end_at"] = $open_until;
                 $payload["commercial_eval_deadline"] = $open_until;
                 $payload["award_ready_at"] = null;
-                $this->_ensure_override_opening($tender_id, "commercial", $now);
                 break;
 
             case "award_decision":
@@ -330,9 +408,16 @@ class Tender_reports extends Security_Controller
         $payload = $alignment["payload"];
         $adjustments = $alignment["adjustments"];
 
-        $this->Tenders_model->ci_save($payload, $tender_id);
-        $this->_record_workflow_history($tender, $payload, $target_stage, $open_until, $reason, $adjustments, $now);
-        $this->_record_stage_override($tender, $target_stage, $open_until, $reason, $now, $adjustments);
+        $this->Tenders_model->ci_save($this->_build_stage_override_manager_payload([
+            "workflow_stage" => $target_stage,
+            "open_until" => $open_until,
+            "reason" => $reason,
+            "tender_fields" => $payload,
+            "adjustments" => $adjustments,
+            "from_status" => (string) ($tender->status ?? ""),
+            "from_stage" => (string) ($tender->workflow_stage ?? ""),
+            "requested_at" => $now,
+        ], $now), $tender_id);
         $this->db->transComplete();
 
         if ($this->db->transStatus() === false) {
@@ -341,20 +426,188 @@ class Tender_reports extends Security_Controller
 
         return $this->response->setJSON([
             "success" => true,
-            "message" => "Workflow stage opened: " . $this->_workflow_stage_label($target_stage) . ".",
+            "message" => "Workflow stage change submitted for procurement manager approval: " . $this->_workflow_stage_label($target_stage) . ".",
             "redirect_url" => get_uri("tender_reports/details/" . $tender_id),
         ]);
     }
 
-    public function bid_opening_form($id = 0, $stage = "commercial")
+    public function approve_late_evaluation()
+    {
+        return $this->_save_late_evaluation_review("accepted");
+    }
+
+    public function reject_late_evaluation()
+    {
+        return $this->_save_late_evaluation_review("rejected");
+    }
+
+    private function _save_late_evaluation_review(string $decision)
+    {
+        $this->validate_submitted_data([
+            "evaluation_id" => "required|numeric",
+            "comment" => "permit_empty",
+        ]);
+        $this->access_only_tender("procurement", "update");
+
+        $evaluation_id = (int) $this->request->getPost("evaluation_id");
+        $comment = trim((string) $this->request->getPost("comment"));
+        $evaluation = $this->_get_late_evaluation_for_review($evaluation_id);
+        if (!$evaluation) {
+            return $this->response->setJSON(["success" => false, "message" => "Late evaluation not found."]);
+        }
+
+        if ((int) ($evaluation->submitted_after_deadline ?? 0) !== 1) {
+            return $this->response->setJSON(["success" => false, "message" => "Only late evaluations require procurement review."]);
+        }
+
+        $current_status = (string) ($evaluation->late_review_status ?? "");
+        if ($current_status !== "" && $current_status !== "pending") {
+            return $this->response->setJSON(["success" => false, "message" => "This late evaluation has already been reviewed."]);
+        }
+
+        $now = date("Y-m-d H:i:s");
+        $te = $this->db->prefixTable("tender_evaluations");
+        $tb = $this->db->prefixTable("tender_bids");
+
+        $this->db->transStart();
+        $this->db->table($te)->where("id", $evaluation_id)->update(clean_data([
+            "late_review_status" => $decision,
+            "late_reviewed_by" => (int) $this->login_user->id,
+            "late_reviewed_at" => $now,
+            "late_review_comment" => $comment ?: null,
+            "updated_at" => $now,
+        ]));
+
+        if ($decision === "accepted" && (string) ($evaluation->type ?? "") === "technical" && in_array((string) ($evaluation->decision ?? ""), ["accepted", "rejected"], true)) {
+            $this->db->table($tb)->where("id", (int) $evaluation->tender_bid_id)->update(clean_data([
+                "status" => (string) $evaluation->decision,
+                "updated_at" => $now,
+            ]));
+        }
+
+        $this->_record_late_evaluation_review_history($evaluation, $decision, $comment, $now);
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setJSON(["success" => false, "message" => "Database error."]);
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Late evaluation " . ($decision === "accepted" ? "accepted" : "rejected") . ".",
+            "redirect_url" => get_uri("tender_reports/details/" . (int) $evaluation->tender_id . "#tender-report-evaluations"),
+        ]);
+    }
+
+    public function save_manual_bid_opening_form()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+        ]);
+        $this->access_only_tender("procurement", "update");
+
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $tender = $this->_get_tender_report($tender_id);
+        if (!$tender) {
+            return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
+        }
+
+        if ((string) ($tender->status ?? "") !== "closed" || (string) ($tender->workflow_stage ?? "") !== "technical_3key") {
+            return $this->response->setJSON(["success" => false, "message" => "Manual opening forms can only be accepted during the 3-key bid opening stage."]);
+        }
+
+        $file = $this->request->getFile("manual_bid_opening_form");
+        if (!$file || !$file->isValid() || $file->hasMoved()) {
+            return $this->response->setJSON(["success" => false, "message" => "Upload the signed bid opening form."]);
+        }
+
+        $original_name = $file->getClientName();
+        if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
+            return $this->response->setJSON(["success" => false, "message" => "Please upload a valid file."]);
+        }
+
+        $upload_dir = WRITEPATH . "uploads/tender_opening_forms/tender_" . $tender_id . "/";
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0775, true);
+        }
+
+        $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
+        $new_name = uniqid("opening_form_", true) . ($extension ? "." . $extension : "");
+        $file->move($upload_dir, $new_name);
+
+        $path = "tender_opening_forms/tender_" . $tender_id . "/" . $new_name;
+        $this->Tender_bid_openings_model->mark_manual_form_accepted($tender_id, (int) $this->login_user->id, $path, $original_name);
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Manual bid opening form uploaded. Procurement can now start technical review.",
+            "redirect_url" => get_uri("tender_reports/details/" . $tender_id . "#tender-report-audit"),
+        ]);
+    }
+
+    public function start_technical_review()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+        ]);
+        $this->access_only_tender("procurement", "update");
+
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $tender = $this->_get_tender_report($tender_id);
+        if (!$tender) {
+            return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
+        }
+
+        if ((string) ($tender->status ?? "") !== "closed" || (string) ($tender->workflow_stage ?? "") !== "technical_3key") {
+            return $this->response->setJSON(["success" => false, "message" => "This tender is not waiting for bid opening completion."]);
+        }
+
+        $session = $this->Tender_bid_openings_model->get_completed_session_for_technical_start($tender_id);
+        if (!$session) {
+            return $this->response->setJSON(["success" => false, "message" => "Complete committee signatures or upload a manual signed opening form first."]);
+        }
+
+        $technical_proposals_reviewed = (int) $this->request->getPost("technical_proposals_reviewed") === 1;
+        $commercial_proposals_reviewed = (int) $this->request->getPost("commercial_proposals_reviewed") === 1;
+
+        if (!$technical_proposals_reviewed || !$commercial_proposals_reviewed) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Procurement must confirm both technical and commercial proposal review before sending the bids for evaluation."
+            ]);
+        }
+
+        $review_note = trim((string) $this->request->getPost("proposal_review_note"));
+        $technical_end_at = $this->_normalize_override_until($this->request->getPost("technical_end_at"));
+        $now = date("Y-m-d H:i:s");
+
+        $this->db->transBegin();
+        $this->_record_procurement_proposal_review($tender, $session, $review_note, $now);
+        $started = $this->Tenders_model->start_technical_review_after_opening($tender_id, (int) $this->login_user->id, $technical_end_at);
+
+        if (!$started) {
+            $this->db->transRollback();
+            return $this->response->setJSON(["success" => false, "message" => "Technical review could not be started."]);
+        }
+
+        $this->db->transCommit();
+        if ($this->db->transStatus() === false) {
+            return $this->response->setJSON(["success" => false, "message" => "Database error."]);
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Procurement proposal review recorded. The technical team can now evaluate the bids.",
+            "redirect_url" => get_uri("tender_reports/details/" . $tender_id),
+        ]);
+    }
+
+    public function bid_opening_form($id = 0, $stage = "technical")
     {
         $this->_access_reports();
 
         $tender_id = (int) $id;
-        $stage = strtolower(trim((string) $stage));
-        if (!in_array($stage, ["technical", "commercial"], true)) {
-            $stage = "commercial";
-        }
+        $stage = "technical";
         if (!$tender_id) {
             show_404();
         }
@@ -370,6 +623,8 @@ class Tender_reports extends Security_Controller
             "vendors" => $this->_get_vendor_participation($tender_id),
             "teams" => $this->_get_team_members($tender_id),
             "opening_audit" => $this->_get_opening_audit($tender_id),
+            "opening_session" => $this->Tender_bid_openings_model->get_active_session($tender_id, "technical"),
+            "signature_rows" => $this->_get_opening_signatures($tender_id),
         ]);
     }
 
@@ -400,9 +655,36 @@ class Tender_reports extends Security_Controller
         return $this->response->download($full_path, null)->setFileName($doc->original_name ?: basename($full_path));
     }
 
+    public function download_evaluation_attachment($id = 0)
+    {
+        $this->_access_reports();
+        $id = (int) $id;
+        if (!$id) {
+            show_404();
+        }
+
+        $attachment = $this->Tender_evaluation_attachments_model->get_attachment($id);
+        if (!$attachment) {
+            show_404();
+        }
+
+        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        return $this->response->download($full_path, null)->setFileName($attachment->original_name ?: basename($full_path));
+    }
+
     private function _access_reports(): void
     {
-        $this->access_only_tender("procurement", "view");
+        if (
+            !$this->can_tender("procurement", "view")
+            && !$this->can_tender("procurement_manager_inbox", "view")
+        ) {
+            app_redirect("forbidden");
+            exit;
+        }
     }
 
     private function _ensure_workflow_history_table(): void
@@ -435,9 +717,8 @@ class Tender_reports extends Security_Controller
     {
         return [
             "bidding" => "Bid Submission / Bidding",
-            "technical_3key" => "3-Key Technical Opening",
+            "technical_3key" => "Bid Opening",
             "technical" => "Technical Evaluation",
-            "committee_3key" => "3-Key Commercial Opening",
             "commercial" => "Commercial Evaluation",
             "award_decision" => "Award Decision",
         ];
@@ -482,6 +763,21 @@ class Tender_reports extends Security_Controller
         )->getRowArray();
 
         return $row ?: ["total_count" => 0, "submitted_count" => 0, "accepted_count" => 0];
+    }
+
+    private function _build_stage_override_manager_payload(array $payload, string $now): array
+    {
+        return [
+            "procurement_manager_status" => "pending",
+            "procurement_manager_action" => "stage_override",
+            "procurement_manager_payload" => json_encode($payload),
+            "procurement_manager_submitted_by" => (int) $this->login_user->id,
+            "procurement_manager_submitted_at" => $now,
+            "procurement_manager_reviewed_by" => null,
+            "procurement_manager_reviewed_at" => null,
+            "procurement_manager_comment" => null,
+            "updated_at" => $now,
+        ];
     }
 
     private function _expire_opening_sessions(int $tender_id, string $stage): void
@@ -562,8 +858,6 @@ class Tender_reports extends Security_Controller
             "technical_end_at" => "Technical Evaluation End",
             "technical_eval_deadline" => "Technical Evaluation Deadline",
             "technical_locked_at" => "Technical Lock",
-            "committee_3key_start_at" => "Commercial 3-Key Opening Start",
-            "committee_3key_end_at" => "Commercial 3-Key Opening Deadline",
             "commercial_unlocked_at" => "Commercial Unlock",
             "commercial_start_at" => "Commercial Evaluation Start",
             "commercial_end_at" => "Commercial Evaluation End",
@@ -620,17 +914,9 @@ class Tender_reports extends Security_Controller
             $technical_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "technical_eval_deadline", $bid_opening_at);
             $payload["technical_end_at"] = $technical_end_at;
 
-            $committee_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "committee_3key_start_at", $technical_end_at);
-            $committee_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "committee_3key_end_at", $committee_start_at);
-            $commercial_unlocked_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_unlocked_at", $committee_end_at);
-            $commercial_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_start_at", $commercial_unlocked_at);
-            $commercial_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_eval_deadline", $commercial_start_at);
-            $payload["commercial_end_at"] = $commercial_end_at;
-            $this->_push_stage_field_after($tender, $payload, $adjustments, "award_ready_at", $commercial_end_at);
-        } elseif ($target_stage === "committee_3key") {
-            $committee_end_at = $this->_stage_date_value($tender, $payload, "committee_3key_end_at") ?: date("Y-m-d H:i:s");
-            $commercial_unlocked_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_unlocked_at", $committee_end_at);
-            $commercial_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_start_at", $commercial_unlocked_at);
+            $commercial_unlocked_at = $this->_stage_date_value($tender, $payload, "commercial_unlocked_at") ?: $bid_opening_at;
+            $payload["commercial_unlocked_at"] = $commercial_unlocked_at;
+            $commercial_start_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_start_at", $technical_end_at);
             $commercial_end_at = $this->_push_stage_field_after($tender, $payload, $adjustments, "commercial_eval_deadline", $commercial_start_at);
             $payload["commercial_end_at"] = $commercial_end_at;
             $this->_push_stage_field_after($tender, $payload, $adjustments, "award_ready_at", $commercial_end_at);
@@ -657,8 +943,6 @@ class Tender_reports extends Security_Controller
             "technical_end_at",
             "technical_eval_deadline",
             "technical_locked_at",
-            "committee_3key_start_at",
-            "committee_3key_end_at",
             "commercial_unlocked_at",
             "commercial_start_at",
             "commercial_end_at",
@@ -717,7 +1001,7 @@ class Tender_reports extends Security_Controller
         $message .= "From: " . $from . "\n";
         $message .= "To: " . $to . "\n";
 
-        if (in_array($target_stage, ["bidding", "technical", "committee_3key", "commercial"], true)) {
+        if (in_array($target_stage, ["bidding", "technical", "commercial"], true)) {
             $message .= "Open until: " . date("Y-m-d H:i", strtotime($open_until)) . "\n";
         }
 
@@ -741,6 +1025,38 @@ class Tender_reports extends Security_Controller
             "published_at" => $now,
             "created_by" => $this->login_user->id,
             "status" => "internal",
+            "created_at" => $now,
+            "deleted" => 0,
+        ]));
+    }
+
+    private function _record_procurement_proposal_review($tender, $opening_session, string $review_note, string $now): void
+    {
+        $table = $this->db->prefixTable("tender_workflow_history");
+        $details = [
+            "Procurement reviewed the opened technical and commercial proposal documents before releasing bids to the concerned evaluation department.",
+            "Bid opening status: " . ucwords(str_replace("_", " ", (string) ($opening_session->status ?? "completed"))),
+        ];
+
+        if (!empty($opening_session->signed_at)) {
+            $details[] = "Committee signed at: " . date("Y-m-d H:i", strtotime((string) $opening_session->signed_at));
+        }
+
+        if (!empty($opening_session->manual_form_uploaded_at)) {
+            $details[] = "Manual opening form uploaded at: " . date("Y-m-d H:i", strtotime((string) $opening_session->manual_form_uploaded_at));
+        }
+
+        $this->db->table($table)->insert(clean_data([
+            "tender_id" => (int) ($tender->id ?? 0),
+            "action_type" => "procurement_proposal_review",
+            "from_status" => (string) ($tender->status ?? ""),
+            "to_status" => (string) ($tender->status ?? ""),
+            "from_stage" => (string) ($tender->workflow_stage ?? ""),
+            "to_stage" => (string) ($tender->workflow_stage ?? ""),
+            "open_until" => null,
+            "reason" => $review_note ?: null,
+            "details" => implode("\n", $details),
+            "created_by" => $this->login_user->id,
             "created_at" => $now,
             "deleted" => 0,
         ]));
@@ -784,7 +1100,7 @@ class Tender_reports extends Security_Controller
                 req.reference AS request_reference,
                 req.request_date,
                 req.budget_omr,
-                req.tender_fee,
+                COALESCE(t.tender_fee, req.tender_fee) AS tender_fee,
                 req.announcement,
                 req.evaluation_method,
                 req.technical_weight,
@@ -964,6 +1280,7 @@ class Tender_reports extends Security_Controller
                 FROM $te
                 WHERE deleted = 0
                   AND type = 'technical'
+                  AND (submitted_after_deadline = 0 OR late_review_status = 'accepted')
                 GROUP BY tender_bid_id
              ) latest_tech
                 ON latest_tech.tender_bid_id = bid.id
@@ -976,6 +1293,7 @@ class Tender_reports extends Security_Controller
                 FROM $te
                 WHERE deleted = 0
                   AND type = 'commercial'
+                  AND (submitted_after_deadline = 0 OR late_review_status = 'accepted')
                 GROUP BY tender_bid_id
              ) latest_comm
                 ON latest_comm.tender_bid_id = bid.id
@@ -985,6 +1303,126 @@ class Tender_reports extends Security_Controller
                 ON comm_user.id = comm_eval.evaluator_id
              ORDER BY $vendors.vendor_name ASC"
         )->getResult();
+    }
+
+    private function _get_weighted_evaluation_scores($tender, array $vendors): array
+    {
+        $technical_weight = $this->_weight_value($tender->technical_weight ?? null, 70);
+        $commercial_weight = $this->_weight_value($tender->commercial_weight ?? null, 30);
+
+        if (($technical_weight + $commercial_weight) <= 0) {
+            $technical_weight = 70.0;
+            $commercial_weight = 30.0;
+        }
+
+        $technical_max = $this->_stage_score_max((int) ($tender->id ?? 0), "technical");
+        $commercial_max = 100.0;
+        $rows = [];
+
+        foreach ($vendors as $vendor) {
+            if (empty($vendor->bid_id)) {
+                continue;
+            }
+
+            $technical_score = $this->_nullable_float($vendor->technical_score ?? null);
+            $commercial_score = $this->_nullable_float($vendor->commercial_score ?? null);
+
+            $technical_percent = $this->_score_percent($technical_score, $technical_max);
+            $commercial_percent = $this->_score_percent($commercial_score, $commercial_max);
+            $technical_weighted = $this->_weighted_score_points($technical_score, $technical_max, $technical_weight);
+            $commercial_weighted = $this->_weighted_score_points($commercial_score, $commercial_max, $commercial_weight);
+            $is_complete = $technical_weighted !== null && $commercial_weighted !== null;
+
+            $rows[] = [
+                "vendor_id" => (int) ($vendor->vendor_id ?? 0),
+                "bid_id" => (int) ($vendor->bid_id ?? 0),
+                "vendor_name" => (string) ($vendor->vendor_name ?? "-"),
+                "technical_score" => $technical_score,
+                "technical_score_max" => $technical_max,
+                "technical_percent" => $technical_percent,
+                "technical_weight" => $technical_weight,
+                "technical_weighted" => $technical_weighted,
+                "technical_decision" => (string) ($vendor->technical_decision ?? ""),
+                "commercial_score" => $commercial_score,
+                "commercial_score_max" => $commercial_max,
+                "commercial_percent" => $commercial_percent,
+                "commercial_weight" => $commercial_weight,
+                "commercial_weighted" => $commercial_weighted,
+                "commercial_decision" => (string) ($vendor->commercial_decision ?? ""),
+                "final_weighted_score" => $is_complete ? round($technical_weighted + $commercial_weighted, 3) : null,
+                "max_weighted_score" => round($technical_weight + $commercial_weight, 3),
+                "is_complete" => $is_complete,
+            ];
+        }
+
+        usort($rows, function ($a, $b) {
+            if ((bool) $a["is_complete"] !== (bool) $b["is_complete"]) {
+                return (bool) $a["is_complete"] ? -1 : 1;
+            }
+
+            $a_score = $a["final_weighted_score"];
+            $b_score = $b["final_weighted_score"];
+            if ($a_score !== $b_score) {
+                return ((float) $b_score <=> (float) $a_score);
+            }
+
+            return strcasecmp((string) $a["vendor_name"], (string) $b["vendor_name"]);
+        });
+
+        return $rows;
+    }
+
+    private function _stage_score_max(int $tender_id, string $type): float
+    {
+        $criteria = $this->db->prefixTable("tender_criteria");
+        $row = $this->db->query(
+            "SELECT SUM(weight) AS max_score
+             FROM $criteria
+             WHERE deleted=0
+               AND tender_id=?
+               AND type=?",
+            [$tender_id, $type]
+        )->getRow();
+
+        $max = (float) ($row->max_score ?? 0);
+        return $max > 0 ? $max : 100.0;
+    }
+
+    private function _weighted_score_points(?float $score, float $score_max, float $weight): ?float
+    {
+        $percent = $this->_score_percent($score, $score_max);
+        if ($percent === null) {
+            return null;
+        }
+
+        return round(($percent / 100) * $weight, 3);
+    }
+
+    private function _score_percent(?float $score, float $score_max): ?float
+    {
+        if ($score === null || $score_max <= 0) {
+            return null;
+        }
+
+        return round(max(0, min(100, ($score / $score_max) * 100)), 3);
+    }
+
+    private function _nullable_float($value): ?float
+    {
+        if ($value === null || $value === "") {
+            return null;
+        }
+
+        return is_numeric($value) ? (float) $value : null;
+    }
+
+    private function _weight_value($value, float $fallback): float
+    {
+        if ($value === null || $value === "" || !is_numeric($value)) {
+            return $fallback;
+        }
+
+        return max(0, (float) $value);
     }
 
     private function _get_evaluations(int $tender_id, string $type): array
@@ -1005,6 +1443,14 @@ class Tender_reports extends Security_Controller
                 $te.decision,
                 $te.total_score,
                 $te.comments,
+                $te.review_started_at,
+                $te.review_duration_seconds,
+                $te.deadline_at,
+                $te.submitted_after_deadline,
+                $te.late_review_status,
+                $te.late_reviewed_by,
+                $te.late_reviewed_at,
+                $te.late_review_comment,
                 $te.submitted_at,
                 $vendors.vendor_name,
                 TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS evaluator_name,
@@ -1039,12 +1485,89 @@ class Tender_reports extends Security_Controller
                 $te.decision,
                 $te.total_score,
                 $te.comments,
+                $te.review_started_at,
+                $te.review_duration_seconds,
+                $te.deadline_at,
+                $te.submitted_after_deadline,
+                $te.late_review_status,
+                $te.late_reviewed_by,
+                $te.late_reviewed_at,
+                $te.late_review_comment,
                 $te.submitted_at,
                 $vendors.vendor_name,
                 evaluator_name
              ORDER BY $te.submitted_at DESC, $te.id DESC",
             [$tender_id, $type]
         )->getResult();
+    }
+
+    private function _get_late_evaluation_for_review(int $evaluation_id)
+    {
+        $te = $this->db->prefixTable("tender_evaluations");
+        $tb = $this->db->prefixTable("tender_bids");
+        $t = $this->db->prefixTable("tenders");
+        $vendors = $this->db->prefixTable("vendors");
+        $users = $this->db->prefixTable("users");
+
+        return $this->db->query(
+            "SELECT
+                $te.*,
+                $tb.vendor_id,
+                $tb.status AS bid_status,
+                $vendors.vendor_name,
+                $t.reference,
+                $t.title,
+                $t.status AS tender_status,
+                $t.workflow_stage,
+                TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS evaluator_name
+             FROM $te
+             INNER JOIN $tb
+                ON $tb.id = $te.tender_bid_id
+               AND $tb.deleted = 0
+             INNER JOIN $t
+                ON $t.id = $te.tender_id
+               AND $t.deleted = 0
+             LEFT JOIN $vendors
+                ON $vendors.id = $tb.vendor_id
+               AND $vendors.deleted = 0
+             LEFT JOIN $users
+                ON $users.id = $te.evaluator_id
+             WHERE $te.deleted = 0
+               AND $te.id = ?
+             LIMIT 1",
+            [$evaluation_id]
+        )->getRow();
+    }
+
+    private function _record_late_evaluation_review_history($evaluation, string $decision, string $comment, string $now): void
+    {
+        $table = $this->db->prefixTable("tender_workflow_history");
+        $details = [
+            ucfirst((string) ($evaluation->type ?? "evaluation")) . " late evaluation reviewed by procurement.",
+            "Vendor: " . ((string) ($evaluation->vendor_name ?? "-")),
+            "Evaluator: " . (trim((string) ($evaluation->evaluator_name ?? "")) ?: "-"),
+            "Late review decision: " . ucfirst($decision),
+            "Evaluation decision: " . ucfirst((string) ($evaluation->decision ?? "-")),
+        ];
+
+        if ($comment !== "") {
+            $details[] = "Procurement comment: " . $comment;
+        }
+
+        $this->db->table($table)->insert(clean_data([
+            "tender_id" => (int) ($evaluation->tender_id ?? 0),
+            "action_type" => "late_" . (string) ($evaluation->type ?? "evaluation") . "_review_" . $decision,
+            "from_status" => (string) ($evaluation->tender_status ?? ""),
+            "to_status" => (string) ($evaluation->tender_status ?? ""),
+            "from_stage" => (string) ($evaluation->workflow_stage ?? ""),
+            "to_stage" => (string) ($evaluation->workflow_stage ?? ""),
+            "open_until" => $evaluation->deadline_at ?? null,
+            "reason" => $comment ?: null,
+            "details" => implode("\n", $details),
+            "created_by" => $this->login_user->id,
+            "created_at" => $now,
+            "deleted" => 0,
+        ]));
     }
 
     private function _get_communications(int $tender_id): array
@@ -1112,6 +1635,28 @@ class Tender_reports extends Security_Controller
         )->getResult();
     }
 
+    private function _get_latest_proposal_review(int $tender_id)
+    {
+        $history = $this->db->prefixTable("tender_workflow_history");
+        $users = $this->db->prefixTable("users");
+
+        return $this->db->query(
+            "SELECT
+                $history.*,
+                TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS created_by_name,
+                $users.email AS created_by_email
+             FROM $history
+             LEFT JOIN $users
+                ON $users.id = $history.created_by
+             WHERE $history.deleted = 0
+               AND $history.tender_id = ?
+               AND $history.action_type = 'procurement_proposal_review'
+             ORDER BY $history.created_at DESC, $history.id DESC
+             LIMIT 1",
+            [$tender_id]
+        )->getRow();
+    }
+
     private function _get_opening_audit(int $tender_id): array
     {
         $opening = $this->db->prefixTable("tender_bid_openings");
@@ -1126,9 +1671,16 @@ class Tender_reports extends Security_Controller
                 $opening.generated_at,
                 $opening.expires_at,
                 $opening.unlocked_at,
+                $opening.signed_at,
+                $opening.manual_form_path,
+                $opening.manual_form_original_name,
+                $opening.manual_form_uploaded_at,
                 $entry.role,
                 $entry.is_valid,
                 $entry.confirmed_at,
+                $entry.signature_name,
+                $entry.signature_statement,
+                $entry.signed_at AS entry_signed_at,
                 $entry.ip_address,
                 TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS member_name,
                 $users.email AS member_email
@@ -1143,6 +1695,16 @@ class Tender_reports extends Security_Controller
              ORDER BY $opening.id DESC, $entry.confirmed_at ASC, $entry.id ASC",
             [$tender_id]
         )->getResult();
+    }
+
+    private function _get_opening_signatures(int $tender_id): array
+    {
+        $session = $this->Tender_bid_openings_model->get_active_session($tender_id, "technical");
+        if (!$session) {
+            return [];
+        }
+
+        return $this->Tender_bid_openings_model->get_signature_rows((int) $session->id);
     }
 
     private function _get_bid_document_with_tender(int $document_id)
@@ -1191,9 +1753,8 @@ class Tender_reports extends Security_Controller
             $this->_timeline_item("Site Visit", "Site visit notice/deadline captured for vendors.", $tender->site_visit_at ?? null, null, $site_visit_status),
             $this->_timeline_item("Clarifications", "Vendor questions and procurement responses window.", $tender->published_at ?? null, $tender->clarification_deadline ?? null, !empty($tender->clarification_deadline) && strtotime((string) $tender->clarification_deadline) <= $now ? "completed" : "scheduled"),
             $this->_timeline_item("Bid Submission", "Vendor bid upload window.", $tender->published_at ?? $tender->release_at ?? null, $tender->closing_at ?? null, in_array($status, ["closed", "awarded", "cancelled"], true) || $rank >= 1 ? "completed" : ($status === "published" ? "active" : "pending")),
-            $this->_timeline_item("3-Key Technical Opening", "Technical proposals unlock by chairman, secretary, and ITC member.", $tender->closing_at ?? null, $tender->technical_start_at ?? $tender->bid_opening_at ?? null, !empty($tender->technical_start_at) || $rank > 1 ? "completed" : ($rank === 1 ? "active" : "pending")),
+            $this->_timeline_item("Bid Opening", "Technical and commercial bid packages unlock once chairman, secretary, and ITC member sign.", $tender->closing_at ?? null, $tender->technical_start_at ?? $tender->bid_opening_at ?? null, !empty($tender->technical_start_at) || $rank > 1 ? "completed" : ($rank === 1 ? "active" : "pending")),
             $this->_timeline_item("Technical Evaluation", "Technical team scoring and accept/reject decision.", $tender->technical_start_at ?? null, $tender->technical_locked_at ?? $tender->technical_end_at ?? null, $rank > 2 ? "completed" : ($rank === 2 ? "active" : "pending")),
-            $this->_timeline_item("3-Key Commercial Opening", "Commercial bid unlock by chairman, secretary, and ITC member.", $tender->committee_3key_start_at ?? null, $tender->commercial_unlocked_at ?? $tender->committee_3key_end_at ?? null, !empty($tender->commercial_unlocked_at) || $rank > 3 ? "completed" : ($rank === 3 ? "active" : "pending")),
             $this->_timeline_item("Commercial Evaluation", "Commercial scoring, pricing review, and shortlist.", $tender->commercial_start_at ?? null, $tender->award_ready_at ?? $tender->commercial_end_at ?? null, $rank > 4 || $status === "awarded" ? "completed" : ($rank === 4 ? "active" : "pending")),
             $this->_timeline_item("Award Decision", "Manual award decision and final status update.", $tender->award_ready_at ?? null, $tender->loa_issued_at ?? null, $status === "awarded" ? "completed" : ($rank === 5 ? "active" : ($status === "cancelled" ? "cancelled" : "pending"))),
         ];
@@ -1244,10 +1805,15 @@ class Tender_reports extends Security_Controller
 
     private function _get_document_access_map($tender): array
     {
+        $tender_id = (int) ($tender->id ?? ($tender->tender_id ?? 0));
         $rank = $this->_stage_rank((string) ($tender->workflow_stage ?? ""));
         $status = (string) ($tender->status ?? "");
-        $technical_open = !empty($tender->technical_start_at) || $rank >= 2 || $status === "awarded";
-        $commercial_open = !empty($tender->commercial_unlocked_at) || $rank >= 4 || $status === "awarded";
+        $procurement_can_review_opened_bids = (
+            $this->can_tender("procurement", "view")
+            || $this->can_tender("procurement_manager_inbox", "view")
+        ) && $this->_is_bid_opening_completed($tender_id);
+        $technical_open = $procurement_can_review_opened_bids || !empty($tender->technical_start_at) || $rank >= 2 || $status === "awarded";
+        $commercial_open = $procurement_can_review_opened_bids || !empty($tender->commercial_unlocked_at) || $rank >= 4 || $status === "awarded";
 
         return [
             "technical" => $technical_open,
@@ -1258,12 +1824,20 @@ class Tender_reports extends Security_Controller
         ];
     }
 
+    private function _is_bid_opening_completed(int $tender_id): bool
+    {
+        if (!$tender_id) {
+            return false;
+        }
+
+        return (bool) $this->Tender_bid_openings_model->get_completed_session_for_technical_start($tender_id);
+    }
+
     private function _stage_rank(string $stage): int
     {
         return match ($stage) {
             "technical_3key" => 1,
             "technical" => 2,
-            "committee_3key" => 3,
             "commercial" => 4,
             "award_decision" => 5,
             default => 0,
@@ -1289,15 +1863,13 @@ class Tender_reports extends Security_Controller
         $class = match ($stage) {
             "technical_3key" => "bg-warning text-dark",
             "technical" => "bg-info text-dark",
-            "committee_3key" => "bg-warning text-dark",
             "commercial" => "bg-primary",
             "award_decision" => "bg-success",
             default => "bg-light text-dark",
         };
 
         $label = match ($stage) {
-            "technical_3key" => "3-Key Technical Opening",
-            "committee_3key" => "3-Key Commercial Opening",
+            "technical_3key" => "Bid Opening",
             default => ucwords(str_replace("_", " ", $stage ?: "bidding")),
         };
 

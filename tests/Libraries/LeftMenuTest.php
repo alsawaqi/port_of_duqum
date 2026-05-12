@@ -244,6 +244,7 @@ namespace Tests\Libraries {
             // children flattened should also appear as individual keys
             $this->assertArrayHasKey('vendors', $items);
             $this->assertArrayHasKey('vendor_groups', $items);
+            $this->assertArrayHasKey('vendor_grades', $items);
             $this->assertArrayHasKey('vendor_group_fees', $items);
             $this->assertArrayHasKey('vendor_document_types', $items);
             $this->assertArrayHasKey('todo', $items); // still includes todo

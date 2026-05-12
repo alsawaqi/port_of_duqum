@@ -19,10 +19,57 @@ class Gate_passes_model extends Crud_model
     {
         $t = $this->db->prefixTable("gate_passes");
         $row = $this->db->query(
-            "SELECT * FROM $t WHERE gate_pass_request_id=? AND deleted=0 LIMIT 1",
+            "SELECT * FROM $t WHERE gate_pass_request_id=? AND deleted=0 ORDER BY id ASC LIMIT 1",
             [(int)$gate_pass_request_id]
         )->getRow();
         return $row;
+    }
+
+    /**
+     * Get every issued pass for a request, including the assigned visitor when available.
+     */
+    public function get_all_by_request_id($gate_pass_request_id)
+    {
+        $t = $this->db->prefixTable("gate_passes");
+        $visitors = $this->db->prefixTable("gate_pass_request_visitors");
+
+        return $this->db->query(
+            "SELECT $t.*,
+                    $visitors.full_name AS visitor_full_name,
+                    $visitors.id_number AS visitor_id_number,
+                    $visitors.nationality AS visitor_nationality
+             FROM $t
+             LEFT JOIN $visitors ON $visitors.id = $t.gate_pass_request_visitor_id AND $visitors.deleted=0
+             WHERE $t.gate_pass_request_id=? AND $t.deleted=0
+             ORDER BY COALESCE($visitors.is_primary, 0) DESC, $visitors.full_name ASC, $t.id ASC",
+            [(int)$gate_pass_request_id]
+        );
+    }
+
+    public function get_by_request_and_visitor(int $gate_pass_request_id, ?int $gate_pass_request_visitor_id)
+    {
+        $t = $this->db->prefixTable("gate_passes");
+        if ($gate_pass_request_visitor_id) {
+            return $this->db->query(
+                "SELECT * FROM $t WHERE gate_pass_request_id=? AND gate_pass_request_visitor_id=? AND deleted=0 LIMIT 1",
+                [$gate_pass_request_id, $gate_pass_request_visitor_id]
+            )->getRow();
+        }
+
+        return $this->db->query(
+            "SELECT * FROM $t WHERE gate_pass_request_id=? AND gate_pass_request_visitor_id IS NULL AND deleted=0 LIMIT 1",
+            [$gate_pass_request_id]
+        )->getRow();
+    }
+
+    public function get_by_id_for_request(int $id, int $gate_pass_request_id)
+    {
+        $t = $this->db->prefixTable("gate_passes");
+
+        return $this->db->query(
+            "SELECT * FROM $t WHERE id=? AND gate_pass_request_id=? AND deleted=0 LIMIT 1",
+            [$id, $gate_pass_request_id]
+        )->getRow();
     }
 
 
@@ -45,9 +92,14 @@ class Gate_passes_model extends Crud_model
     /**
      * Generate gate_pass_no (e.g. GP-2025-000123 for request id 123).
      */
-    public function generate_gate_pass_no($request_id): string
+    public function generate_gate_pass_no($request_id, ?int $visitor_id = null): string
     {
-        return "GP-" . date("Y") . "-" . str_pad((string)(int)$request_id, 6, "0", STR_PAD_LEFT);
+        $base = "GP-" . date("Y") . "-" . str_pad((string)(int)$request_id, 6, "0", STR_PAD_LEFT);
+        if ($visitor_id) {
+            return $base . "-V" . str_pad((string)$visitor_id, 6, "0", STR_PAD_LEFT);
+        }
+
+        return $base;
     }
 
 

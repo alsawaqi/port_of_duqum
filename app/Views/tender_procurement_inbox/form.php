@@ -6,6 +6,7 @@ $existing_required_codes = $existing_required_codes ?? [];
 $bid_requirement_labels = $bid_requirement_labels ?? [];
 $rfq_detail = $rfq_detail ?? null;
 $rfq_items = $rfq_items ?? [];
+$testing_stage_options = $testing_stage_options ?? ["" => "- Keep normal date-based flow -"];
 
 $dtValue = function ($value) {
     if (empty($value)) {
@@ -23,6 +24,10 @@ $dateOnlyValue = function ($value) {
 
 $is_edit = !empty($tender->id);
 $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
+$procurement_manager_status = (string)($tender->procurement_manager_status ?? "draft");
+$tender_status = (string)($tender->status ?? "draft");
+$requires_change_approval = $is_edit && (in_array($tender_status, ["published", "closed"], true) || ($tender_status === "draft" && $procurement_manager_status === "approved"));
+$can_publish_after_manager_approval = $procurement_manager_status === "approved";
 ?>
 
 <div id="page-content" class="page-wrapper clearfix gp-pro-page tender-wizard-page">
@@ -174,11 +179,39 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                     </div>
                     <div class="col-md-6">
                         <div class="form-group tender-publish-choice">
-                            <label>Publish After Save</label>
+                            <label><?php echo $requires_change_approval ? "Submit Change for Procurement Manager Approval" : ($can_publish_after_manager_approval ? "Publish After Manager Approval" : "Submit for Procurement Manager Approval"); ?></label>
                             <label class="form-check mt10">
-                                <input type="checkbox" class="form-check-input" name="publish_now" value="1" <?php echo (($tender->status ?? "draft") === "published" ? "" : "checked"); ?>>
-                                <span class="form-check-label">Release tender immediately after saving</span>
+                                <?php if ($requires_change_approval) { ?>
+                                    <input type="checkbox" class="form-check-input" checked disabled>
+                                    <span class="form-check-label">Changes are sent to the procurement manager before they affect the tender</span>
+                                <?php } elseif ($can_publish_after_manager_approval) { ?>
+                                    <input type="checkbox" class="form-check-input" name="publish_now" value="1" <?php echo (($tender->status ?? "draft") === "published" ? "" : "checked"); ?>>
+                                    <span class="form-check-label">Release tender immediately after saving</span>
+                                <?php } else { ?>
+                                    <input type="checkbox" class="form-check-input" name="submit_for_approval" value="1" checked>
+                                    <span class="form-check-label">Send this tender to the procurement manager before publishing</span>
+                                <?php } ?>
                             </label>
+                            <?php if (!$can_publish_after_manager_approval && $procurement_manager_status === "pending") { ?>
+                                <div class="text-off mt5">Current approval status: Pending procurement manager approval.</div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Tender Fees (OMR)</label>
+                            <?php echo form_input([
+                                "name" => "tender_fee",
+                                "type" => "number",
+                                "step" => "0.001",
+                                "min" => "0",
+                                "value" => esc($tender->tender_fee ?? $request->tender_fee ?? ""),
+                                "class" => "form-control",
+                                "placeholder" => "0.000",
+                            ]); ?>
                         </div>
                     </div>
                 </div>
@@ -186,6 +219,16 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                 <div class="form-group">
                     <label>Brief Description</label>
                     <textarea name="brief_description" class="form-control" rows="5"><?php echo esc($tender->brief_description ?? $request->brief_description ?? ""); ?></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Temporary Testing Stage</label>
+                    <?php echo form_dropdown(
+                        "testing_workflow_stage",
+                        $testing_stage_options,
+                        "",
+                        "class='form-control select2' id='testing_workflow_stage'"
+                    ); ?>
                 </div>
             </div>
 
@@ -341,7 +384,12 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                             <label>Target By</label>
                             <?php echo form_dropdown(
                                 "target_mode",
-                                ["specialty" => "Vendor Specialty", "group" => "Vendor Group"],
+                                [
+                                    "specialty" => "Vendor Specialty",
+                                    "group" => "Vendor Group",
+                                    "specific_vendors" => "Specific Vendors",
+                                    "grade" => "Vendor Grade",
+                                ],
                                 $selected_target_mode ?? "specialty",
                                 "class='form-control select2' id='target_mode'"
                             ); ?>
@@ -381,6 +429,55 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                                 (int) ($selected_vendor_group_id ?? 0),
                                 "class='form-control select2' id='vendor_group_id'"
                             ); ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row" id="target-by-grade-wrap" style="display:none;">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Vendor Grade</label>
+                            <?php echo form_dropdown(
+                                "vendor_grade_id",
+                                $vendor_grades_dropdown ?? ["" => "- Select vendor grade -"],
+                                (int) ($selected_vendor_grade_id ?? 0),
+                                "class='form-control select2' id='vendor_grade_id'"
+                            ); ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="target-by-specific-vendors-wrap" style="display:none;">
+                    <div class="form-group">
+                        <label>Specific Vendors</label>
+                        <div class="tender-vendor-picker-shell">
+                            <div id="selected-vendor-tags" class="tender-selected-vendors">
+                                <?php foreach (($selected_specific_vendors ?? []) as $vendor) {
+                                    $grade_label = function_exists("vendor_grade_label") ? vendor_grade_label($vendor->grade_name ?? "", $vendor->grade_code ?? "") : trim((string) ($vendor->grade_code ?? ""));
+                                    $group_label = trim((string) ($vendor->group_name ?? ""));
+                                    if ($group_label !== "" && !empty($vendor->group_code)) {
+                                        $group_label .= " (" . $vendor->group_code . ")";
+                                    }
+                                    $meta = array_filter([
+                                        !empty($vendor->cr_number) ? "CR " . $vendor->cr_number : "",
+                                        $group_label,
+                                        $grade_label !== "-" ? $grade_label : "",
+                                    ]);
+                                ?>
+                                    <span class="tender-selected-vendor-tag" data-vendor-id="<?php echo (int) $vendor->id; ?>" data-vendor-name="<?php echo esc($vendor->vendor_name ?? "Vendor #" . (int) $vendor->id); ?>">
+                                        <input type="hidden" name="specific_vendor_ids[]" value="<?php echo (int) $vendor->id; ?>">
+                                        <span>
+                                            <strong><?php echo esc($vendor->vendor_name ?? "Vendor #" . (int) $vendor->id); ?></strong>
+                                            <?php if (!empty($meta)) { ?><small><?php echo esc(implode(" / ", $meta)); ?></small><?php } ?>
+                                        </span>
+                                        <button type="button" class="tender-remove-selected-vendor" aria-label="Remove vendor">&times;</button>
+                                    </span>
+                                <?php } ?>
+                            </div>
+                            <button type="button" class="btn btn-default tender-open-vendor-picker">
+                                <i data-feather="search" class="icon-16"></i> Search and Add Vendors
+                            </button>
+                            <div class="text-off mt5">Add as many approved vendors as needed. Only selected vendors will be invited when this target mode is used.</div>
                         </div>
                     </div>
                 </div>
@@ -446,13 +543,13 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                     <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>RFQ No</label>
+                                <label>Reference Number</label>
                                 <input type="text" name="rfq_no" class="form-control" value="<?php echo esc($rfq_detail->rfq_no ?? ""); ?>">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>RFQ Date</label>
+                                <label>Request Date</label>
                                 <input type="date" name="rfq_date" class="form-control" value="<?php echo esc($dateOnlyValue($rfq_detail->rfq_date ?? "")); ?>">
                             </div>
                         </div>
@@ -635,7 +732,9 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                             <div><dt>Company</dt><dd data-preview="company">-</dd></div>
                             <div><dt>Department</dt><dd data-preview="department">-</dd></div>
                             <div><dt>Type</dt><dd data-preview="tender_type">-</dd></div>
-                            <div><dt>Publish</dt><dd data-preview="publish_now">-</dd></div>
+                            <div><dt>Tender Fees</dt><dd data-preview="tender_fee">-</dd></div>
+                            <div><dt>Manager Step</dt><dd data-preview="publish_now">-</dd></div>
+                            <div><dt>Testing Stage</dt><dd data-preview="testing_workflow_stage">-</dd></div>
                             <div class="span-all"><dt>Description</dt><dd data-preview="brief_description">-</dd></div>
                         </dl>
                     </section>
@@ -675,6 +774,8 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                             <div><dt>Category</dt><dd data-preview="vendor_category">-</dd></div>
                             <div><dt>Subcategory</dt><dd data-preview="vendor_subcategory">-</dd></div>
                             <div><dt>Group</dt><dd data-preview="vendor_group">-</dd></div>
+                            <div><dt>Grade</dt><dd data-preview="vendor_grade">-</dd></div>
+                            <div class="span-all"><dt>Specific Vendors</dt><dd data-preview="specific_vendors">-</dd></div>
                             <div class="span-all"><dt>Existing Invites</dt><dd><?php echo !empty($invited_vendors) ? count($invited_vendors) . " vendor(s)" : "None yet"; ?></dd></div>
                         </dl>
                     </section>
@@ -682,8 +783,8 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                     <section class="tender-preview-card span-all">
                         <h3><i data-feather="list" class="icon-16"></i> RFQ / RFP</h3>
                         <dl class="tender-preview-list mb15">
-                            <div><dt>RFQ No</dt><dd data-preview="rfq_no">-</dd></div>
-                            <div><dt>RFQ Date</dt><dd data-preview="rfq_date">-</dd></div>
+                            <div><dt>Reference Number</dt><dd data-preview="rfq_no">-</dd></div>
+                            <div><dt>Request Date</dt><dd data-preview="rfq_date">-</dd></div>
                             <div><dt>PR No</dt><dd data-preview="pr_no">-</dd></div>
                             <div><dt>Delivery</dt><dd data-preview="delivery_location">-</dd></div>
                             <div><dt>INCOTERM</dt><dd data-preview="incoterm">-</dd></div>
@@ -731,7 +832,7 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
                 </button>
                 <button type="submit" class="btn btn-success tender-save">
                     <i data-feather="check-circle" class="icon-16"></i>
-                    <?php echo $is_edit ? "Save Tender" : "Create Tender"; ?>
+                    <?php echo $requires_change_approval ? "Submit Change for Approval" : ($is_edit ? "Save Tender" : "Create Tender"); ?>
                 </button>
             </div>
         </section>
@@ -740,11 +841,39 @@ $page_title = $is_edit ? "Edit Tender" : "Create New Tender";
     <?php echo form_close(); ?>
 </div>
 
+<div class="modal fade" id='vendor_picker_modal' tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Vendors</h5>
+                <button type="button" class="close" data-bs-dismiss="modal" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group mb15">
+                    <input type="text" id="vendor_picker_search" class="form-control" placeholder="Search by vendor name, CR number, email, or phone">
+                    <button type="button" class="btn btn-primary" id="vendor_picker_search_btn">
+                        <i data-feather="search" class="icon-16"></i> Search
+                    </button>
+                </div>
+                <div id="vendor_picker_results" class="tender-vendor-picker-results">
+                    <div class="text-off p15">Search for approved vendors to add them to this tender.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-bs-dismiss="modal" data-dismiss="modal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function () {
     var currentStep = 0;
     var maxStep = 5;
     var hasRequestSelectedVendors = <?php echo !empty($request_selected_vendors) ? "true" : "false"; ?>;
+    var vendorSearchTimer = null;
 
     $("#tender-procurement-form .select2").select2();
 
@@ -932,6 +1061,12 @@ $(document).ready(function () {
         return docs;
     }
 
+    function selectedVendorTexts() {
+        return $("#selected-vendor-tags .tender-selected-vendor-tag").map(function () {
+            return $.trim($(this).data("vendor-name") || $(this).find("strong").text());
+        }).get();
+    }
+
     function rfqItemTexts() {
         var rows = [];
         $("#rfq-items-table tbody tr").each(function () {
@@ -958,7 +1093,11 @@ $(document).ready(function () {
         setPreview("company", selectedText('[name="company_id"]'));
         setPreview("department", selectedText('[name="department_id"]'));
         setPreview("tender_type", selectedText("#tender_type"));
-        setPreview("publish_now", $('input[name="publish_now"]').is(":checked") ? "Publish after save" : "Save as draft");
+        setPreview("tender_fee", fieldValue("tender_fee") ? fieldValue("tender_fee") + " OMR" : "-");
+        var publishAfterSave = $('input[name="publish_now"]').is(":checked");
+        var submitForApproval = $('input[name="submit_for_approval"]').is(":checked");
+        setPreview("publish_now", publishAfterSave ? "Publish after save" : (submitForApproval ? "Submit for procurement manager approval" : "Save as draft"));
+        setPreview("testing_workflow_stage", selectedText("#testing_workflow_stage"));
         setPreview("brief_description", fieldValue("brief_description"));
 
         setPreview("release_at", dateText("release_at"));
@@ -983,6 +1122,8 @@ $(document).ready(function () {
         setPreview("vendor_category", selectedText("#vendor_category_id"));
         setPreview("vendor_subcategory", selectedText("#vendor_sub_category_id"));
         setPreview("vendor_group", selectedText("#vendor_group_id"));
+        setPreview("vendor_grade", selectedText("#vendor_grade_id"));
+        setPreview("specific_vendors", selectedVendorTexts().join(", ") || "-");
 
         setPreview("rfq_no", fieldValue("rfq_no"));
         setPreview("rfq_date", fieldValue("rfq_date"));
@@ -1011,6 +1152,11 @@ $(document).ready(function () {
         var $panel = $('.tender-wizard-step-panel[data-step-panel="' + step + '"]');
         $panel.find("[data-wizard-required]").each(function () {
             var $field = $(this);
+            var skipClosingForTesting = $("#testing_workflow_stage").val() && $field.attr("name") === "closing_at";
+            if (skipClosingForTesting) {
+                markField($field, false);
+                return;
+            }
             var hasValue = fieldHasValue($field);
             markField($field, !hasValue);
             if (!hasValue) {
@@ -1018,7 +1164,10 @@ $(document).ready(function () {
             }
         });
 
-        if ($("input[name='publish_now']").is(":checked")) {
+        var testingStage = $("#testing_workflow_stage").val();
+        var testingStageNeedsTeam = $.inArray(testingStage, ["technical_3key", "technical", "commercial"]) !== -1;
+        var needsPublishFields = $("input[name='publish_now']").is(":checked") || ($("input[name='submit_for_approval']").is(":checked") && !testingStage) || testingStageNeedsTeam;
+        if (needsPublishFields) {
             $panel.find("[data-publish-required]").each(function () {
                 var $field = $(this);
                 var hasValue = fieldHasValue($field);
@@ -1033,17 +1182,24 @@ $(document).ready(function () {
             });
         }
 
-        if (step === 3 && $("#tender_type").val() === "close" && !hasRequestSelectedVendors) {
+        if (step === 3) {
             var targetMode = $("#target_mode").val();
-            var $targetField = targetMode === "group" ? $("#vendor_group_id") : $("#vendor_category_id");
-            var hasTarget = fieldHasValue($targetField);
+            var $targetField = targetMode === "group" ? $("#vendor_group_id") : (targetMode === "grade" ? $("#vendor_grade_id") : $("#vendor_category_id"));
+            var mustHaveTarget = targetMode === "group" || targetMode === "grade" || targetMode === "specific_vendors" || ($("#tender_type").val() === "close" && !hasRequestSelectedVendors);
+            var hasTarget = !mustHaveTarget || fieldHasValue($targetField);
+            if (targetMode === "specific_vendors") {
+                hasTarget = selectedVendorTexts().length > 0;
+                $targetField = $("#selected-vendor-tags");
+            }
             markField($targetField, !hasTarget);
             if (!hasTarget) {
                 isValid = false;
             }
-        } else if (step === 3) {
+        } else {
             markField($("#vendor_category_id"), false);
             markField($("#vendor_group_id"), false);
+            markField($("#vendor_grade_id"), false);
+            markField($("#selected-vendor-tags"), false);
         }
 
         if (!isValid && !silent) {
@@ -1072,6 +1228,9 @@ $(document).ready(function () {
         var mode = $("#target_mode").val();
         $("#target-by-specialty-wrap").toggle(mode === "specialty");
         $("#target-by-group-wrap").toggle(mode === "group");
+        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors");
+        $("#target-by-grade-wrap").toggle(mode === "grade");
+        renderPreview();
     }
 
     function loadSubcategories() {
@@ -1124,6 +1283,120 @@ $(document).ready(function () {
         openTenderDocumentChooser();
     });
 
+    function htmlEscape(value) {
+        return $("<div>").text(value || "").html();
+    }
+
+    function selectedVendorIds() {
+        return $("#selected-vendor-tags .tender-selected-vendor-tag").map(function () {
+            return String($(this).data("vendor-id"));
+        }).get();
+    }
+
+    function addSelectedVendor(vendor) {
+        if (!vendor || !vendor.id || $.inArray(String(vendor.id), selectedVendorIds()) !== -1) {
+            return;
+        }
+
+        var meta = [];
+        if (vendor.cr_number) meta.push("CR " + vendor.cr_number);
+        if (vendor.group) meta.push(vendor.group);
+        if (vendor.grade && vendor.grade !== "-") meta.push(vendor.grade);
+
+        var html = '<span class="tender-selected-vendor-tag" data-vendor-id="' + parseInt(vendor.id, 10) + '" data-vendor-name="' + htmlEscape(vendor.name) + '">' +
+            '<input type="hidden" name="specific_vendor_ids[]" value="' + parseInt(vendor.id, 10) + '">' +
+            '<span><strong>' + htmlEscape(vendor.name) + '</strong>' +
+            (meta.length ? '<small>' + htmlEscape(meta.join(" / ")) + '</small>' : '') +
+            '</span>' +
+            '<button type="button" class="tender-remove-selected-vendor" aria-label="Remove vendor">&times;</button>' +
+            '</span>';
+
+        $("#selected-vendor-tags").append(html);
+        markField($("#selected-vendor-tags"), false);
+        renderPreview();
+    }
+
+    function renderVendorSearchResults(vendors) {
+        var selected = selectedVendorIds();
+        if (!vendors || !vendors.length) {
+            $("#vendor_picker_results").html('<div class="text-off p15">No approved vendors found.</div>');
+            return;
+        }
+
+        var html = "";
+        $.each(vendors, function (index, vendor) {
+            var alreadySelected = $.inArray(String(vendor.id), selected) !== -1;
+            var meta = [];
+            if (vendor.email) meta.push(vendor.email);
+            if (vendor.cr_number) meta.push("CR " + vendor.cr_number);
+            if (vendor.group) meta.push(vendor.group);
+            if (vendor.grade && vendor.grade !== "-") meta.push(vendor.grade);
+
+            html += '<div class="tender-vendor-result">' +
+                '<div><strong>' + htmlEscape(vendor.name) + '</strong>' +
+                '<small>' + htmlEscape(meta.join(" / ") || "Approved vendor") + '</small></div>' +
+                '<button type="button" class="btn btn-sm ' + (alreadySelected ? 'btn-success' : 'btn-primary') + ' tender-add-vendor-from-search" ' +
+                'data-vendor-id="' + parseInt(vendor.id, 10) + '" ' +
+                'data-vendor-name="' + htmlEscape(vendor.name) + '" ' +
+                'data-vendor-email="' + htmlEscape(vendor.email || "") + '" ' +
+                'data-vendor-cr-number="' + htmlEscape(vendor.cr_number || "") + '" ' +
+                'data-vendor-group="' + htmlEscape(vendor.group || "") + '" ' +
+                'data-vendor-grade="' + htmlEscape(vendor.grade || "") + '"' + (alreadySelected ? ' disabled' : '') + '>' +
+                (alreadySelected ? 'Added' : 'Add') +
+                '</button>' +
+                '</div>';
+        });
+
+        $("#vendor_picker_results").html(html);
+    }
+
+    function searchVendors() {
+        var query = $.trim($("#vendor_picker_search").val() || "");
+        $("#vendor_picker_results").html('<div class="text-off p15">Searching...</div>');
+        $.getJSON("<?php echo get_uri('tender_procurement_inbox/search_vendors'); ?>", {q: query}, function (res) {
+            renderVendorSearchResults((res && res.vendors) || []);
+        }).fail(function () {
+            $("#vendor_picker_results").html('<div class="text-danger p15">Unable to load vendors. Please try again.</div>');
+        });
+    }
+
+    $(".tender-open-vendor-picker").on("click", function () {
+        $("#vendor_picker_modal").modal("show");
+        if (!$.trim($("#vendor_picker_search").val() || "")) {
+            searchVendors();
+        }
+    });
+
+    $("#vendor_picker_search_btn").on("click", searchVendors);
+    $("#vendor_picker_search").on("keyup", function (event) {
+        if (event.keyCode === 13) {
+            searchVendors();
+            return;
+        }
+
+        clearTimeout(vendorSearchTimer);
+        vendorSearchTimer = setTimeout(searchVendors, 350);
+    });
+
+    $(document).on("click", ".tender-add-vendor-from-search", function () {
+        var vendor = {
+            id: $(this).data("vendor-id"),
+            name: $(this).data("vendor-name"),
+            email: $(this).data("vendor-email"),
+            cr_number: $(this).data("vendor-cr-number"),
+            group: $(this).data("vendor-group"),
+            grade: $(this).data("vendor-grade")
+        };
+
+        addSelectedVendor(vendor);
+        $(this).removeClass("btn-primary").addClass("btn-success").text("Added").prop("disabled", true);
+    });
+
+    $(document).on("click", ".tender-remove-selected-vendor", function () {
+        $(this).closest(".tender-selected-vendor-tag").remove();
+        renderPreview();
+    });
+
     function rfqRowTemplate(nextNo) {
         return '<tr>' +
             '<td><input type="text" name="rfq_item_sr_no[]" class="form-control" value="' + nextNo + '"></td>' +
@@ -1155,6 +1428,7 @@ $(document).ready(function () {
 
     $("#target_mode").on("change", toggleTargetMode);
     $("#vendor_category_id").on("change", loadSubcategories);
+    $("#vendor_group_id, #vendor_grade_id, #vendor_sub_category_id").on("change", renderPreview);
     toggleTargetMode();
     if ($("#vendor_category_id").val()) {
         loadSubcategories();
@@ -1450,6 +1724,74 @@ $(document).ready(function () {
 #rfq-items-table input {
     min-width: 0;
 }
+.tender-vendor-picker-shell {
+    border: 1px solid #dfe7f2;
+    border-radius: 12px;
+    background: #fbfdff;
+    padding: 12px;
+}
+.tender-selected-vendors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 46px;
+    margin-bottom: 10px;
+}
+.tender-selected-vendor-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    border: 1px solid #bfd8ee;
+    border-radius: 10px;
+    background: #f5fbff;
+    color: var(--tw-ink);
+    padding: 8px 9px;
+}
+.tender-selected-vendor-tag strong,
+.tender-selected-vendor-tag small {
+    display: block;
+    max-width: 360px;
+    overflow-wrap: anywhere;
+}
+.tender-selected-vendor-tag small {
+    color: var(--tw-muted);
+    font-size: 11px;
+    margin-top: 2px;
+}
+.tender-remove-selected-vendor {
+    border: 0;
+    background: transparent;
+    color: #6b7890;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.tender-vendor-picker-results {
+    border: 1px solid #edf2f7;
+    border-radius: 10px;
+    max-height: 420px;
+    overflow: auto;
+}
+.tender-vendor-result {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid #edf2f7;
+}
+.tender-vendor-result:last-child {
+    border-bottom: 0;
+}
+.tender-vendor-result strong,
+.tender-vendor-result small {
+    display: block;
+}
+.tender-vendor-result small {
+    color: var(--tw-muted);
+    margin-top: 3px;
+}
 .tender-document-file-meta {
     border-top: 1px solid #edf2f7;
     padding-top: 10px;
@@ -1544,6 +1886,7 @@ $(document).ready(function () {
     margin-left: auto;
 }
 .tender-wizard-page .has-error .form-control,
+.tender-wizard-page .has-error .tender-selected-vendors,
 .tender-wizard-page .has-error .select2-container .select2-choice,
 .tender-wizard-page .has-error .select2-container .select2-selection {
     border-color: #df425a !important;

@@ -13,10 +13,7 @@ class Pod_reports extends Security_Controller
     {
         parent::__construct();
         $this->access_only_team_members();
-
-        if (empty($this->login_user->is_admin)) {
-            app_redirect("forbidden");
-        }
+        $this->access_only_pod_reports();
 
         $this->db = db_connect();
         $this->Stats_model = new Pod_dashboard_stats_model();

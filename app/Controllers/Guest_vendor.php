@@ -96,18 +96,19 @@ class Guest_vendor extends App_Controller
                 "contact_designation" => "permit_empty",
 
                 // optional numeric (if empty, CI may fail numeric, so handle below)
-                "country_id"      => "numeric",
-                "region_id"       => "numeric",
-                "city_id"         => "numeric",
+                "country_id"      => "permit_empty|numeric",
+                "region_id"       => "permit_empty|numeric",
+                "city_id"         => "permit_empty|numeric",
 
                 // login user fields
                 "user_name"       => "required",
                 "user_email"      => "required|valid_email",
-                "password"        => "permit_empty",
+                "password"        => "required",
+                "password_confirm" => "required",
                 // optional vendor address fields
 
 
-                "vendor_document_type_id" => "required|numeric",
+                "vendor_document_type_id" => "required",
                 "issued_at"               => "permit_empty",
                 "expires_at"              => "permit_empty",
                 "address"     => "permit_empty",
@@ -117,6 +118,19 @@ class Guest_vendor extends App_Controller
 
             // ✅ Guest page is CREATE ONLY
             $vendor_email = strtolower(trim((string) $this->request->getPost("email")));
+            $cr_number = trim((string) $this->request->getPost("cr_number"));
+            $password = (string) $this->request->getPost("password");
+            $password_confirm = (string) $this->request->getPost("password_confirm");
+
+            if ($password !== $password_confirm) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("passwords_do_not_match"),
+                    "field"   => "password_confirm",
+                    "errors"  => ["password_confirm" => app_lang("passwords_do_not_match")]
+                ]);
+                return;
+            }
 
             // vendor email must be unique for active records (deleted=0)
             $vendors_table = $db->prefixTable("vendors");
@@ -137,6 +151,23 @@ class Guest_vendor extends App_Controller
                 return;
             }
 
+            $existing_cr = $db->table($vendors_table)
+                ->select("id")
+                ->where("cr_number", $cr_number)
+                ->where("deleted", 0)
+                ->get()
+                ->getRow();
+
+            if ($existing_cr) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("cr_number_already_exists"),
+                    "field"   => "cr_number",
+                    "errors"  => ["cr_number" => app_lang("cr_number_already_exists")]
+                ]);
+                return;
+            }
+
             $user_email = strtolower(trim((string) $this->request->getPost("user_email")));
             $existing_user = $db->table("users")
                 ->select("id, user_type, deleted")
@@ -144,20 +175,14 @@ class Guest_vendor extends App_Controller
                 ->get()
                 ->getRow();
 
-            if ($existing_user && strtolower((string)($existing_user->user_type ?? "")) !== "staff") {
+            if ($existing_user) {
                 echo json_encode([
                     "success" => false,
-                    "message" => "This email is linked to a non-staff account and cannot be used for vendor portal access.",
+                    "message" => app_lang("email_already_exists"),
                     "field"   => "user_email",
-                    "errors"  => ["user_email" => "This email is linked to a non-staff account."]
+                    "errors"  => ["user_email" => app_lang("email_already_exists")]
                 ]);
                 return;
-            }
-
-            if (!$existing_user) {
-                $this->validate_submitted_data([
-                    "password" => "required",
-                ]);
             }
 
             // ✅ optional ids: store NULL instead of 0
@@ -169,7 +194,7 @@ class Guest_vendor extends App_Controller
                 "vendor_group_id" => (int) $this->request->getPost("vendor_group_id"),
                 "vendor_name"     => $this->request->getPost("vendor_name"),
                 "email"           => $vendor_email,
-                "cr_number"       => $this->request->getPost("cr_number"),
+                "cr_number"       => $cr_number,
                 "phone"           => $this->request->getPost("phone"),
                 "contact_person"  => $this->request->getPost("contact_person"),
                 "contact_designation" => $this->request->getPost("contact_designation"),
@@ -185,7 +210,7 @@ class Guest_vendor extends App_Controller
                 "postal_code" => $this->request->getPost("postal_code"),
 
                 // ✅ public submission always new
-                "status"          => "submitted",
+                "status"          => vendor_initial_registration_status(),
 
                 // ✅ public: no login user
                 "created_by"      => 0
@@ -296,13 +321,61 @@ class Guest_vendor extends App_Controller
             }
 
 
-            // 3) Save initial vendor document + create VUR (pending)
-            $doc_type_id = (int)$this->request->getPost("vendor_document_type_id");
-            $file        = $this->request->getFile("file");
-            $has_file    = $file && $file->isValid() && !$file->hasMoved();
+            // 3) Save initial vendor documents + create VUR rows (pending)
+            $doc_type_ids = $this->request->getPost("vendor_document_type_id");
+            $issued_ats = $this->request->getPost("issued_at");
+            $expires_ats = $this->request->getPost("expires_at");
+            $files = $this->request->getFileMultiple("file");
 
-            // File is mandatory for guest vendor
-            if (!$doc_type_id || !$has_file) {
+            if (!is_array($doc_type_ids)) {
+                $doc_type_ids = [$doc_type_ids];
+            }
+            if (!is_array($issued_ats)) {
+                $issued_ats = [$issued_ats];
+            }
+            if (!is_array($expires_ats)) {
+                $expires_ats = [$expires_ats];
+            }
+            if (!$files) {
+                $single_file = $this->request->getFile("file");
+                $files = $single_file ? [$single_file] : [];
+            }
+
+            $max_documents = max(count($doc_type_ids), count($files), count($issued_ats), count($expires_ats));
+            $document_rows = [];
+            for ($i = 0; $i < $max_documents; $i++) {
+                $doc_type_id = (int)($doc_type_ids[$i] ?? 0);
+                $file = $files[$i] ?? null;
+                $has_file = $file && $file->isValid() && !$file->hasMoved();
+                $has_dates = !empty($issued_ats[$i]) || !empty($expires_ats[$i]);
+
+                if (!$doc_type_id && !$has_file && !$has_dates) {
+                    continue;
+                }
+
+                if (!$doc_type_id || !$has_file) {
+                    $db->transRollback();
+
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("vendor_document_row_required"),
+                        "errors"  => [
+                            "vendor_document_type_id" => !$doc_type_id ? app_lang("field_required") : null,
+                            "file"                    => !$has_file ? app_lang("file_is_required") : null,
+                        ],
+                    ]);
+                    return;
+                }
+
+                $document_rows[] = [
+                    "vendor_document_type_id" => $doc_type_id,
+                    "issued_at" => $issued_ats[$i] ?? null,
+                    "expires_at" => $expires_ats[$i] ?? null,
+                    "file" => $file,
+                ];
+            }
+
+            if (!$document_rows) {
                 $db->transRollback();
 
                 echo json_encode([
@@ -322,62 +395,60 @@ class Guest_vendor extends App_Controller
                 mkdir($upload_dir, 0775, true);
             }
 
-            $new_name = uniqid("vd_", true) . "." . $file->getExtension();
-            $file->move($upload_dir, $new_name);
+            foreach ($document_rows as $document_row) {
+                $file = $document_row["file"];
+                $extension = $file->getExtension() ?: pathinfo($file->getClientName(), PATHINFO_EXTENSION);
+                $new_name = uniqid("vd_", true) . ($extension ? "." . $extension : "");
+                $file->move($upload_dir, $new_name);
 
-            // Prepare document data (same style as Vendor_portal::save_document)
-            $doc_data = [
-                "vendor_id"              => (int)$save_vendor_id,
-                "vendor_document_type_id" => $doc_type_id,
-                "disk"                   => "local",
-                "path"                   => "vendor_documents/vendor_" . $save_vendor_id . "/" . $new_name,
-                "original_name"          => $file->getClientName(),
-                "mime_type"              => $file->getClientMimeType(),
-                "size_bytes"             => $file->getSize(),
-                "issued_at"              => $this->request->getPost("issued_at") ?: null,
-                "expires_at"             => $this->request->getPost("expires_at") ?: null,
-                "uploaded_by"            => $user_id,   // the user we just created
-                "status"                 => "pending",
-                "deleted"                => 0,
-                "created_at"             => date("Y-m-d H:i:s"),
-                "updated_at"             => date("Y-m-d H:i:s"),
-            ];
+                // Prepare document data (same style as Vendor_portal::save_document)
+                $doc_data = [
+                    "vendor_id"              => (int)$save_vendor_id,
+                    "vendor_document_type_id" => (int)$document_row["vendor_document_type_id"],
+                    "disk"                   => "local",
+                    "path"                   => "vendor_documents/vendor_" . $save_vendor_id . "/" . $new_name,
+                    "original_name"          => $file->getClientName(),
+                    "mime_type"              => $file->getClientMimeType(),
+                    "size_bytes"             => $file->getSize(),
+                    "issued_at"              => $document_row["issued_at"] ?: null,
+                    "expires_at"             => $document_row["expires_at"] ?: null,
+                    "uploaded_by"            => $user_id,
+                    "status"                 => "pending",
+                    "deleted"                => 0,
+                    "created_at"             => date("Y-m-d H:i:s"),
+                    "updated_at"             => date("Y-m-d H:i:s"),
+                ];
 
-            $doc_clean = clean_data($doc_data);
-            $doc_id    = $this->Vendor_documents_model->ci_save($doc_clean);
+                $doc_clean = clean_data($doc_data);
+                $doc_id    = $this->Vendor_documents_model->ci_save($doc_clean);
 
-            if (!$doc_id) {
-                $err = $db->error();
-                throw new \RuntimeException("Vendor document insert error: " . ($err["message"] ?? "unknown"));
+                if (!$doc_id) {
+                    $err = $db->error();
+                    throw new \RuntimeException("Vendor document insert error: " . ($err["message"] ?? "unknown"));
+                }
+
+                // Build vendor_update_requests payload (same structure as vendor portal)
+                $changes = [
+                    "module"    => "documents",
+                    "table"     => "vendor_documents",
+                    "action"    => "create",
+                    "record_id" => (int)$doc_id,
+                    "before"    => [],
+                    "after"     => $doc_clean,
+                ];
+
+                $vur_data = [
+                    "vendor_id"    => (int)$save_vendor_id,
+                    "requested_by" => (int)$user_id,
+                    "changes"      => json_encode($changes, JSON_UNESCAPED_UNICODE),
+                    "status"       => "pending",
+                    "deleted"      => 0,
+                    "created_at"   => date("Y-m-d H:i:s"),
+                    "updated_at"   => date("Y-m-d H:i:s"),
+                ];
+
+                $this->Vendor_update_requests_model->ci_save($vur_data);
             }
-
-            // Build vendor_update_requests payload (same structure as vendor portal)
-            $changes = [
-                "module"    => "documents",
-                "table"     => "vendor_documents",
-                "action"    => "create",
-                "record_id" => (int)$doc_id,
-                "before"    => [],
-                "after"     => $doc_clean,
-            ];
-
-            $vur_data = [
-                "vendor_id"    => (int)$save_vendor_id,
-                "requested_by" => (int)$user_id,
-                "changes"      => json_encode($changes, JSON_UNESCAPED_UNICODE),
-                "status"       => "pending",
-                "deleted"      => 0,
-                "created_at"   => date("Y-m-d H:i:s"),
-                "updated_at"   => date("Y-m-d H:i:s"),
-            ];
-
-            $this->Vendor_update_requests_model->ci_save($vur_data);
-
-
-
-
-
-
 
 
             if ($db->transStatus() === false) {
@@ -389,7 +460,7 @@ class Guest_vendor extends App_Controller
 
             echo json_encode([
                 "success" => true,
-                "message" => "Thank you. Your vendor application has been submitted successfully."
+                "message" => app_lang("guest_vendor_application_saved")
             ]);
             return;
         } catch (\Throwable $e) {
@@ -441,7 +512,7 @@ class Guest_vendor extends App_Controller
             }
         }
 
-        $this->db->query("UPDATE `$table` SET status='submitted' WHERE deleted=0 AND (status='' OR status IS NULL)");
+        $this->db->query("UPDATE `$table` SET status='new' WHERE deleted=0 AND (status='' OR status IS NULL)");
     }
 
     private function _column_exists(string $table, string $column): bool

@@ -10,6 +10,19 @@ class Ptw_applications_model extends Crud_model
     {
         $this->table = "ptw_applications";
         parent::__construct($this->table);
+        $this->ensure_terminal_approval_required_column();
+    }
+
+    private function ensure_terminal_approval_required_column(): void
+    {
+        try {
+            if (!$this->db->fieldExists("terminal_approval_required", $this->table)) {
+                $table = $this->table;
+                $this->db->query("ALTER TABLE `$table` ADD COLUMN `terminal_approval_required` TINYINT(1) NOT NULL DEFAULT 1 AFTER `completed_at`");
+            }
+        } catch (\Throwable $e) {
+            log_message("error", "Failed to ensure PTW terminal approval column: " . $e->getMessage());
+        }
     }
 
     public function get_details($options = [])

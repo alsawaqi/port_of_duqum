@@ -4,7 +4,10 @@ namespace App\Controllers;
 
 use App\Models\Tender_bids_model;
 use App\Models\Tender_bid_documents_model;
+use App\Models\Tender_bid_item_prices_model;
+use App\Models\Tender_communications_model;
 use App\Models\Tender_documents_model;
+use App\Models\Tender_evaluation_attachments_model;
 use App\Models\Tender_evaluations_model;
 use App\Models\Tenders_model;
 
@@ -12,7 +15,10 @@ class Tender_commercial_inbox extends Security_Controller
 {
     protected $Tender_bids_model;
     protected $Tender_bid_documents_model;
+    protected $Tender_bid_item_prices_model;
+    protected $Tender_communications_model;
     protected $Tender_documents_model;
+    protected $Tender_evaluation_attachments_model;
     protected $Tender_evaluations_model;
     protected $Tenders_model;
 
@@ -23,7 +29,10 @@ class Tender_commercial_inbox extends Security_Controller
 
         $this->Tender_bids_model = new Tender_bids_model();
         $this->Tender_bid_documents_model = new Tender_bid_documents_model();
+        $this->Tender_bid_item_prices_model = new Tender_bid_item_prices_model();
+        $this->Tender_communications_model = new Tender_communications_model();
         $this->Tender_documents_model = new Tender_documents_model();
+        $this->Tender_evaluation_attachments_model = new Tender_evaluation_attachments_model();
         $this->Tender_evaluations_model = new Tender_evaluations_model();
         $this->Tenders_model = new Tenders_model();
     }
@@ -153,11 +162,24 @@ class Tender_commercial_inbox extends Security_Controller
             $active_evaluation = $latest_evaluation;
         }
 
+        $finding_attachments = [];
+        if (!empty($active_evaluation->id)) {
+            $grouped_attachments = $this->Tender_evaluation_attachments_model->get_grouped_by_evaluation_ids([(int) $active_evaluation->id]);
+            $finding_attachments = get_array_value($grouped_attachments, (int) $active_evaluation->id) ?: [];
+        }
+
+        $internal_messages = $this->Tender_communications_model->get_internal_conversation($tender_id, "commercial", $bid_id);
+        $internal_attachments = $this->Tender_communications_model->get_attachments_map(array_map(fn($message) => (int) $message->id, $internal_messages));
+
         return $this->template->view("tender_commercial_inbox/bid_modal_form", [
             "tender"            => $tender,
             "bid"               => $bid,
+            "bid_item_prices"   => $this->Tender_bid_item_prices_model->get_bid_item_prices($bid_id),
             "active_evaluation" => $active_evaluation,
             "latest_evaluation" => $latest_evaluation,
+            "finding_attachments" => $finding_attachments,
+            "internal_messages" => $internal_messages,
+            "internal_attachments" => $internal_attachments,
             "editable"          => $editable,
         ]);
     }
@@ -226,6 +248,7 @@ class Tender_commercial_inbox extends Security_Controller
         }
 
         $now = date("Y-m-d H:i:s");
+        $late_review = $this->_late_review_metadata($tender, "commercial", $now);
         $db = db_connect();
         $db->transBegin();
 
@@ -280,6 +303,8 @@ class Tender_commercial_inbox extends Security_Controller
             $evaluator_id,
             "commercial"
         );
+        $review_started_at = !empty($existing->review_started_at) ? (string) $existing->review_started_at : $late_review["review_started_at"];
+        $review_duration_seconds = $this->_review_duration_seconds($review_started_at, $now);
 
         $evaluation_data = [
             "tender_id"     => $tender_id,
@@ -290,6 +315,14 @@ class Tender_commercial_inbox extends Security_Controller
             "decision"      => $decision,
             "total_score"   => $commercial_score,
             "comments"      => $evaluation_comment ?: null,
+            "review_started_at" => $review_started_at,
+            "review_duration_seconds" => $review_duration_seconds,
+            "deadline_at" => $late_review["deadline_at"],
+            "submitted_after_deadline" => $late_review["is_late"] ? 1 : 0,
+            "late_review_status" => $late_review["is_late"] ? "pending" : null,
+            "late_reviewed_by" => null,
+            "late_reviewed_at" => null,
+            "late_review_comment" => null,
             "submitted_at"  => $now,
             "updated_at"    => $now,
             "deleted"       => 0,
@@ -310,6 +343,9 @@ class Tender_commercial_inbox extends Security_Controller
             ]);
         }
 
+        $this->_save_commercial_finding_files($evaluation_id, $tender_id, $bid_id);
+        $this->_record_evaluation_history($db, $tender, $fresh_bid, $evaluation_id, "commercial", $late_review, $decision, $commercial_score, $evaluation_comment, $now);
+
         $overview_after = $this->Tender_bids_model->get_tender_bids_overview_for_commercial_user($tender_id, $evaluator_id);
         $pending_count = 0;
         $approved_count = 0;
@@ -329,7 +365,7 @@ class Tender_commercial_inbox extends Security_Controller
         $message = "Commercial evaluation saved successfully.";
         $redirect_url = null;
 
-        if ($pending_count === 0) {
+        if ($pending_count === 0 && !$late_review["is_late"]) {
             $this->Tenders_model->ci_save([
                 "workflow_stage" => "award_decision",
                 "award_ready_at" => $now,
@@ -356,7 +392,7 @@ class Tender_commercial_inbox extends Security_Controller
 
         $response = [
             "success" => true,
-            "message" => $message
+            "message" => $late_review["is_late"] ? "Late commercial evaluation saved and sent to procurement for review." : $message
         ];
         
         if ($redirect_url) {
@@ -364,6 +400,182 @@ class Tender_commercial_inbox extends Security_Controller
         }
         
         return $this->response->setJSON($response);
+    }
+
+    private function _late_review_metadata($tender, string $type, string $now): array
+    {
+        $deadline = $type === "technical"
+            ? ($tender->technical_end_at ?? $tender->technical_eval_deadline ?? null)
+            : ($tender->commercial_end_at ?? $tender->commercial_eval_deadline ?? null);
+        $started_at = $type === "technical"
+            ? ($tender->technical_start_at ?? $tender->bid_opening_at ?? $tender->closing_at ?? $now)
+            : ($tender->commercial_start_at ?? $tender->commercial_unlocked_at ?? $now);
+
+        $deadline = $this->_normalize_audit_datetime($deadline);
+        $started_at = $this->_normalize_audit_datetime($started_at) ?: $now;
+        $stage = (string) ($tender->workflow_stage ?? "");
+        $late_stage = $type === "technical"
+            ? !in_array($stage, ["technical"], true)
+            : !in_array($stage, ["commercial"], true);
+        $late_deadline = $deadline && strtotime($now) > strtotime($deadline);
+
+        return [
+            "deadline_at" => $deadline,
+            "review_started_at" => $started_at,
+            "is_late" => (bool) ($late_deadline || $late_stage),
+        ];
+    }
+
+    private function _normalize_audit_datetime($value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $timestamp = strtotime((string) $value);
+        return $timestamp === false ? null : date("Y-m-d H:i:s", $timestamp);
+    }
+
+    private function _review_duration_seconds(?string $started_at, string $now): ?int
+    {
+        if (!$started_at) {
+            return null;
+        }
+
+        $start_time = strtotime($started_at);
+        $end_time = strtotime($now);
+        if ($start_time === false || $end_time === false || $end_time < $start_time) {
+            return null;
+        }
+
+        return $end_time - $start_time;
+    }
+
+    private function _record_evaluation_history($db, $tender, $bid, int $evaluation_id, string $type, array $late_review, string $decision, float $score, string $comment, string $now): void
+    {
+        $table = $db->prefixTable("tender_workflow_history");
+        $duration = $this->_review_duration_seconds($late_review["review_started_at"] ?? null, $now);
+        $details = [
+            ucfirst($type) . " evaluation submitted for bid #" . (int) ($bid->id ?? 0) . ".",
+            "Decision: " . ucfirst($decision),
+            "Score: " . number_format($score, 3),
+            "Review duration: " . ($duration === null ? "-" : $this->_format_duration($duration)),
+        ];
+
+        if (!empty($late_review["is_late"])) {
+            $details[] = "Submitted after deadline; waiting for procurement late review.";
+        }
+
+        if ($comment !== "") {
+            $details[] = "Comments: " . $comment;
+        }
+
+        $db->table($table)->insert(clean_data([
+            "tender_id" => (int) ($tender->id ?? 0),
+            "action_type" => $type . "_evaluation_submitted",
+            "from_status" => (string) ($tender->status ?? ""),
+            "to_status" => (string) ($tender->status ?? ""),
+            "from_stage" => (string) ($tender->workflow_stage ?? ""),
+            "to_stage" => (string) ($tender->workflow_stage ?? ""),
+            "open_until" => $late_review["deadline_at"] ?? null,
+            "reason" => !empty($late_review["is_late"]) ? "Late evaluation pending procurement review" : null,
+            "details" => implode("\n", $details),
+            "created_by" => $this->login_user->id,
+            "created_at" => $now,
+            "deleted" => 0,
+        ]));
+    }
+
+    private function _format_duration(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+        $days = intdiv($seconds, 86400);
+        $seconds %= 86400;
+        $hours = intdiv($seconds, 3600);
+        $seconds %= 3600;
+        $minutes = intdiv($seconds, 60);
+
+        $parts = [];
+        if ($days > 0) {
+            $parts[] = $days . "d";
+        }
+        if ($hours > 0) {
+            $parts[] = $hours . "h";
+        }
+        $parts[] = $minutes . "m";
+
+        return implode(" ", $parts);
+    }
+
+    public function request_clarification()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+            "message"   => "required",
+        ]);
+        $this->access_only_tender("commercial_eval", "update");
+
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $bid_id = (int) $this->request->getPost("bid_id");
+        $user_id = (int) $this->login_user->id;
+        $message = trim((string) $this->request->getPost("message"));
+        $subject = trim((string) $this->request->getPost("subject"));
+
+        $this->Tenders_model->auto_progress_workflow();
+
+        $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user($tender_id, $user_id);
+        if (!$tender) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Tender not found or you do not have access to request clarification."
+            ]);
+        }
+
+        $bid = null;
+        if ($bid_id > 0) {
+            $bid = $this->Tender_bids_model->get_tender_bid_for_commercial_user($tender_id, $bid_id, $user_id);
+            if (!$bid) {
+                return $this->response->setJSON([
+                    "success" => false,
+                    "message" => "Bid not found or you do not have access to request clarification."
+                ]);
+            }
+        }
+
+        $now = date("Y-m-d H:i:s");
+        $saved = $this->Tender_communications_model->ci_save(clean_data([
+            "tender_id" => $tender_id,
+            "vendor_id" => $bid ? (int) ($bid->vendor_id ?? 0) : null,
+            "tender_bid_id" => $bid ? $bid_id : null,
+            "type" => "commercial_clarification_request",
+            "clarification_scope" => "commercial",
+            "internal_audience" => "commercial",
+            "subject" => $subject ?: ($bid ? ("Commercial clarification request - " . ($bid->vendor_name ?? "Vendor")) : "General commercial clarification request"),
+            "message" => $message,
+            "parent_id" => null,
+            "sent_to_all" => 0,
+            "is_vendor_visible" => 0,
+            "status" => "pending_procurement",
+            "created_by" => $user_id,
+            "created_at" => $now,
+            "published_at" => $now,
+            "deleted" => 0,
+        ]));
+
+        if (!$saved) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => app_lang("error_occurred")
+            ]);
+        }
+
+        $this->_save_clarification_files((int) $saved, $tender_id, $bid ? (int) ($bid->vendor_id ?? 0) : null);
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Clarification request sent to procurement.",
+            "redirect_url" => get_uri("tender_commercial_inbox/details/" . $tender_id),
+        ]);
     }
 
     public function preview_tender_document($id = 0)
@@ -406,6 +618,62 @@ class Tender_commercial_inbox extends Security_Controller
     {
         $context = $this->_get_accessible_bid_document_context((int) $id);
         return $this->_serve_document_file($context["doc"], $context["full_path"], true);
+    }
+
+    public function download_finding_document($id = 0)
+    {
+        $this->access_only_tender("commercial_eval", "view");
+        $id = (int) $id;
+        if (!$id) {
+            show_404();
+        }
+
+        $attachment = $this->Tender_evaluation_attachments_model->get_attachment($id);
+        if (!$attachment || (string) ($attachment->evaluation_type ?? "") !== "commercial") {
+            show_404();
+        }
+
+        $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user((int) $attachment->tender_id, (int) $this->login_user->id);
+        if (!$tender) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        return $this->response->download($full_path, null)->setFileName($attachment->original_name ?: basename($full_path));
+    }
+
+    public function download_clarification_attachment($id = 0)
+    {
+        $this->access_only_tender("commercial_eval", "view");
+        $id = (int) $id;
+        if (!$id) {
+            show_404();
+        }
+
+        $attachment = $this->Tender_communications_model->get_attachment($id);
+        if (
+            !$attachment
+            || (int) ($attachment->is_vendor_visible ?? 0) === 1
+            || (string) ($attachment->internal_audience ?? "") !== "commercial"
+        ) {
+            show_404();
+        }
+
+        $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user((int) $attachment->tender_id, (int) $this->login_user->id);
+        if (!$tender) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        return $this->response->download($full_path, null)->setFileName($attachment->original_name ?: basename($full_path));
     }
 
     private function _get_accessible_tender_document_context(int $id): array
@@ -513,6 +781,98 @@ class Tender_commercial_inbox extends Security_Controller
             ->setHeader("Content-Type", $mime)
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($full_path));
+    }
+
+    private function _save_commercial_finding_files(int $evaluation_id, int $tender_id, int $bid_id): void
+    {
+        $files = method_exists($this->request, "getFileMultiple")
+            ? ($this->request->getFileMultiple("commercial_finding_files") ?: [])
+            : (($this->request->getFiles()["commercial_finding_files"] ?? []) ?: []);
+
+        if (!$files) {
+            return;
+        }
+
+        if (!is_array($files)) {
+            $files = [$files];
+        }
+
+        $upload_dir = WRITEPATH . "uploads/tender_evaluation_findings/tender_" . $tender_id . "/evaluation_" . $evaluation_id . "/";
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0775, true);
+        }
+
+        $saved_files = [];
+        foreach ($files as $file) {
+            if (!$file || !$file->isValid() || $file->hasMoved()) {
+                continue;
+            }
+
+            $original_name = $file->getClientName();
+            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
+                continue;
+            }
+
+            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
+            $new_name = uniqid("cef_", true) . ($extension ? "." . $extension : "");
+            $file->move($upload_dir, $new_name);
+
+            $saved_files[] = [
+                "disk" => "local",
+                "path" => "tender_evaluation_findings/tender_" . $tender_id . "/evaluation_" . $evaluation_id . "/" . $new_name,
+                "original_name" => $original_name,
+                "mime_type" => $file->getClientMimeType(),
+                "size_bytes" => $file->getSize(),
+            ];
+        }
+
+        $this->Tender_evaluation_attachments_model->save_attachments($evaluation_id, $tender_id, $bid_id, $saved_files, (int) $this->login_user->id);
+    }
+
+    private function _save_clarification_files(int $communication_id, int $tender_id, ?int $vendor_id): void
+    {
+        $files = method_exists($this->request, "getFileMultiple")
+            ? ($this->request->getFileMultiple("clarification_files") ?: [])
+            : (($this->request->getFiles()["clarification_files"] ?? []) ?: []);
+
+        if (!$files) {
+            return;
+        }
+
+        if (!is_array($files)) {
+            $files = [$files];
+        }
+
+        $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0775, true);
+        }
+
+        $saved_files = [];
+        foreach ($files as $file) {
+            if (!$file || !$file->isValid() || $file->hasMoved()) {
+                continue;
+            }
+
+            $original_name = $file->getClientName();
+            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
+                continue;
+            }
+
+            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
+            $new_name = uniqid("tc_", true) . ($extension ? "." . $extension : "");
+            $file->move($upload_dir, $new_name);
+
+            $saved_files[] = [
+                "disk" => "local",
+                "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
+                "original_name" => $original_name,
+                "mime_type" => $file->getClientMimeType(),
+                "size_bytes" => $file->getSize(),
+            ];
+        }
+
+        $this->Tender_communications_model->save_attachments($communication_id, $tender_id, $vendor_id, $saved_files, (int) $this->login_user->id);
     }
 
     private function _make_row($row)

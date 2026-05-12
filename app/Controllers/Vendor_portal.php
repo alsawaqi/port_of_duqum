@@ -22,6 +22,7 @@ use App\Models\Tenders_model;
 use App\Models\Tender_documents_model;
 use App\Models\Tender_bids_model;
 use App\Models\Tender_bid_documents_model;
+use App\Models\Tender_bid_item_prices_model;
 use App\Models\Tender_bid_requirements_model;
 use App\Models\Tender_communications_model;
 use App\Models\Tender_evaluations_model;
@@ -31,6 +32,7 @@ use App\Models\Tender_rfq_items_model;
 
 class Vendor_portal extends Security_Controller
 {
+    protected $db;
     protected $Vendors_model;
     protected $Vendor_contacts_model;
     protected $Tenders_model;
@@ -48,6 +50,7 @@ class Vendor_portal extends Security_Controller
     protected $Vendor_update_requests_model;
     protected $Tender_bids_model;
     protected $Tender_bid_documents_model;
+    protected $Tender_bid_item_prices_model;
     protected $Tender_bid_requirements_model;
     protected $Tender_communications_model;
     protected $Tender_rfq_details_model;
@@ -62,6 +65,8 @@ class Vendor_portal extends Security_Controller
     function __construct()
     {
         parent::__construct();
+
+        $this->db = db_connect();
 
         // Vendor Portal is for staff users (vendor logins should be staff)
         if ($this->login_user->user_type !== "staff") {
@@ -91,6 +96,7 @@ class Vendor_portal extends Security_Controller
 
         $this->Tender_bids_model = new Tender_bids_model();
         $this->Tender_bid_documents_model = new Tender_bid_documents_model();
+        $this->Tender_bid_item_prices_model = new Tender_bid_item_prices_model();
         $this->Tender_bid_requirements_model = new Tender_bid_requirements_model();
         $this->Tender_communications_model = new Tender_communications_model();
         $this->Tender_evaluations_model = new Tender_evaluations_model();
@@ -101,13 +107,13 @@ class Vendor_portal extends Security_Controller
 
     function tenders()
     {
-        $this->_require_vendor_access();
+        $this->_require_vendor_tender_access();
         return $this->template->view("vendor_portal/tenders/index");
     }
 
     function tenders_list_data()
     {
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
 
         $list_data = $this->Tenders_model->get_vendor_visible_tenders($vendor_id)->getResult();
 
@@ -119,29 +125,47 @@ class Vendor_portal extends Security_Controller
         echo json_encode(["data" => $result]);
     }
 
+    function tender($id = 0)
+    {
+        $vendor_id = $this->_require_vendor_tender_access();
+        $tender_id = (int) $id;
+        if (!$tender_id) {
+            show_404();
+        }
+
+        $view_data = $this->_get_vendor_tender_view_data($tender_id, $vendor_id);
+        if (!$view_data) {
+            app_redirect("forbidden");
+        }
+
+        return $this->template->rander("vendor_portal/tenders/details", $view_data);
+    }
+
     function tender_view_modal()
     {
         $this->validate_submitted_data([
             "id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
         $tender_id = (int) $this->request->getPost("id");
 
-        $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
-        if (!$tender) {
+        $view_data = $this->_get_vendor_tender_view_data($tender_id, $vendor_id);
+        if (!$view_data) {
             app_redirect("forbidden");
         }
 
-        $db = db_connect();
-        $tiv = $db->prefixTable("tender_invited_vendors");
-        $db->query(
-            "UPDATE $tiv
-             SET invite_status='opened'
-             WHERE tender_id=? AND vendor_id=? AND deleted=0
-               AND invite_status IN ('sent','delivered')",
-            [$tender_id, $vendor_id]
-        );
+        return $this->template->view("vendor_portal/tenders/view_modal", $view_data);
+    }
+
+    private function _get_vendor_tender_view_data(int $tender_id, int $vendor_id): ?array
+    {
+        $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
+        if (!$tender) {
+            return null;
+        }
+
+        $this->_mark_tender_invite_opened($tender_id, $vendor_id);
 
         $docs = $this->Tender_documents_model->get_details([
             "tender_id" => $tender_id
@@ -150,6 +174,11 @@ class Vendor_portal extends Security_Controller
         $bid = $this->Tender_bids_model->get_vendor_bid($tender_id, $vendor_id);
         $required_sections = $this->Tender_bid_requirements_model->get_required_codes($tender_id);
         $clarifications = $this->Tender_communications_model->get_clarification_conversation($tender_id, $vendor_id, true);
+        $clarification_attachments = $this->Tender_communications_model->get_attachments_map(array_map(fn($item) => (int) $item->id, $clarifications));
+        $rfq_items = $this->Tender_rfq_items_model->get_by_tender($tender_id);
+        $documents_map = [];
+        $bid_item_price_map = [];
+        $bid_item_price_rows = [];
 
         $latest_commercial_evaluation = null;
         $is_awarded_to_vendor = false;
@@ -157,6 +186,12 @@ class Vendor_portal extends Security_Controller
 
         if ($bid) {
             $latest_commercial_evaluation = $this->Tender_evaluations_model->get_latest_stage_evaluation_for_bid((int) $bid->id, "commercial");
+            $documents_map = $this->Tender_bid_documents_model->get_bid_documents_map((int) $bid->id);
+            if (!isset($documents_map["commercial_priced"]) && isset($documents_map["commercial"])) {
+                $documents_map["commercial_priced"] = $documents_map["commercial"];
+            }
+            $bid_item_price_map = $this->Tender_bid_item_prices_model->get_price_map((int) $bid->id);
+            $bid_item_price_rows = $this->Tender_bid_item_prices_model->get_bid_item_prices((int) $bid->id);
         }
 
         if (($tender->status ?? "") === "awarded" && $bid) {
@@ -164,24 +199,46 @@ class Vendor_portal extends Security_Controller
             $is_regretted_vendor = !$is_awarded_to_vendor;
         }
 
-        return $this->template->view("vendor_portal/tenders/view_modal", [
+        return [
             "tender"                       => $tender,
             "docs"                         => $docs,
             "bid"                          => $bid,
             "required_sections"            => $required_sections,
+            "documents_map"                 => $documents_map,
             "clarifications"               => $clarifications,
-            "clarification_open"           => $this->_is_tender_clarification_open($tender),
+            "clarification_attachments"     => $clarification_attachments,
+            "clarification_scope_options"   => Tender_communications_model::clarification_scope_options(),
+            "clarification_open"           => $this->_is_vendor_clarification_response_allowed($tender, $vendor_id),
             "latest_commercial_evaluation" => $latest_commercial_evaluation,
             "is_awarded_to_vendor"         => $is_awarded_to_vendor,
             "is_regretted_vendor"          => $is_regretted_vendor,
             "rfq_detail"                   => $this->Tender_rfq_details_model->get_by_tender($tender_id),
-            "rfq_items"                    => $this->Tender_rfq_items_model->get_by_tender($tender_id),
-        ]);
+            "rfq_items"                    => $rfq_items,
+            "bid_item_price_map"           => $bid_item_price_map,
+            "bid_item_price_rows"          => $bid_item_price_rows,
+            "procurement_approved_for_submission" => $this->_is_tender_procurement_approved($tender),
+            "procurement_approval_status"  => $this->_tender_procurement_approval_status($tender),
+            "tender_fee_required"          => $this->_is_tender_fee_required($tender),
+            "tender_fee_paid"              => $this->_is_tender_fee_paid($tender),
+            "tender_fee_payment_status"    => $this->_tender_fee_payment_status($tender),
+        ];
+    }
+
+    private function _mark_tender_invite_opened(int $tender_id, int $vendor_id): void
+    {
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $this->db->query(
+            "UPDATE $tiv
+             SET invite_status='opened'
+             WHERE tender_id=? AND vendor_id=? AND deleted=0
+               AND invite_status IN ('sent','delivered')",
+            [$tender_id, $vendor_id]
+        );
     }
 
     public function download_tender_document($id = 0)
     {
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
         $id = (int) $id;
 
         if (!$id) {
@@ -215,6 +272,162 @@ class Vendor_portal extends Security_Controller
         return $this->response->download($full_path, null)->setFileName($download_name);
     }
 
+    public function pay_tender_fee()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric"
+        ]);
+
+        $vendor_id = $this->_require_vendor_tender_access();
+        $tender_id = (int) $this->request->getPost("tender_id");
+
+        $this->Tenders_model->auto_progress_workflow();
+
+        $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
+        if (!$tender) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Tender not found or not accessible."
+            ]);
+        }
+
+        if (!$this->_is_tender_fee_required($tender)) {
+            return $this->response->setJSON([
+                "success" => true,
+                "message" => "No tender fee is required for this tender."
+            ]);
+        }
+
+        if ($this->_is_tender_fee_paid($tender)) {
+            return $this->response->setJSON([
+                "success" => true,
+                "message" => "Tender fee is already marked as paid."
+            ]);
+        }
+
+        $fee_payments = $this->db->prefixTable("tender_fee_payments");
+        $amount = $this->_tender_fee_amount($tender);
+        $now = date("Y-m-d H:i:s");
+        $reference = "BYPASS-" . $tender_id . "-" . $vendor_id . "-" . time();
+
+        $existing = $this->db->query(
+            "SELECT id
+             FROM $fee_payments
+             WHERE tender_id=? AND vendor_id=? AND deleted=0
+             ORDER BY id DESC
+             LIMIT 1",
+            [$tender_id, $vendor_id]
+        )->getRow();
+
+        if ($existing) {
+            $this->db->query(
+                "UPDATE $fee_payments
+                 SET amount=?,
+                     currency='OMR',
+                     status='paid',
+                     payment_reference=?,
+                     paid_at=?,
+                     updated_at=?,
+                     deleted=0
+                 WHERE id=?",
+                [$amount, $reference, $now, $now, (int) $existing->id]
+            );
+        } else {
+            $this->db->query(
+                "INSERT INTO $fee_payments
+                    (tender_id, vendor_id, amount, currency, status, payment_reference, paid_at, created_by, created_at, updated_at, deleted)
+                 VALUES (?, ?, ?, 'OMR', 'paid', ?, ?, ?, ?, ?, 0)",
+                [$tender_id, $vendor_id, $amount, $reference, $now, $this->login_user->id, $now, $now]
+            );
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Tender fee payment bypass recorded successfully."
+        ]);
+    }
+
+    public function request_tender_approval()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric"
+        ]);
+
+        $vendor_id = $this->_require_vendor_tender_access();
+        $tender_id = (int) $this->request->getPost("tender_id");
+
+        $this->Tenders_model->auto_progress_workflow();
+
+        $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
+        if (!$tender) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Tender not found or not accessible."
+            ]);
+        }
+
+        if (!$this->_is_tender_submission_open($tender)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "This tender is no longer open for participation requests."
+            ]);
+        }
+
+        if (!$this->_is_tender_fee_paid($tender)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Tender fee payment is required before requesting procurement approval."
+            ]);
+        }
+
+        if ($this->_is_tender_procurement_approved($tender)) {
+            return $this->response->setJSON([
+                "success" => true,
+                "message" => "Procurement approval is already granted for this tender."
+            ]);
+        }
+
+        if ($this->_tender_procurement_approval_status($tender) === "pending_approval") {
+            return $this->response->setJSON([
+                "success" => true,
+                "message" => "Your participation request is already pending procurement approval."
+            ]);
+        }
+
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $now = date("Y-m-d H:i:s");
+        $existing = $this->db->query(
+            "SELECT id
+             FROM $tiv
+             WHERE tender_id=? AND vendor_id=? AND deleted=0
+             LIMIT 1",
+            [$tender_id, $vendor_id]
+        )->getRow();
+
+        if ($existing) {
+            $this->db->query(
+                "UPDATE $tiv
+                 SET invite_status='pending_approval',
+                     invited_by=?,
+                     invited_at=?,
+                     deleted=0
+                 WHERE id=?",
+                [$this->login_user->id, $now, (int) $existing->id]
+            );
+        } else {
+            $this->db->query(
+                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
+                 VALUES (?, ?, 'pending_approval', ?, ?, 0)",
+                [$tender_id, $vendor_id, $this->login_user->id, $now]
+            );
+        }
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Participation request sent to procurement for approval."
+        ]);
+    }
+
 
     function bid_modal()
     {
@@ -222,7 +435,7 @@ class Vendor_portal extends Security_Controller
             "tender_id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
         $tender_id = (int) $this->request->getPost("tender_id");
 
 
@@ -237,22 +450,35 @@ class Vendor_portal extends Security_Controller
             app_redirect("forbidden");
         }
 
+        if (!$this->_is_tender_fee_paid($tender)) {
+            app_redirect("forbidden");
+        }
+
+        if (!$this->_is_tender_procurement_approved($tender)) {
+            app_redirect("forbidden");
+        }
+
         $bid = $this->Tender_bids_model->get_vendor_bid($tender_id, $vendor_id);
         $required_sections = $this->Tender_bid_requirements_model->get_required_codes($tender_id);
+        $rfq_items = $this->Tender_rfq_items_model->get_by_tender($tender_id);
         $documents_map = [];
+        $bid_item_price_map = [];
 
         if ($bid) {
             $documents_map = $this->Tender_bid_documents_model->get_bid_documents_map((int) $bid->id);
             if (!isset($documents_map["commercial_priced"]) && isset($documents_map["commercial"])) {
                 $documents_map["commercial_priced"] = $documents_map["commercial"];
             }
+            $bid_item_price_map = $this->Tender_bid_item_prices_model->get_price_map((int) $bid->id);
         }
 
         return $this->template->view("vendor_portal/tenders/bid_modal", [
             "tender" => $tender,
             "bid" => $bid,
             "required_sections" => $required_sections,
-            "documents_map" => $documents_map
+            "documents_map" => $documents_map,
+            "rfq_items" => $rfq_items,
+            "bid_item_price_map" => $bid_item_price_map
         ]);
     }
 
@@ -262,7 +488,7 @@ class Vendor_portal extends Security_Controller
             "tender_id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
         $tender_id = (int) $this->request->getPost("tender_id");
 
 
@@ -280,6 +506,20 @@ class Vendor_portal extends Security_Controller
             return $this->response->setJSON([
                 "success" => false,
                 "message" => "Bid submission is closed for this tender."
+            ]);
+        }
+
+        if (!$this->_is_tender_fee_paid($tender)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Tender fee payment is required before submitting a bid."
+            ]);
+        }
+
+        if (!$this->_is_tender_procurement_approved($tender)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Procurement approval is required before submitting a bid."
             ]);
         }
 
@@ -318,17 +558,35 @@ class Vendor_portal extends Security_Controller
             }
         }
 
+        $rfq_items = $this->Tender_rfq_items_model->get_by_tender($tender_id);
+        $item_price_summary = $this->Tender_bid_item_prices_model->prepare_submitted_item_prices(
+            $rfq_items,
+            $this->request->getPost("rfq_item_unit_price")
+        );
+
+        if (empty($item_price_summary["success"])) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => $item_price_summary["message"] ?? "Please complete the RFQ/RFP item prices."
+            ]);
+        }
+
         $currency = trim((string) $this->request->getPost("currency"));
         if (!$currency) {
             $currency = "OMR";
         }
+
+        $manual_total_amount = $this->request->getPost("total_amount");
+        $total_amount = !empty($item_price_summary["has_items"])
+            ? ($item_price_summary["total_amount"] ?? null)
+            : ($manual_total_amount !== "" ? $manual_total_amount : null);
 
         $bid_data = [
             "tender_id" => $tender_id,
             "vendor_id" => $vendor_id,
             "status" => "submitted",
             "submitted_at" => date("Y-m-d H:i:s"),
-            "total_amount" => $this->request->getPost("total_amount") !== "" ? $this->request->getPost("total_amount") : null,
+            "total_amount" => $total_amount,
             "currency" => $currency,
         ];
 
@@ -352,6 +610,13 @@ class Vendor_portal extends Security_Controller
             }
         }
 
+        $this->Tender_bid_item_prices_model->sync_bid_item_prices(
+            (int) $bid_id,
+            $tender_id,
+            $vendor_id,
+            $item_price_summary["rows"] ?? []
+        );
+
         return $this->response->setJSON([
             "success" => true,
             "message" => "Bid submitted successfully."
@@ -365,9 +630,10 @@ class Vendor_portal extends Security_Controller
             "message" => "required",
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
         $tender_id = (int) $this->request->getPost("tender_id");
         $message = trim((string) $this->request->getPost("message"));
+        $clarification_scope = Tender_communications_model::normalize_clarification_scope($this->request->getPost("clarification_scope"));
 
         $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
         if (!$tender) {
@@ -377,20 +643,32 @@ class Vendor_portal extends Security_Controller
             ]);
         }
 
-        if (!$this->_is_tender_clarification_open($tender)) {
+        $normal_clarification_open = $this->_is_tender_clarification_open($tender);
+        if (!$this->_is_vendor_clarification_response_allowed($tender, $vendor_id)) {
             return $this->response->setJSON([
                 "success" => false,
                 "message" => "Clarification submissions are closed for this tender."
             ]);
         }
 
+        $parent_request = null;
+        if (!$normal_clarification_open) {
+            $parent_request = $this->Tender_communications_model->get_latest_vendor_visible_evaluator_request($tender_id, $vendor_id);
+            if ($parent_request) {
+                $clarification_scope = Tender_communications_model::normalize_clarification_scope($parent_request->clarification_scope ?? $clarification_scope);
+            }
+        }
+
         $saved = $this->Tender_communications_model->ci_save(clean_data([
             "tender_id" => $tender_id,
             "vendor_id" => $vendor_id,
+            "tender_bid_id" => !empty($parent_request->tender_bid_id) ? (int) $parent_request->tender_bid_id : null,
             "type" => "clarification",
+            "clarification_scope" => $clarification_scope,
+            "internal_audience" => !empty($parent_request->internal_audience) ? $parent_request->internal_audience : null,
             "subject" => null,
             "message" => $message,
-            "parent_id" => null,
+            "parent_id" => !empty($parent_request->id) ? (int) $parent_request->id : null,
             "status" => "open",
             "is_vendor_visible" => 1,
             "created_by" => $this->login_user->id,
@@ -406,15 +684,49 @@ class Vendor_portal extends Security_Controller
             ]);
         }
 
+        $this->_save_clarification_files((int) $saved, $tender_id, $vendor_id);
+
         return $this->response->setJSON([
             "success" => true,
             "message" => "Clarification submitted successfully."
         ]);
     }
 
+    public function download_clarification_attachment($id = 0)
+    {
+        $vendor_id = $this->_require_vendor_tender_access();
+        $id = (int) $id;
+        if (!$id) {
+            show_404();
+        }
+
+        $attachment = $this->Tender_communications_model->get_attachment($id);
+        if (!$attachment || (int) ($attachment->is_vendor_visible ?? 0) !== 1) {
+            show_404();
+        }
+
+        $tender = $this->Tenders_model->get_vendor_visible_tender((int) $attachment->tender_id, $vendor_id);
+        if (!$tender) {
+            app_redirect("forbidden");
+        }
+
+        $attachment_vendor_id = (int) ($attachment->vendor_id ?? 0);
+        if ($attachment_vendor_id > 0 && $attachment_vendor_id !== (int) $vendor_id) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        $download_name = $attachment->original_name ?: basename($full_path);
+        return $this->response->download($full_path, null)->setFileName($download_name);
+    }
+
     public function download_bid_document($id = 0)
     {
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_tender_access();
         $id = (int) $id;
 
         if (!$id) {
@@ -475,9 +787,115 @@ class Vendor_portal extends Security_Controller
         $this->Tender_bid_documents_model->ci_save(clean_data($doc_data));
     }
 
+    private function _save_clarification_files(int $communication_id, int $tender_id, int $vendor_id): void
+    {
+        $files = method_exists($this->request, "getFileMultiple")
+            ? ($this->request->getFileMultiple("clarification_files") ?: [])
+            : (($this->request->getFiles()["clarification_files"] ?? []) ?: []);
+
+        if (!$files) {
+            return;
+        }
+
+        if (!is_array($files)) {
+            $files = [$files];
+        }
+
+        $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0775, true);
+        }
+
+        $saved_files = [];
+        foreach ($files as $file) {
+            if (!$file || !$file->isValid() || $file->hasMoved()) {
+                continue;
+            }
+
+            $original_name = $file->getClientName();
+            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
+                continue;
+            }
+
+            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
+            $new_name = uniqid("tc_", true) . ($extension ? "." . $extension : "");
+            $file->move($upload_dir, $new_name);
+
+            $saved_files[] = [
+                "disk" => "local",
+                "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
+                "original_name" => $original_name,
+                "mime_type" => $file->getClientMimeType(),
+                "size_bytes" => $file->getSize(),
+            ];
+        }
+
+        $this->Tender_communications_model->save_attachments($communication_id, $tender_id, $vendor_id, $saved_files, (int) $this->login_user->id);
+    }
+
     private function _is_tender_submission_open($tender): bool
     {
         return $this->Tenders_model->is_vendor_submission_open($tender);
+    }
+
+    private function _tender_fee_amount($tender): float
+    {
+        return round((float) ($tender->tender_fee ?? 0), 3);
+    }
+
+    private function _is_tender_fee_required($tender): bool
+    {
+        return $this->_tender_fee_amount($tender) > 0;
+    }
+
+    private function _is_tender_fee_paid($tender): bool
+    {
+        if (!$this->_is_tender_fee_required($tender)) {
+            return true;
+        }
+
+        return strtolower((string) ($tender->fee_payment_status ?? "")) === "paid";
+    }
+
+    private function _tender_fee_payment_status($tender): string
+    {
+        if (!$this->_is_tender_fee_required($tender)) {
+            return "not_required";
+        }
+
+        return $this->_is_tender_fee_paid($tender) ? "paid" : "unpaid";
+    }
+
+    private function _is_tender_procurement_approved($tender): bool
+    {
+        if (!$tender) {
+            return false;
+        }
+
+        if ((int) ($tender->procurement_approved_for_submission ?? 0) === 1) {
+            return true;
+        }
+
+        if (!empty($tender->specific_target_id)) {
+            return true;
+        }
+
+        $invite_status = strtolower((string) ($tender->invite_status ?? ""));
+        return in_array($invite_status, ["sent", "delivered", "opened", "approved"], true);
+    }
+
+    private function _tender_procurement_approval_status($tender): string
+    {
+        if ($this->_is_tender_procurement_approved($tender)) {
+            return "approved";
+        }
+
+        $invite_status = strtolower((string) ($tender->invite_status ?? ""));
+        if (in_array($invite_status, ["pending_approval", "rejected", "declined"], true)) {
+            return $invite_status;
+        }
+
+        return "required";
     }
 
     private function _is_tender_clarification_open($tender): bool
@@ -497,6 +915,15 @@ class Vendor_portal extends Security_Controller
         return true;
     }
 
+    private function _is_vendor_clarification_response_allowed($tender, int $vendor_id): bool
+    {
+        if ($this->_is_tender_clarification_open($tender)) {
+            return true;
+        }
+
+        return $this->Tender_communications_model->has_vendor_visible_evaluator_clarification_request((int) ($tender->id ?? 0), $vendor_id);
+    }
+
     private function _make_tender_row($row)
     {
         $type_badge = ($row->tender_type ?? "open") === "close"
@@ -514,28 +941,56 @@ class Vendor_portal extends Security_Controller
         $status_class = $status_classes[$status] ?? "secondary";
         $status_badge = "<span class='badge bg-" . $status_class . "'>" . esc(ucfirst($status)) . "</span>";
 
-        $invite_status = strtolower((string) ($row->invite_status ?? "sent"));
-        $invite_badges = [
-            "sent"      => "secondary",
-            "delivered" => "info",
-            "opened"    => "success",
-            "declined"  => "danger",
+        $participation_status = $this->_tender_procurement_approval_status($row);
+        $participation_badges = [
+            "approved"         => "success",
+            "pending_approval" => "warning",
+            "required"         => "secondary",
+            "rejected"         => "danger",
+            "declined"         => "danger",
         ];
-        $invite_class = $invite_badges[$invite_status] ?? "secondary";
-        $invite_badge = "<span class='badge bg-" . $invite_class . "'>" . esc(ucfirst($invite_status)) . "</span>";
+        $participation_labels = [
+            "approved"         => "Approved",
+            "pending_approval" => "Pending approval",
+            "required"         => "Approval required",
+            "rejected"         => "Rejected",
+            "declined"         => "Declined",
+        ];
+        $invite_class = $participation_badges[$participation_status] ?? "secondary";
+        $invite_label = $participation_labels[$participation_status] ?? ucwords(str_replace("_", " ", $participation_status));
+        $invite_badge = "<span class='badge bg-" . $invite_class . "'>" . esc($invite_label) . "</span>";
 
-        $target = $row->vendor_category_name ?: "-";
+        $target = $row->vendor_category_name ?: "";
         if (!empty($row->vendor_sub_category_name)) {
             $target .= " / " . $row->vendor_sub_category_name;
         }
+        if (!empty($row->vendor_group_name)) {
+            $target = "Group: " . $row->vendor_group_name . (!empty($row->vendor_group_code) ? " (" . $row->vendor_group_code . ")" : "");
+        }
+        if (!empty($row->vendor_grade_name) || !empty($row->vendor_grade_code)) {
+            $target = "Grade: " . trim(($row->vendor_grade_code ? $row->vendor_grade_code . " - " : "") . ($row->vendor_grade_name ?? ""));
+        }
+        if (!$target) {
+            $target = "Open to eligible vendors";
+        }
 
-        $actions = modal_anchor(
-            get_uri("vendor_portal/tender_view_modal"),
-            "<i data-feather='eye' class='icon-16'></i>",
+        $eligibility_labels = [
+            "specific_vendor" => "Selected vendor",
+            "invited" => "Invited",
+            "vendor_group" => "Vendor group",
+            "vendor_grade" => "Vendor grade",
+            "specialty" => "Specialty",
+            "open" => "Open tender",
+        ];
+        $eligibility_source = strtolower((string) ($row->eligibility_source ?? "eligible"));
+        $eligibility_label = $eligibility_labels[$eligibility_source] ?? "Eligible";
+
+        $actions = anchor(
+            get_uri("vendor_portal/tender/" . (int) $row->id),
+            "<i data-feather='arrow-up-right' class='icon-16'></i>",
             [
-                "class" => "edit",
-                "title" => "Tender Details",
-                "data-post-id" => $row->id
+                "class" => "btn btn-default btn-sm vpt-open-tender",
+                "title" => "Open Tender Details",
             ]
         );
 
@@ -545,6 +1000,7 @@ class Vendor_portal extends Security_Controller
             $type_badge,
             $status_badge,
             esc($target),
+            "<span class='badge bg-light text-dark'>" . esc($eligibility_label) . "</span>",
             !empty($row->published_at) ? format_to_datetime($row->published_at) : "-",
             !empty($row->closing_at) ? format_to_datetime($row->closing_at) : "-",
             $invite_badge,
@@ -575,7 +1031,68 @@ class Vendor_portal extends Security_Controller
         if (!$vendor_id && !$this->login_user->is_admin) {
             app_redirect("forbidden");
         }
+
+        if ($vendor_id && !vendor_can_access_profile_portal($this->_vendor_status($vendor_id))) {
+            app_redirect("forbidden");
+        }
+
         return $vendor_id;
+    }
+
+    private function _require_vendor_tender_access(): int
+    {
+        $vendor_id = $this->_my_vendor_id();
+        if (!$vendor_id && !$this->login_user->is_admin) {
+            app_redirect("forbidden");
+        }
+
+        if ($vendor_id && !vendor_can_access_tender_portal($this->_vendor_status($vendor_id))) {
+            app_redirect("forbidden");
+        }
+
+        return $vendor_id;
+    }
+
+    private function _vendor_status(int $vendor_id): string
+    {
+        if (!$vendor_id) {
+            return "";
+        }
+
+        $vendors_table = $this->db->prefixTable("vendors");
+        $row = $this->db->query(
+            "SELECT status FROM $vendors_table WHERE id=? AND deleted=0 LIMIT 1",
+            [$vendor_id]
+        )->getRow();
+
+        return (string)($row->status ?? "");
+    }
+
+    private function _record_vendor_status_history(int $vendor_id, string $from_status, string $to_status, string $reason = ""): void
+    {
+        if ($from_status === $to_status) {
+            return;
+        }
+
+        $action_map = [
+            "submitted" => "submit",
+            "approved" => "approve",
+            "rejected" => "reject",
+            "revise" => "revise",
+        ];
+
+        $this->db->table($this->db->prefixTable("vendor_status_histories"))->insert(clean_data([
+            "vendor_id" => $vendor_id,
+            "from_status" => $from_status ?: null,
+            "to_status" => $to_status,
+            "action" => $action_map[$to_status] ?? null,
+            "reason" => $reason ?: null,
+            "action_by" => $this->login_user->id ?? null,
+            "action_at" => get_current_utc_time(),
+            "created_at" => get_current_utc_time(),
+            "updated_at" => get_current_utc_time(),
+            "deleted" => 0,
+        ]));
     }
 
 
@@ -1096,6 +1613,42 @@ class Vendor_portal extends Security_Controller
         return $this->template->view("vendor_portal/overview/index", $view_data);
     }
 
+    function submit_for_review()
+    {
+        $vendor_id = $this->_require_vendor_access();
+        $vendor = $this->Vendors_model->get_one($vendor_id);
+        if (!$vendor || (int)($vendor->deleted ?? 0) === 1) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("invalid_request")]);
+        }
+
+        $status = strtolower((string)($vendor->status ?? ""));
+        if (!in_array($status, ["new", "pending_payment", "revise"], true)) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("vendor_profile_already_submitted")]);
+        }
+
+        $checklist = $this->_get_vendor_profile_checklist($vendor_id);
+        if ((int)($checklist["completed"] ?? 0) < (int)($checklist["total"] ?? 0)) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("vendor_profile_incomplete")]);
+        }
+
+        $this->db->transBegin();
+
+        $ok = $this->Vendors_model->ci_save(clean_data([
+            "status" => "submitted",
+            "updated_by" => $this->login_user->id ?? null
+        ]), $vendor_id);
+
+        if (!$ok || $this->db->transStatus() === false) {
+            $this->db->transRollback();
+            return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
+        }
+
+        $this->_record_vendor_status_history($vendor_id, $status, "submitted");
+        $this->db->transCommit();
+
+        return $this->response->setJSON(["success" => true, "message" => app_lang("vendor_profile_submitted")]);
+    }
+
     private function _get_vendor_profile_checklist(int $vendor_id): array
     {
         $db = db_connect();
@@ -1116,9 +1669,9 @@ class Vendor_portal extends Security_Controller
             && trim((string) ($vendor->phone ?? "")) !== "";
 
         $contact_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $contacts WHERE vendor_id=? AND deleted=0", [$vendor_id])->getRow()->total ?? 0);
-        $bank_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $bank WHERE vendor_id=? AND deleted=0 AND status='approved'", [$vendor_id])->getRow()->total ?? 0);
-        $specialty_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $specialties WHERE vendor_id=? AND deleted=0 AND status='approved'", [$vendor_id])->getRow()->total ?? 0);
-        $approved_doc_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $documents WHERE vendor_id=? AND deleted=0 AND status='approved'", [$vendor_id])->getRow()->total ?? 0);
+        $bank_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $bank WHERE vendor_id=? AND deleted=0 AND status!='rejected'", [$vendor_id])->getRow()->total ?? 0);
+        $specialty_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $specialties WHERE vendor_id=? AND deleted=0 AND status!='rejected'", [$vendor_id])->getRow()->total ?? 0);
+        $submitted_doc_count = (int) ($db->query("SELECT COUNT(*) AS total FROM $documents WHERE vendor_id=? AND deleted=0 AND status!='rejected'", [$vendor_id])->getRow()->total ?? 0);
 
         $required_rows = $db->query(
             "SELECT id, name
@@ -1132,7 +1685,7 @@ class Vendor_portal extends Security_Controller
         )->getResult();
 
         $required_doc_total = count($required_rows);
-        $approved_required_docs = 0;
+        $submitted_required_docs = 0;
         foreach ($required_rows as $row) {
             $has_doc = $db->query(
                 "SELECT id
@@ -1140,16 +1693,16 @@ class Vendor_portal extends Security_Controller
                  WHERE vendor_id=?
                    AND vendor_document_type_id=?
                    AND deleted=0
-                   AND status='approved'
+                   AND status!='rejected'
                  LIMIT 1",
                 [$vendor_id, (int) $row->id]
             )->getRow();
             if ($has_doc) {
-                $approved_required_docs++;
+                $submitted_required_docs++;
             }
         }
 
-        $required_docs_complete = $required_doc_total === 0 ? $approved_doc_count > 0 : $approved_required_docs >= $required_doc_total;
+        $required_docs_complete = $required_doc_total === 0 ? $submitted_doc_count > 0 : $submitted_required_docs >= $required_doc_total;
 
         $expiry_rows = $db->query(
             "SELECT vd.*, vdt.name AS document_type_name
@@ -1157,6 +1710,7 @@ class Vendor_portal extends Security_Controller
              LEFT JOIN $doc_types vdt ON vdt.id=vd.vendor_document_type_id
              WHERE vd.vendor_id=?
                AND vd.deleted=0
+               AND vd.status!='rejected'
                AND vd.expires_at IS NOT NULL
                AND vd.expires_at <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
              ORDER BY vd.expires_at ASC
@@ -1167,9 +1721,9 @@ class Vendor_portal extends Security_Controller
         $items = [
             ["label" => "Company profile", "done" => (bool) $profile_complete, "hint" => "Name, email, CR number, and phone"],
             ["label" => "Primary contacts", "done" => $contact_count > 0, "hint" => $contact_count . " contact(s) recorded"],
-            ["label" => "Approved bank account", "done" => $bank_count > 0, "hint" => $bank_count . " approved account(s)"],
-            ["label" => "Approved specialties", "done" => $specialty_count > 0, "hint" => $specialty_count . " approved specialty record(s)"],
-            ["label" => "Required documents", "done" => (bool) $required_docs_complete, "hint" => $approved_required_docs . "/" . max(1, $required_doc_total) . " approved"],
+            ["label" => "Bank account", "done" => $bank_count > 0, "hint" => $bank_count . " account(s) submitted"],
+            ["label" => "Specialties", "done" => $specialty_count > 0, "hint" => $specialty_count . " specialty record(s) submitted"],
+            ["label" => "Required documents", "done" => (bool) $required_docs_complete, "hint" => $submitted_required_docs . "/" . max(1, $required_doc_total) . " submitted"],
         ];
 
         $completed = 0;
@@ -2620,7 +3174,7 @@ class Vendor_portal extends Security_Controller
 
 
         if ($id) {
-            $this->_deny_if_vendor_module_locked($vendor_id, "contact");
+            $this->_deny_if_vendor_module_locked($vendor_id, "contacts");
         }
 
         // capture "before" ONLY if editing

@@ -156,6 +156,71 @@ WHERE `deleted` = 0 AND `fee_is_waived` = 1
   AND (`fee_waiver_commercial_status` IS NULL OR `fee_waiver_commercial_status` = '');
 
 -- -----------------------------------------------------------------------------
+-- C4) Passes: one QR/pass per visitor under a request
+-- -----------------------------------------------------------------------------
+SET @tabpass := 'pod_gate_passes';
+SET @colgpv := 'gate_pass_request_visitor_id';
+SET @sqlgpv := (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tabpass AND COLUMN_NAME = @colgpv) > 0,
+    'SELECT ''pod_gate_passes: gate_pass_request_visitor_id already exists'' AS info',
+    CONCAT('ALTER TABLE `', @tabpass, '` ADD COLUMN `', @colgpv, '` BIGINT UNSIGNED NULL DEFAULT NULL AFTER `gate_pass_request_id`')
+  )
+);
+PREPARE stmt_gpv FROM @sqlgpv;
+EXECUTE stmt_gpv;
+DEALLOCATE PREPARE stmt_gpv;
+
+SET @idxgpv := 'idx_gate_passes_request_visitor';
+SET @sqlidxgpv := (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tabpass AND INDEX_NAME = @idxgpv) > 0,
+    'SELECT ''pod_gate_passes: idx_gate_passes_request_visitor already exists'' AS info',
+    CONCAT('ALTER TABLE `', @tabpass, '` ADD INDEX `', @idxgpv, '` (`gate_pass_request_id`, `gate_pass_request_visitor_id`)')
+  )
+);
+PREPARE stmt_idxgpv FROM @sqlidxgpv;
+EXECUTE stmt_idxgpv;
+DEALLOCATE PREPARE stmt_idxgpv;
+
+UPDATE `pod_gate_passes` gp
+INNER JOIN `pod_gate_pass_requests` r ON r.id = gp.gate_pass_request_id AND r.deleted = 0
+SET gp.valid_from = r.visit_from, gp.valid_to = r.visit_to, gp.updated_at = NOW()
+WHERE gp.deleted = 0 AND r.visit_from IS NOT NULL AND r.visit_to IS NOT NULL;
+
+-- -----------------------------------------------------------------------------
+-- C5) Scan log: record which visitor entered/exited/was checked
+-- -----------------------------------------------------------------------------
+SET @tabscan := 'pod_gate_pass_scan_log';
+SET @colscanv := 'gate_pass_request_visitor_id';
+SET @sqlscanv := (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tabscan AND COLUMN_NAME = @colscanv) > 0,
+    'SELECT ''pod_gate_pass_scan_log: gate_pass_request_visitor_id already exists'' AS info',
+    CONCAT('ALTER TABLE `', @tabscan, '` ADD COLUMN `', @colscanv, '` BIGINT UNSIGNED NULL DEFAULT NULL AFTER `gate_pass_id`')
+  )
+);
+PREPARE stmt_scanv FROM @sqlscanv;
+EXECUTE stmt_scanv;
+DEALLOCATE PREPARE stmt_scanv;
+
+SET @idxscanv := 'idx_gate_pass_scan_log_visitor';
+SET @sqlidxscanv := (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = @tabscan AND INDEX_NAME = @idxscanv) > 0,
+    'SELECT ''pod_gate_pass_scan_log: idx_gate_pass_scan_log_visitor already exists'' AS info',
+    CONCAT('ALTER TABLE `', @tabscan, '` ADD INDEX `', @idxscanv, '` (`gate_pass_request_id`, `gate_pass_request_visitor_id`, `recorded_at`)')
+  )
+);
+PREPARE stmt_idxscanv FROM @sqlidxscanv;
+EXECUTE stmt_idxscanv;
+DEALLOCATE PREPARE stmt_idxscanv;
+
+-- -----------------------------------------------------------------------------
 -- D) Approvals: drop UNIQUE(gate_pass_request_id, stage) when present
 -- -----------------------------------------------------------------------------
 SET @tbl := 'pod_gate_pass_request_approvals';

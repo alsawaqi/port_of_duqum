@@ -3,11 +3,13 @@
         <div class="page-title clearfix">
             <h1><?php echo app_lang("tender_finance_users"); ?></h1>
             <div class="title-button-group">
+                <?php if (!empty($can_create_tender_user)) { ?>
                 <?php echo modal_anchor(
                     get_uri("tender_finance_users/modal_form"),
                     "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang("add_tender_finance_user"),
                     ["class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang("add_tender_finance_user")]
                 ); ?>
+                <?php } ?>
             </div>
         </div>
 

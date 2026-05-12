@@ -96,11 +96,13 @@
                     </div>
                 </div>
                 <div class="title-button-group">
+                    <?php if (!empty($can_create_blocked_visitors)) { ?>
                     <?php echo modal_anchor(
                         get_uri("gate_pass_blocked_visitors/modal_form"),
                         "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang("gate_pass_add_blocked_visitor"),
                         ["class" => "btn btn-primary", "title" => app_lang("gate_pass_add_blocked_visitor")]
                     ); ?>
+                    <?php } ?>
                 </div>
             </div>
 

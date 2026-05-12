@@ -131,16 +131,16 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
             "ptw_application_id" => $application->id,
             "stage" => "hsse"
         ])->getResult();
+        $hmo_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $application->id, "stage" => "hmo"])->getResult();
+        $terminal_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $application->id, "stage" => "terminal"])->getResult();
+        $audit_logs = $this->Ptw_audit_logs_model->get_by_application($application->id)->getResult();
     
         // Load PTW checklist + attachments (same source as portal)
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
         $responses_rows = $this->Ptw_requirement_responses_model->get_by_application($application->id)->getResult();
         $attachments_rows = $this->Ptw_attachments_model->get_by_application($application->id)->getResult();
     
-        $responses_by_definition = [];
-        foreach ($responses_rows as $row) {
-            $responses_by_definition[(int)($row->ptw_requirement_definition_id ?? 0)] = $row;
-        }
+        $responses_by_definition = ptw_index_requirement_responses_with_default_others($responses_rows, $defs);
     
         $attachments_by_response = [];
         foreach ($attachments_rows as $att) {
@@ -153,6 +153,12 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
         return $this->template->rander("ptw_hsse_inbox/details", [
             "application" => $application,
             "reviews" => $reviews,
+            "review_groups" => [
+                "hsse" => $reviews,
+                "hmo" => $hmo_reviews,
+                "terminal" => $terminal_reviews,
+            ],
+            "audit_logs" => $audit_logs,
             "definitions_grouped" => $this->_group_definitions($defs),
             "responses_by_definition" => $responses_by_definition,
             "attachments_by_response" => $attachments_by_response,
@@ -161,24 +167,9 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
 
 
     private function _group_definitions(array $defs): array
-{
-    $grouped = [
-        "hazard_document" => [],
-        "ppe" => [],
-        "preparation" => [],
-        "other" => [],
-    ];
-
-    foreach ($defs as $d) {
-        $cat = (string)($d->category ?? "other");
-        if (!isset($grouped[$cat])) {
-            $grouped[$cat] = [];
-        }
-        $grouped[$cat][] = $d;
+    {
+        return ptw_group_definitions_with_default_others($defs);
     }
-
-    return $grouped;
-}
 
     public function approval_modal_form()
     {
@@ -236,6 +227,7 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
         $remarks = trim((string)$this->request->getPost("remarks"));
         $reason_id = (int)$this->request->getPost("reason_id");
         $status_change_reason = trim((string)$this->request->getPost("status_change_reason"));
+        $terminal_approval_required = $this->request->getPost("terminal_approval_not_required") ? 0 : 1;
 
         $application = $this->Ptw_applications_model->get_one($application_id);
         if (!$application || (int)$application->deleted) {
@@ -320,10 +312,11 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
 
             // HSSE approved -> move to HMO
             $app_update = [
-                "updated_at"   => $now,
-                "stage"        => "hmo",
-                "status"       => "submitted",
+                "updated_at" => $now,
+                "stage" => "hmo",
+                "status" => "submitted",
                 "completed_at" => null,
+                "terminal_approval_required" => $terminal_approval_required,
             ];
         } elseif ($decision === "rejected") {
             // Reject is final for PTW workflow.
@@ -380,6 +373,7 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
                 "revision_no"          => $revision_no,
                 "remarks"              => $remarks,
                 "status_change_reason" => $status_change_reason,
+                "terminal_approval_required" => $decision === "approved" ? $terminal_approval_required : null,
             ]),
             "ip_address" => $this->request->getIPAddress(),
             "user_agent" => substr((string)$this->request->getUserAgent()->getAgentString(), 0, 512),
@@ -459,15 +453,6 @@ $this->Ptw_attachments_model = new Ptw_attachments_model();
             return "-";
         }
 
-        $map = [
-            "draft" => "Draft",
-            "submitted" => "Submitted",
-            "in_review" => "In Review",
-            "revise" => "Revise",
-            "rejected" => "Rejected",
-            "approved" => "Approved",
-        ];
-
-        return $map[$status] ?? ucwords(str_replace("_", " ", $status));
+        return ptw_status_display_label($status);
     }
 }

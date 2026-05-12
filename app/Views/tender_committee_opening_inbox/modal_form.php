@@ -1,9 +1,9 @@
 <div class="modal-body">
-    <h5 class="mb-3"><?php echo esc($opening_title ?? "3-Key Bid Opening"); ?></h5>
+    <h5 class="mb-3"><?php echo esc($opening_title ?? "Bid Opening"); ?></h5>
 
     <div><strong>Reference:</strong> <?php echo esc($tender->reference ?? "-"); ?></div>
     <div><strong>Title:</strong> <?php echo esc($tender->title ?? "-"); ?></div>
-    <div><strong>Opening Stage:</strong> <?php echo esc(ucfirst($opening_stage ?? "commercial")); ?></div>
+    <div><strong>Opening Stage:</strong> Bid Opening</div>
     <div><strong>Your Role:</strong> <?php echo esc(ucwords(str_replace("_", " ", $my_role ?? "-"))); ?></div>
 
     <hr>
@@ -15,51 +15,134 @@
         </button>
     <?php } else { ?>
         <div class="alert alert-info">
-            Codes expire at: <strong><?php echo esc($session->expires_at); ?></strong>
-        </div>
-
-        <div class="mb-3">
-            <strong>Your code:</strong>
-            <?php if (($my_role ?? "") === "chairman") { ?>
-                <span class="badge bg-dark"><?php echo esc($session->chairman_code); ?></span>
-            <?php } elseif (($my_role ?? "") === "secretary") { ?>
-                <span class="badge bg-dark"><?php echo esc($session->secretary_code); ?></span>
-            <?php } elseif (($my_role ?? "") === "itc_member") { ?>
-                <span class="badge bg-dark"><?php echo esc($session->member_code); ?></span>
+            <?php if (($session->status ?? "") === "codes_generated") { ?>
+                Codes expire at: <strong><?php echo esc($session->expires_at); ?></strong>
+            <?php } elseif (($session->status ?? "") === "signed") { ?>
+                All committee signatures are complete. Procurement can download the bid opening form and start technical review.
+            <?php } else { ?>
+                Bids are unlocked. Review the technical and commercial bid package below, then sign digitally.
             <?php } ?>
         </div>
 
-        <div class="mb-3">
-            <div>Chairman confirmed: <?php echo ($confirm_map["chairman"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
-            <div>Secretary confirmed: <?php echo ($confirm_map["secretary"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
-            <div>Member confirmed: <?php echo ($confirm_map["itc_member"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
-        </div>
+        <?php if (($session->status ?? "") === "codes_generated") { ?>
+            <div class="mb-3">
+                <strong>Your code:</strong>
+                <?php if (($my_role ?? "") === "chairman") { ?>
+                    <span class="badge bg-dark"><?php echo esc($session->chairman_code); ?></span>
+                <?php } elseif (($my_role ?? "") === "secretary") { ?>
+                    <span class="badge bg-dark"><?php echo esc($session->secretary_code); ?></span>
+                <?php } elseif (($my_role ?? "") === "itc_member") { ?>
+                    <span class="badge bg-dark"><?php echo esc($session->member_code); ?></span>
+                <?php } ?>
+            </div>
 
-        <?php echo form_open(get_uri("tender_committee_opening_inbox/confirm_codes"), ["id" => "tender-3key-confirm-form", "class" => "general-form"]); ?>
-        <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
-        <input type="hidden" name="opening_stage" value="<?php echo esc($opening_stage ?? "commercial"); ?>" />
+            <div class="mb-3">
+                <div>Chairman confirmed: <?php echo ($confirm_map["chairman"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
+                <div>Secretary confirmed: <?php echo ($confirm_map["secretary"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
+                <div>Member confirmed: <?php echo ($confirm_map["itc_member"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
+            </div>
 
-        <div class="form-group">
-            <label>Chairman Code</label>
-            <input type="text" name="chairman_code" class="form-control" required>
-        </div>
+            <?php echo form_open(get_uri("tender_committee_opening_inbox/confirm_codes"), ["id" => "tender-3key-confirm-form", "class" => "general-form"]); ?>
+            <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+            <input type="hidden" name="opening_stage" value="<?php echo esc($opening_stage ?? "technical"); ?>" />
 
-        <div class="form-group">
-            <label>Secretary Code</label>
-            <input type="text" name="secretary_code" class="form-control" required>
-        </div>
+            <div class="form-group">
+                <label>Chairman Code</label>
+                <input type="text" name="chairman_code" class="form-control" required>
+            </div>
 
-        <div class="form-group">
-            <label>Member Code</label>
-            <input type="text" name="member_code" class="form-control" required>
-        </div>
+            <div class="form-group">
+                <label>Secretary Code</label>
+                <input type="text" name="secretary_code" class="form-control" required>
+            </div>
 
-        <div class="modal-footer">
-            <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
-            <button type="submit" class="btn btn-primary">Confirm Codes</button>
-        </div>
+            <div class="form-group">
+                <label>Member Code</label>
+                <input type="text" name="member_code" class="form-control" required>
+            </div>
 
-        <?php echo form_close(); ?>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
+                <button type="submit" class="btn btn-primary">Confirm Codes</button>
+            </div>
+
+            <?php echo form_close(); ?>
+        <?php } else { ?>
+            <h5 class="mb10">Bid Package Summary</h5>
+            <div class="table-responsive mb15">
+                <table class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th>Vendor</th>
+                            <th>Status</th>
+                            <th>Technical</th>
+                            <th>Commercial Without Price</th>
+                            <th>Commercial With Price</th>
+                            <th>Bank Guarantee</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($bid_summary)) { ?>
+                            <tr><td colspan="7" class="text-center text-off p20">No submitted bids found.</td></tr>
+                        <?php } ?>
+                        <?php foreach (($bid_summary ?? []) as $bid) { ?>
+                            <?php
+                            $doc_link = static function ($doc_id, $label) {
+                                if (empty($doc_id)) {
+                                    return esc($label ?: "-");
+                                }
+                                return anchor(
+                                    get_uri("tender_committee_opening_inbox/download_bid_document/" . (int) $doc_id),
+                                    esc($label ?: "Download"),
+                                    ["class" => "btn btn-default btn-xs", "target" => "_blank"]
+                                );
+                            };
+                            ?>
+                            <tr>
+                                <td><?php echo esc($bid->vendor_name ?? "-"); ?></td>
+                                <td><?php echo esc(ucwords(str_replace("_", " ", $bid->bid_status ?? "-"))); ?></td>
+                                <td><?php echo $doc_link($bid->technical_doc_id ?? 0, $bid->technical_doc_name ?? "-"); ?></td>
+                                <td><?php echo $doc_link($bid->commercial_unpriced_doc_id ?? 0, $bid->commercial_unpriced_doc_name ?? "-"); ?></td>
+                                <td><?php echo $doc_link($bid->commercial_priced_doc_id ?? 0, $bid->commercial_priced_doc_name ?? "-"); ?></td>
+                                <td><?php echo $doc_link($bid->bank_guarantee_doc_id ?? 0, $bid->bank_guarantee_doc_name ?? "-"); ?></td>
+                                <td><?php echo $bid->total_amount !== null ? number_format((float) $bid->total_amount, 3) . " " . esc($bid->currency ?? "OMR") : "-"; ?></td>
+                            </tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <h5 class="mb10">Committee Digital Signatures</h5>
+            <div class="mb15">
+                <span class="badge bg-light text-dark me-1">Chairman: <?php echo ($signature_map["chairman"] ?? 0) >= 1 ? "Signed" : "Pending"; ?></span>
+                <span class="badge bg-light text-dark me-1">Secretary: <?php echo ($signature_map["secretary"] ?? 0) >= 1 ? "Signed" : "Pending"; ?></span>
+                <span class="badge bg-light text-dark me-1">Member: <?php echo ($signature_map["itc_member"] ?? 0) >= 1 ? "Signed" : "Pending"; ?></span>
+            </div>
+
+            <?php if (($signature_map[$my_role ?? ""] ?? 0) >= 1) { ?>
+                <div class="alert alert-success">Your digital signature has been saved.</div>
+            <?php } elseif (($session->status ?? "") === "unlocked") { ?>
+                <?php echo form_open(get_uri("tender_committee_opening_inbox/sign_opening"), ["id" => "tender-3key-sign-form", "class" => "general-form"]); ?>
+                    <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+                    <input type="hidden" name="opening_stage" value="<?php echo esc($opening_stage ?? "technical"); ?>" />
+
+                    <div class="form-group">
+                        <label>Signature Name</label>
+                        <input type="text" name="signature_name" class="form-control" value="<?php echo esc(trim((string) (($this->login_user->first_name ?? "") . " " . ($this->login_user->last_name ?? "")))); ?>">
+                    </div>
+                    <div class="form-group">
+                        <label>Digital Signature Statement</label>
+                        <textarea name="committee_signature_statement" class="form-control" rows="3" required>I confirm that I reviewed the opened technical and commercial bid package for this tender and digitally sign the bid opening form.</textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
+                        <button type="submit" class="btn btn-primary">Sign Bid Opening</button>
+                    </div>
+                <?php echo form_close(); ?>
+            <?php } ?>
+        <?php } ?>
     <?php } ?>
 </div>
 
@@ -100,6 +183,15 @@ $(document).ready(function () {
     $("#tender-3key-confirm-form").appForm({
         onSuccess: function (response) {
             $("#tender-committee-opening-table").appTable({reload: true});
+        }
+    });
+
+    $("#tender-3key-sign-form").appForm({
+        onSuccess: function (response) {
+            $("#tender-committee-opening-table").appTable({reload: true});
+            if (response.reload) {
+                $(".modal").modal("hide");
+            }
         }
     });
 });

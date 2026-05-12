@@ -8,6 +8,25 @@
             </h1>
         </div>
 
+        <div class="p15 pt0">
+            <div class="row">
+                <div class="col-md-3 mb10">
+                    <div class="text-off"><?php echo app_lang("vendor_grade"); ?></div>
+                    <strong><?php echo esc(vendor_grade_label($vendor->vendor_grade_name ?? "", $vendor->vendor_grade_code ?? "")); ?></strong>
+                </div>
+                <div class="col-md-3 mb10">
+                    <div class="text-off"><?php echo app_lang("status"); ?></div>
+                    <strong><?php echo esc($vendor->status ?? "-"); ?></strong>
+                </div>
+                <?php if (($vendor->status ?? "") === vendor_blocked_status()) { ?>
+                    <div class="col-md-6 mb10">
+                        <div class="text-off"><?php echo app_lang("reason"); ?></div>
+                        <strong><?php echo esc($vendor->blocked_reason ?? "-"); ?></strong>
+                    </div>
+                <?php } ?>
+            </div>
+        </div>
+
         <ul class="nav nav-tabs" role="tablist">
             <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-docs"><?php echo app_lang("documents"); ?></a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-contacts"><?php echo app_lang("contacts"); ?></a></li>

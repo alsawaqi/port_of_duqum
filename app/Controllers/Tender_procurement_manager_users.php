@@ -1,0 +1,170 @@
+<?php
+
+namespace App\Controllers;
+
+use App\Models\Gate_pass_companies_model;
+use App\Models\Tender_procurement_manager_users_model;
+
+class Tender_procurement_manager_users extends Security_Controller
+{
+    protected $Tender_procurement_manager_users_model;
+    protected $Gate_pass_companies_model;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->access_only_team_members();
+        $this->access_only_tender("procurement_manager_users", "view");
+
+        $this->Tender_procurement_manager_users_model = new Tender_procurement_manager_users_model();
+        $this->Gate_pass_companies_model = new Gate_pass_companies_model();
+        $this->db = db_connect();
+    }
+
+    public function index()
+    {
+        return $this->template->rander("tender_procurement_manager_users/index", [
+            "can_create_tender_user" => $this->can_tender("procurement_manager_users", "create"),
+        ]);
+    }
+
+    public function list_data()
+    {
+        $list = $this->Tender_procurement_manager_users_model->get_details()->getResult();
+        $result = [];
+        foreach ($list as $d) {
+            $result[] = $this->_make_row($d);
+        }
+
+        return $this->response->setJSON(["data" => $result]);
+    }
+
+    public function modal_form()
+    {
+        $this->validate_submitted_data(["id" => "numeric"]);
+        $id = (int)$this->request->getPost("id");
+        $this->access_only_tender("procurement_manager_users", $id ? "update" : "create");
+
+        $model_info = $id ? $this->Tender_procurement_manager_users_model->get_details(["id" => $id])->getRow() : null;
+
+        $company_dropdown = ["0" => "- " . app_lang("select_company") . " -"];
+        foreach ($this->Gate_pass_companies_model->get_details()->getResult() as $c) {
+            $company_dropdown[$c->id] = $c->name;
+        }
+
+        return $this->template->view("tender_procurement_manager_users/modal_form", [
+            "model_info" => $model_info,
+            "company_dropdown" => $company_dropdown,
+        ]);
+    }
+
+    public function save()
+    {
+        $this->validate_submitted_data([
+            "id" => "numeric",
+            "company_id" => "required|numeric",
+            "email" => "required|valid_email",
+            "status" => "required",
+        ]);
+
+        $id = (int)$this->request->getPost("id");
+        $this->access_only_tender("procurement_manager_users", $id ? "update" : "create");
+
+        $company_id = (int)$this->request->getPost("company_id");
+
+        try {
+            $role_id = $this->_ensure_role("Tender Procurement Manager", [
+                "can_view_tender_procurement_manager_inbox",
+                "can_update_tender_procurement_manager_inbox",
+            ]);
+
+            return $this->save_operational_user_assignment(
+                $this->Tender_procurement_manager_users_model,
+                "tender_procurement_manager_users",
+                ["company_id" => $company_id],
+                ["job_title" => "Tender Procurement Manager", "role_id" => $role_id]
+            );
+        } catch (\Throwable $e) {
+            $msg = (ENVIRONMENT !== 'production') ? $e->getMessage() : app_lang("error_occurred");
+            return $this->response->setJSON(["success" => false, "message" => $msg]);
+        }
+    }
+
+    public function delete()
+    {
+        $this->validate_submitted_data(["id" => "required|numeric"]);
+        $this->access_only_tender("procurement_manager_users", "delete");
+
+        $id = (int)$this->request->getPost("id");
+        $pivot = $this->Tender_procurement_manager_users_model->get_one($id);
+        if (!$pivot || (int)$pivot->deleted) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
+        }
+
+        $this->Tender_procurement_manager_users_model->delete($id);
+        return $this->response->setJSON(["success" => true, "message" => app_lang("record_deleted")]);
+    }
+
+    private function _ensure_role(string $title, array $keys): int
+    {
+        $roles = $this->db->prefixTable("roles");
+        $row = $this->db->query(
+            "SELECT id, permissions FROM $roles WHERE deleted=0 AND title=? LIMIT 1",
+            [$title]
+        )->getRow();
+
+        $perms = [];
+        if ($row && !empty($row->permissions)) {
+            $tmp = @unserialize($row->permissions);
+            if (is_array($tmp)) {
+                $perms = $tmp;
+            }
+        }
+
+        foreach ($keys as $k) {
+            $perms[$k] = "1";
+        }
+
+        $perm_str = serialize($perms);
+        if (!$row) {
+            $this->db->query(
+                "INSERT INTO $roles (title, permissions, deleted) VALUES (?, ?, 0)",
+                [$title, $perm_str]
+            );
+            return (int)$this->db->insertID();
+        }
+
+        $this->db->query("UPDATE $roles SET permissions=? WHERE id=?", [$perm_str, (int)$row->id]);
+        return (int)$row->id;
+    }
+
+    private function _make_row($d)
+    {
+        $name = trim(($d->first_name ?? "") . " " . ($d->last_name ?? ""));
+        if ($name === "") {
+            $name = "-";
+        }
+
+        $options = "";
+        if ($this->can_tender("procurement_manager_users", "update")) {
+            $options .= modal_anchor(get_uri("tender_procurement_manager_users/modal_form"), "<i data-feather='edit' class='icon-16'></i>", [
+                "class" => "edit", "title" => app_lang("edit"), "data-post-id" => $d->id
+            ]);
+        }
+        if ($this->can_tender("procurement_manager_users", "delete")) {
+            $options .= js_anchor("<i data-feather='x' class='icon-16'></i>", [
+                "title" => app_lang("delete"), "class" => "delete", "data-id" => $d->id,
+                "data-action-url" => get_uri("tender_procurement_manager_users/delete"), "data-action" => "delete-confirmation"
+            ]);
+        }
+
+        return [
+            $d->company_name ?? "-",
+            $name,
+            $d->email ?? "-",
+            $d->phone ?? "-",
+            ucfirst($d->status ?? "inactive"),
+            $options,
+        ];
+    }
+}

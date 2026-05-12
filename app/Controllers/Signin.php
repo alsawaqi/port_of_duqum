@@ -48,7 +48,7 @@ class Signin extends App_Controller {
     // check authentication
     function authenticate() {
         $validation = $this->validate_submitted_data(array(
-            "email" => "required|valid_email",
+            "email" => "required",
             "password" => "required"
         ), true);
 

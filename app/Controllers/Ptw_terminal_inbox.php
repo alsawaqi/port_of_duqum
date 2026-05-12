@@ -131,16 +131,16 @@ class Ptw_terminal_inbox extends Security_Controller
             "ptw_application_id" => $application->id,
             "stage" => "terminal"
         ])->getResult();
+        $hsse_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $application->id, "stage" => "hsse"])->getResult();
+        $hmo_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $application->id, "stage" => "hmo"])->getResult();
+        $audit_logs = $this->Ptw_audit_logs_model->get_by_application($application->id)->getResult();
     
         // Load PTW checklist + attachments (same source as portal)
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
         $responses_rows = $this->Ptw_requirement_responses_model->get_by_application($application->id)->getResult();
         $attachments_rows = $this->Ptw_attachments_model->get_by_application($application->id)->getResult();
     
-        $responses_by_definition = [];
-        foreach ($responses_rows as $row) {
-            $responses_by_definition[(int)($row->ptw_requirement_definition_id ?? 0)] = $row;
-        }
+        $responses_by_definition = ptw_index_requirement_responses_with_default_others($responses_rows, $defs);
     
         $attachments_by_response = [];
         foreach ($attachments_rows as $att) {
@@ -153,6 +153,12 @@ class Ptw_terminal_inbox extends Security_Controller
         return $this->template->rander("ptw_terminal_inbox/details", [
             "application" => $application,
             "reviews" => $reviews,
+            "review_groups" => [
+                "hsse" => $hsse_reviews,
+                "hmo" => $hmo_reviews,
+                "terminal" => $reviews,
+            ],
+            "audit_logs" => $audit_logs,
             "definitions_grouped" => $this->_group_definitions($defs),
             "responses_by_definition" => $responses_by_definition,
             "attachments_by_response" => $attachments_by_response,
@@ -161,24 +167,9 @@ class Ptw_terminal_inbox extends Security_Controller
 
 
     private function _group_definitions(array $defs): array
-{
-    $grouped = [
-        "hazard_document" => [],
-        "ppe" => [],
-        "preparation" => [],
-        "other" => [],
-    ];
-
-    foreach ($defs as $d) {
-        $cat = (string)($d->category ?? "other");
-        if (!isset($grouped[$cat])) {
-            $grouped[$cat] = [];
-        }
-        $grouped[$cat][] = $d;
+    {
+        return ptw_group_definitions_with_default_others($defs);
     }
-
-    return $grouped;
-}
 
     public function approval_modal_form()
     {
@@ -457,15 +448,6 @@ class Ptw_terminal_inbox extends Security_Controller
             return "-";
         }
 
-        $map = [
-            "draft" => "Draft",
-            "submitted" => "Submitted",
-            "in_review" => "In Review",
-            "revise" => "Revise",
-            "rejected" => "Rejected",
-            "approved" => "Approved",
-        ];
-
-        return $map[$status] ?? ucwords(str_replace("_", " ", $status));
+        return ptw_status_display_label($status);
     }
 }

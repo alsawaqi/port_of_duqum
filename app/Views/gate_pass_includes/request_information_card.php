@@ -13,6 +13,7 @@ $can_edit_request_core = !empty($can_edit_request_core);
 
 $visit_from_disp = !empty($request->visit_from) ? format_to_date($request->visit_from) : "-";
 $visit_to_disp = !empty($request->visit_to) ? format_to_date($request->visit_to) : "-";
+$visit_duration_disp = gate_pass_visit_duration_label($request->visit_from ?? null, $request->visit_to ?? null);
 $visit_type_disp = ucwords(str_replace("_", " ", trim((string)($request->visit_type ?? "visitor"))));
 $req_type_raw = strtolower(trim((string)($request->request_type ?? "both")));
 $request_type_disp = $req_type_raw === "person"
@@ -167,6 +168,12 @@ if (!$gp_gate_pass_request_information_styles_loaded) {
                     <div class="gp-spec-field">
                         <span class="gp-spec-label"><?php echo app_lang("visit_to"); ?></span>
                         <span class="gp-spec-value"><?php echo esc($visit_to_disp); ?></span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="gp-spec-field">
+                        <span class="gp-spec-label"><?php echo app_lang("gate_pass_date_count"); ?></span>
+                        <span class="gp-spec-value"><?php echo esc($visit_duration_disp); ?></span>
                     </div>
                 </div>
                 <div class="col-md-6">

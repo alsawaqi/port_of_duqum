@@ -64,6 +64,7 @@ class Ptw_portal extends Security_Controller
     public function application_form($id = 0)
     {
         $this->_require_ptw_access();
+        $this->_cleanup_stale_ptw_pending_uploads();
 
         $id = (int) $id;
         $app = $id ? $this->Ptw_applications_model->get_details(["id" => $id])->getRow() : null;
@@ -79,12 +80,13 @@ class Ptw_portal extends Security_Controller
         }
 
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
-        $responses = [];
+        $response_rows = [];
         if ($app) {
             foreach ($this->Ptw_requirement_responses_model->get_by_application($app->id)->getResult() as $r) {
-                $responses[(int) $r->ptw_requirement_definition_id] = $r;
+                $response_rows[] = $r;
             }
         }
+        $responses = ptw_index_requirement_responses_with_default_others($response_rows, $defs);
 
         $session = \Config\Services::session();
 
@@ -137,6 +139,7 @@ class Ptw_portal extends Security_Controller
     public function save_application()
     {
         $this->_require_ptw_access();
+        $this->_cleanup_stale_ptw_pending_uploads();
 
         $id = (int) $this->request->getPost("id");
         $submit_mode = $this->request->getPost("submit_mode") === "submit" ? "submit" : "draft";
@@ -160,6 +163,10 @@ class Ptw_portal extends Security_Controller
         foreach ($defs as $d) {
             $defs_index[(int) $d->id] = $d;
         }
+        foreach (["hazard_document", "ppe", "preparation"] as $category) {
+            $virtual_other = ptw_virtual_other_requirement_definition($category);
+            $defs_index[(int)$virtual_other->id] = $virtual_other;
+        }
 
         [$errors, $field_errors] = $this->_validate_ptw_submission($existing, $defs_index, $submit_mode);
         if (count($errors)) {
@@ -169,6 +176,7 @@ class Ptw_portal extends Security_Controller
             $old_input = $this->request->getPost();
             // Signature pad data URL can be large; avoid storing it in session flash.
             unset($old_input["signature_data"]);
+            $old_input = $this->_remember_ptw_pending_uploads($old_input, $defs_index);
             $session->setFlashdata('ptw_old_input', $old_input);
             app_redirect("ptw_portal/application_form/" . ($id ?: ""));
             return;
@@ -288,6 +296,13 @@ if ($submit_mode === "draft") {
 
         $db->transComplete();
 
+        if ($db->transStatus() === false) {
+            $session = \Config\Services::session();
+            $session->setFlashdata('ptw_errors', ["Unable to save the PTW application. Please try again."]);
+            app_redirect("ptw_portal/application_form/" . ($id ?: ""));
+            return;
+        }
+
         app_redirect("ptw_portal/application_details/" . $application_id);
     }
 
@@ -302,19 +317,37 @@ if ($submit_mode === "draft") {
         }
 
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
-        $responses = [];
+        $response_rows = [];
         foreach ($this->Ptw_requirement_responses_model->get_by_application($app->id)->getResult() as $r) {
-            $responses[(int) $r->ptw_requirement_definition_id] = $r;
+            $response_rows[] = $r;
         }
+        $responses = ptw_index_requirement_responses_with_default_others($response_rows, $defs);
 
         $attachments = $this->Ptw_attachments_model->get_by_application($app->id)->getResult();
+        $attachments_by_response = [];
+        foreach ($attachments as $att) {
+            $response_id = (int)($att->ptw_requirement_response_id ?? 0);
+            if ($response_id > 0) {
+                $attachments_by_response[$response_id] = $att;
+            }
+        }
+        $hsse_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $app->id, "stage" => "hsse"])->getResult();
+        $hmo_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $app->id, "stage" => "hmo"])->getResult();
+        $terminal_reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $app->id, "stage" => "terminal"])->getResult();
         $audit_logs = $this->Ptw_audit_logs_model->get_by_application($app->id)->getResult();
 
         $view_data = [
             "app" => $app,
             "definitions_grouped" => $this->_group_definitions($defs),
             "responses_index" => $responses,
+            "responses_by_definition" => $responses,
             "attachments" => $attachments,
+            "attachments_by_response" => $attachments_by_response,
+            "review_groups" => [
+                "hsse" => $hsse_reviews,
+                "hmo" => $hmo_reviews,
+                "terminal" => $terminal_reviews,
+            ],
             "audit_logs" => $audit_logs,
             "can_edit" => $this->_can_edit_application($app),
             "can_download_final_permit" => $this->_is_final_permit_available($app),
@@ -380,10 +413,11 @@ if ($submit_mode === "draft") {
         }
 
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
-        $responses = [];
+        $response_rows = [];
         foreach ($this->Ptw_requirement_responses_model->get_by_application($app->id)->getResult() as $row) {
-            $responses[(int) $row->ptw_requirement_definition_id] = $row;
+            $response_rows[] = $row;
         }
+        $responses = ptw_index_requirement_responses_with_default_others($response_rows, $defs);
 
         $reviews = $this->Ptw_reviews_model->get_details(["ptw_application_id" => $app->id])->getResult();
         $html = $this->_ptw_final_permit_html($app, $this->_group_definitions($defs), $responses, $reviews);
@@ -451,7 +485,10 @@ if ($submit_mode === "draft") {
             return false;
         }
 
-        // Portal edit is allowed only during revise cycle.
+        if ($status === "draft" && $stage === "draft") {
+            return true;
+        }
+
         return $status === "revise" && in_array($stage, ["hsse", "hmo", "terminal"], true);
     }
 
@@ -479,15 +516,16 @@ if ($submit_mode === "draft") {
                 $reviewer = $review->email ?? "-";
             }
             $review_rows .= "<tr>"
-                . "<td>" . $h(strtoupper((string) ($review->stage ?? "-"))) . "</td>"
-                . "<td>" . $h(ucwords(str_replace("_", " ", (string) ($review->decision ?? "pending")))) . "</td>"
+                . "<td>" . $h(ptw_stage_display_label($review->stage ?? "")) . "</td>"
+                . "<td>" . $h(ptw_decision_display_label($review->decision ?? "")) . "</td>"
                 . "<td>" . $h($reviewer) . "</td>"
-                . "<td>" . $h(!empty($review->reviewed_at) ? format_to_datetime($review->reviewed_at) : "-") . "</td>"
+                . "<td>" . $h(!empty($review->completed_at) ? format_to_datetime($review->completed_at) : "-") . "</td>"
+                . "<td>" . $h(ptw_duration_between($review->received_at ?? null, $review->completed_at ?? null)) . "</td>"
                 . "<td>" . nl2br($h($review->remarks ?? "-")) . "</td>"
                 . "</tr>";
         }
         if ($review_rows === "") {
-            $review_rows = "<tr><td colspan=\"5\">No approval records.</td></tr>";
+            $review_rows = "<tr><td colspan=\"6\">No approval records.</td></tr>";
         }
 
         $checklist_html = "";
@@ -501,6 +539,32 @@ if ($submit_mode === "draft") {
             $rows = "";
             foreach (($definitions_grouped[$category] ?? []) as $def) {
                 $response = $responses[(int) $def->id] ?? null;
+                if (ptw_is_other_requirement_definition($def)) {
+                    $other_items = ptw_decode_other_requirement_items($response);
+                    if (!$other_items) {
+                        $rows .= "<tr>"
+                            . "<td>" . $h($def->label ?? "-") . "</td>"
+                            . "<td>No</td>"
+                            . "<td>-</td>"
+                            . "</tr>";
+                        continue;
+                    }
+
+                    foreach ($other_items as $item) {
+                        $note = trim((string)($item["label"] ?? ""));
+                        $attachment = trim((string)($item["attachment_name"] ?? ""));
+                        if ($attachment !== "") {
+                            $note .= ($note !== "" ? " - " : "") . $attachment;
+                        }
+                        $rows .= "<tr>"
+                            . "<td>" . $h($def->label ?? "Other") . "</td>"
+                            . "<td>Yes</td>"
+                            . "<td>" . nl2br($h($note !== "" ? $note : "-")) . "</td>"
+                            . "</tr>";
+                    }
+                    continue;
+                }
+
                 $rows .= "<tr>"
                     . "<td>" . $h($def->label ?? "-") . "</td>"
                     . "<td>" . (!empty($response) && (int) ($response->is_checked ?? 0) === 1 ? "Yes" : "No") . "</td>"
@@ -520,6 +584,9 @@ if ($submit_mode === "draft") {
         $issued_at = !empty($app->completed_at) ? format_to_datetime($app->completed_at) : format_to_datetime(get_current_utc_time());
         $valid_from = !empty($app->work_from) ? format_to_datetime($app->work_from) : "-";
         $valid_to = !empty($app->work_to) ? format_to_datetime($app->work_to) : "-";
+        $issued_label = ptw_terminal_approval_is_required($app)
+            ? "PERMIT ISSUED - Approved by Terminal"
+            : "PERMIT ISSUED - Terminal approval not required";
 
         $info_rows = ""
             . $row("Permit Reference", $app->reference ?? "-")
@@ -532,7 +599,8 @@ if ($submit_mode === "draft") {
             . $row("Work Location", $app->exact_location ?? "-")
             . $row("Valid From", $valid_from)
             . $row("Valid To", $valid_to)
-            . $row("Final Status", strtoupper((string) ($app->status ?? "approved")));
+            . $row("Terminal Approval", ptw_terminal_approval_is_required($app) ? "Required" : "Not required")
+            . $row("Final Status", ptw_status_display_label($app->status ?? "approved"));
 
         $description = nl2br($h($app->work_description ?? "-"));
 
@@ -550,13 +618,13 @@ if ($submit_mode === "draft") {
 </style>
 <h1>Final Issued Permit to Work</h1>
 <div class="muted">System-generated issued permit view. Manual signatures can be attached separately where required by PODC procedure.</div>
-<div class="issued">PERMIT ISSUED - Approved by Terminal</div>
+<div class="issued">{$issued_label}</div>
 <table class="info"><tbody>{$info_rows}</tbody></table>
 <h2>Work Description</h2>
 <div class="desc">{$description}</div>
 {$checklist_html}
 <h2>Approval Trail</h2>
-<table class="grid"><thead><tr><th>Stage</th><th>Decision</th><th>Reviewer</th><th>Reviewed At</th><th>Remarks</th></tr></thead><tbody>{$review_rows}</tbody></table>
+<table class="grid"><thead><tr><th>Stage</th><th>Decision</th><th>Reviewer</th><th>Reviewed At</th><th>Duration</th><th>Remarks</th></tr></thead><tbody>{$review_rows}</tbody></table>
 HTML;
     }
 
@@ -646,11 +714,16 @@ HTML;
             }
 
             foreach ($defs_index as $def_id => $def) {
+                if (ptw_is_other_requirement_definition($def)) {
+                    continue;
+                }
+
                 $checked  = $this->request->getPost("req_{$def_id}_checked") ? 1 : 0;
                 $text     = trim((string) $this->request->getPost("req_{$def_id}_text"));
                 $file     = $this->request->getFile("req_{$def_id}_file");
                 $existing_response      = $existing ? $this->Ptw_requirement_responses_model->get_one_by_app_and_def((int)$existing->id, $def_id) : null;
                 $has_existing_attachment = $existing_response && !empty($existing_response->attachment_path);
+                $has_pending_attachment = $this->_ptw_pending_upload_exists((string)$this->request->getPost("req_{$def_id}_pending_token"));
 
                 if ((int)$def->is_mandatory === 1 && $checked !== 1) {
                     $addError($def->label . " must be checked", "req_{$def_id}_checked");
@@ -662,7 +735,7 @@ HTML;
 
                 if ((int)$def->requires_attachment === 1 && $checked === 1) {
                     $has_new_upload = $file && $file->isValid() && !$file->hasMoved();
-                    if (!$has_new_upload && !$has_existing_attachment) {
+                    if (!$has_new_upload && !$has_existing_attachment && !$has_pending_attachment) {
                         $addError($def->label . " requires an attachment", "req_{$def_id}_file");
                     }
                 }
@@ -673,6 +746,8 @@ HTML;
                     }
                 }
             }
+
+            $this->_validate_ptw_other_items($existing, $defs_index, $addError);
         }
 
         return [$errors, $field_errors];
@@ -681,10 +756,15 @@ HTML;
     private function _save_requirement_responses(int $application_id, array $defs_index)
     {
         foreach ($defs_index as $def_id => $def) {
+            if (ptw_is_other_requirement_definition($def)) {
+                continue;
+            }
+
             $checked = $this->request->getPost("req_{$def_id}_checked") ? 1 : 0;
             $text = trim((string) $this->request->getPost("req_{$def_id}_text"));
 
             $existing_response = $this->Ptw_requirement_responses_model->get_one_by_app_and_def($application_id, $def_id);
+            $pending_token = (string)$this->request->getPost("req_{$def_id}_pending_token");
 
             $data = [
                 "ptw_application_id" => $application_id,
@@ -728,7 +808,633 @@ HTML;
                     "uploaded_by"                 => (int) $this->login_user->id,
                 ];
                 $this->Ptw_attachments_model->ci_save($att_data);
+                $this->_delete_ptw_pending_upload($pending_token);
+            } elseif ($this->_ptw_pending_upload_exists($pending_token)) {
+                $consumed = $this->_consume_ptw_pending_upload($pending_token, $application_id, "req_{$def_id}_");
+                if ($consumed) {
+                    $att_path_data = ["attachment_path" => $consumed["file_path"]];
+                    $this->Ptw_requirement_responses_model->ci_save($att_path_data, (int)$response_id);
+
+                    $db = db_connect();
+                    $att_table = $db->prefixTable("ptw_attachments");
+                    $db->query("UPDATE $att_table SET deleted=1 WHERE ptw_requirement_response_id=?", [(int)$response_id]);
+
+                    $att_data = [
+                        "ptw_requirement_id"          => $def_id,
+                        "ptw_application_id"          => $application_id,
+                        "ptw_requirement_response_id" => (int)$response_id,
+                        "file_name"                   => $consumed["file_name"],
+                        "file_path"                   => $consumed["file_path"],
+                        "file_type"                   => $consumed["file_type"],
+                        "file_size"                   => (int)$consumed["file_size"],
+                        "uploaded_by"                 => (int) $this->login_user->id,
+                    ];
+                    $this->Ptw_attachments_model->ci_save($att_data);
+                }
             }
+        }
+
+        foreach (["hazard_document", "ppe", "preparation"] as $category) {
+            $other_def = $this->_get_ptw_other_definition($defs_index, $category);
+            if ($other_def) {
+                $this->_save_ptw_other_items($application_id, $other_def);
+            }
+        }
+    }
+
+    private function _validate_ptw_other_items($existing, array $defs_index, callable $addError): void
+    {
+        foreach (["hazard_document", "ppe", "preparation"] as $category) {
+            $def = $this->_get_ptw_other_definition($defs_index, $category);
+            if (!$def) {
+                continue;
+            }
+
+            $prefix = $this->_ptw_other_post_prefix($category);
+            $existing_response = $existing ? $this->_get_existing_ptw_other_response((int)$existing->id, $category, $def) : null;
+            foreach ($this->_get_ptw_other_post_rows($category) as $index => $row) {
+                $label = trim((string)$row["label"]);
+                $has_existing_attachment = false;
+                if ($existing && $existing_response && trim((string)$row["existing_path"]) !== "") {
+                    $has_existing_attachment = (bool)$this->_get_existing_ptw_other_attachment_item(
+                        (int)$existing->id,
+                        (int)$existing_response->id,
+                        (int)$row["existing_id"],
+                        (string)$row["existing_path"]
+                    );
+                }
+                $file = $row["file"];
+                $has_new_upload = $this->_ptw_file_has_upload($file);
+                $has_pending_attachment = $this->_ptw_pending_upload_exists((string)$row["pending_token"]);
+
+                if ($label === "" && !$has_new_upload && !$has_existing_attachment && !$has_pending_attachment) {
+                    continue;
+                }
+
+                if ($label === "") {
+                    $addError("Other " . $this->_ptw_other_category_label($category) . " requires a description", "{$prefix}_label_{$index}");
+                }
+
+                if ($category === "hazard_document" && !$has_new_upload && !$has_existing_attachment && !$has_pending_attachment) {
+                    $addError("Other hazard/document requires an attachment", "{$prefix}_file_{$index}");
+                }
+
+                if ($file && $file->getError() !== UPLOAD_ERR_NO_FILE) {
+                    if (!$file->isValid() || $file->hasMoved()) {
+                        $addError("Other " . $this->_ptw_other_category_label($category) . " attachment is invalid", "{$prefix}_file_{$index}");
+                    } elseif (!$this->_is_allowed_file_for_definition($file->getClientExtension(), $def)) {
+                        $addError("Other " . $this->_ptw_other_category_label($category) . " has invalid file type", "{$prefix}_file_{$index}");
+                    }
+                }
+            }
+        }
+    }
+
+    private function _get_ptw_other_definition(array $defs_index, string $category)
+    {
+        foreach ($defs_index as $def) {
+            if ((string)($def->category ?? "") === $category && ptw_is_other_requirement_definition($def)) {
+                return $def;
+            }
+        }
+
+        return null;
+    }
+
+    private function _ptw_other_post_prefix(string $category): string
+    {
+        return "other_" . preg_replace('/[^a-z0-9_]/', "", strtolower($category));
+    }
+
+    private function _ptw_other_category_label(string $category): string
+    {
+        $labels = [
+            "hazard_document" => "hazard/document",
+            "ppe" => "PPE",
+            "preparation" => "preparation",
+        ];
+
+        return $labels[$category] ?? $category;
+    }
+
+    private function _get_ptw_post_array(string $key): array
+    {
+        $value = $this->request->getPost($key);
+        if ($value === null) {
+            return [];
+        }
+
+        return is_array($value) ? array_values($value) : [$value];
+    }
+
+    private function _get_ptw_file_array(string $key): array
+    {
+        $files = $this->request->getFileMultiple($key);
+        if (!$files) {
+            return [];
+        }
+
+        return is_array($files) ? array_values($files) : [$files];
+    }
+
+    private function _ptw_file_has_upload($file): bool
+    {
+        return $file && $file->getError() !== UPLOAD_ERR_NO_FILE && $file->isValid() && !$file->hasMoved();
+    }
+
+    private function _remember_ptw_pending_uploads(array $old_input, array $defs_index): array
+    {
+        foreach ($defs_index as $def_id => $def) {
+            if (ptw_is_other_requirement_definition($def)) {
+                continue;
+            }
+
+            $token_key = "req_{$def_id}_pending_token";
+            $name_key = "req_{$def_id}_pending_name";
+            $file = $this->request->getFile("req_{$def_id}_file");
+            $old_token = trim((string)($old_input[$token_key] ?? ""));
+
+            if ($this->_ptw_file_has_upload($file) && $this->_is_allowed_file_for_definition($file->getClientExtension(), $def)) {
+                $this->_delete_ptw_pending_upload($old_token);
+                $pending = $this->_store_ptw_pending_upload($file, "req_{$def_id}");
+                if ($pending) {
+                    $old_input[$token_key] = $pending["token"];
+                    $old_input[$name_key] = $pending["file_name"];
+                }
+            } elseif ($this->_ptw_pending_upload_exists($old_token)) {
+                $pending = $this->_ptw_pending_upload_info($old_token);
+                $old_input[$token_key] = $old_token;
+                $old_input[$name_key] = $pending["file_name"] ?? ($old_input[$name_key] ?? "");
+            } else {
+                unset($old_input[$token_key], $old_input[$name_key]);
+            }
+        }
+
+        foreach (["hazard_document", "ppe", "preparation"] as $category) {
+            $def = $this->_get_ptw_other_definition($defs_index, $category);
+            if (!$def) {
+                continue;
+            }
+
+            $prefix = $this->_ptw_other_post_prefix($category);
+            $labels = $this->_get_ptw_post_array("{$prefix}_label");
+            $existing_paths = $this->_get_ptw_post_array("{$prefix}_existing_path");
+            $existing_names = $this->_get_ptw_post_array("{$prefix}_existing_name");
+            $existing_ids = $this->_get_ptw_post_array("{$prefix}_existing_id");
+            $pending_tokens = $this->_get_ptw_post_array("{$prefix}_pending_token");
+            $pending_names = $this->_get_ptw_post_array("{$prefix}_pending_name");
+            $files = $this->_get_ptw_file_array("{$prefix}_file");
+            $count = max(count($labels), count($existing_paths), count($existing_names), count($existing_ids), count($pending_tokens), count($pending_names), count($files), 1);
+
+            $new_pending_tokens = [];
+            $new_pending_names = [];
+            for ($i = 0; $i < $count; $i++) {
+                $file = $files[$i] ?? null;
+                $old_token = trim((string)($pending_tokens[$i] ?? ""));
+                if ($this->_ptw_file_has_upload($file) && $this->_is_allowed_file_for_definition($file->getClientExtension(), $def)) {
+                    $this->_delete_ptw_pending_upload($old_token);
+                    $pending = $this->_store_ptw_pending_upload($file, "{$prefix}_{$i}");
+                    $new_pending_tokens[$i] = $pending["token"] ?? "";
+                    $new_pending_names[$i] = $pending["file_name"] ?? "";
+                } elseif ($this->_ptw_pending_upload_exists($old_token)) {
+                    $pending = $this->_ptw_pending_upload_info($old_token);
+                    $new_pending_tokens[$i] = $old_token;
+                    $new_pending_names[$i] = $pending["file_name"] ?? ($pending_names[$i] ?? "");
+                } else {
+                    $new_pending_tokens[$i] = "";
+                    $new_pending_names[$i] = "";
+                }
+            }
+
+            $old_input["{$prefix}_pending_token"] = $new_pending_tokens;
+            $old_input["{$prefix}_pending_name"] = $new_pending_names;
+        }
+
+        return $old_input;
+    }
+
+    private function _ptw_pending_upload_dir(): string
+    {
+        $user_id = (int)($this->login_user->id ?? 0);
+        return WRITEPATH . "uploads/ptw/pending/user_{$user_id}/";
+    }
+
+    private function _ptw_pending_upload_meta_path(string $token): ?string
+    {
+        if (!preg_match('/^[a-f0-9]{32}$/', $token)) {
+            return null;
+        }
+
+        return $this->_ptw_pending_upload_dir() . $token . ".json";
+    }
+
+    private function _store_ptw_pending_upload($file, string $context): ?array
+    {
+        if (!$this->_ptw_file_has_upload($file)) {
+            return null;
+        }
+
+        $dir = $this->_ptw_pending_upload_dir();
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $ext = strtolower((string)$file->getClientExtension());
+        $token = bin2hex(random_bytes(16));
+        $stored_name = $token . ($ext ? "." . $ext : "");
+        $file->move($dir, $stored_name);
+
+        $meta = [
+            "token" => $token,
+            "context" => preg_replace('/[^a-zA-Z0-9_-]/', "_", $context),
+            "file_name" => (string)$file->getClientName(),
+            "file_type" => (string)$file->getClientMimeType(),
+            "file_size" => (int)$file->getSize(),
+            "extension" => $ext,
+            "stored_name" => $stored_name,
+            "created_at" => time(),
+        ];
+
+        file_put_contents($dir . $token . ".json", json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        return $meta;
+    }
+
+    private function _ptw_pending_upload_info(string $token): ?array
+    {
+        $meta_path = $this->_ptw_pending_upload_meta_path($token);
+        if (!$meta_path || !is_file($meta_path)) {
+            return null;
+        }
+
+        $meta = json_decode((string)file_get_contents($meta_path), true);
+        if (!is_array($meta) || empty($meta["stored_name"])) {
+            return null;
+        }
+
+        $file_path = $this->_ptw_pending_upload_dir() . basename((string)$meta["stored_name"]);
+        if (!is_file($file_path)) {
+            return null;
+        }
+
+        $meta["path"] = $file_path;
+        return $meta;
+    }
+
+    private function _ptw_pending_upload_exists(string $token): bool
+    {
+        return (bool)$this->_ptw_pending_upload_info($token);
+    }
+
+    private function _consume_ptw_pending_upload(string $token, int $application_id, string $name_prefix): ?array
+    {
+        $meta = $this->_ptw_pending_upload_info($token);
+        if (!$meta) {
+            return null;
+        }
+
+        $rel_dir = "ptw/app_{$application_id}/requirements/";
+        $dir = WRITEPATH . "uploads/" . $rel_dir;
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $ext = (string)($meta["extension"] ?? pathinfo((string)$meta["file_name"], PATHINFO_EXTENSION));
+        $new_name = preg_replace('/[^a-zA-Z0-9_-]/', "_", $name_prefix) . uniqid("", true) . ($ext ? "." . $ext : "");
+        $target = $dir . $new_name;
+        if (!@rename((string)$meta["path"], $target)) {
+            if (!@copy((string)$meta["path"], $target)) {
+                return null;
+            }
+            @unlink((string)$meta["path"]);
+        }
+
+        $this->_delete_ptw_pending_upload($token, false);
+
+        return [
+            "file_name" => (string)($meta["file_name"] ?? $new_name),
+            "file_path" => $rel_dir . $new_name,
+            "file_type" => (string)($meta["file_type"] ?? ""),
+            "file_size" => is_file($target) ? filesize($target) : (int)($meta["file_size"] ?? 0),
+        ];
+    }
+
+    private function _delete_ptw_pending_upload(string $token, bool $delete_file = true): void
+    {
+        $meta_path = $this->_ptw_pending_upload_meta_path($token);
+        if (!$meta_path) {
+            return;
+        }
+
+        if ($delete_file) {
+            $meta = $this->_ptw_pending_upload_info($token);
+            if ($meta && !empty($meta["path"])) {
+                @unlink((string)$meta["path"]);
+            }
+        }
+
+        if (is_file($meta_path)) {
+            @unlink($meta_path);
+        }
+    }
+
+    private function _cleanup_stale_ptw_pending_uploads(): void
+    {
+        $dir = $this->_ptw_pending_upload_dir();
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $cutoff = time() - 86400;
+        foreach (glob($dir . "*.json") ?: [] as $meta_path) {
+            $meta = json_decode((string)file_get_contents($meta_path), true);
+            $created_at = (int)($meta["created_at"] ?? filemtime($meta_path));
+            if ($created_at >= $cutoff) {
+                continue;
+            }
+
+            $token = pathinfo($meta_path, PATHINFO_FILENAME);
+            $this->_delete_ptw_pending_upload($token);
+        }
+    }
+
+    private function _get_ptw_other_post_rows(string $category): array
+    {
+        $prefix = $this->_ptw_other_post_prefix($category);
+        $labels = $this->_get_ptw_post_array("{$prefix}_label");
+        $existing_paths = $this->_get_ptw_post_array("{$prefix}_existing_path");
+        $existing_names = $this->_get_ptw_post_array("{$prefix}_existing_name");
+        $existing_ids = $this->_get_ptw_post_array("{$prefix}_existing_id");
+        $pending_tokens = $this->_get_ptw_post_array("{$prefix}_pending_token");
+        $pending_names = $this->_get_ptw_post_array("{$prefix}_pending_name");
+        $files = $this->_get_ptw_file_array("{$prefix}_file");
+
+        $count = max(count($labels), count($existing_paths), count($existing_names), count($existing_ids), count($pending_tokens), count($pending_names), count($files));
+        $rows = [];
+        for ($i = 0; $i < $count; $i++) {
+            $rows[$i] = [
+                "label" => trim((string)($labels[$i] ?? "")),
+                "existing_path" => trim((string)($existing_paths[$i] ?? "")),
+                "existing_name" => trim((string)($existing_names[$i] ?? "")),
+                "existing_id" => (int)($existing_ids[$i] ?? 0),
+                "pending_token" => trim((string)($pending_tokens[$i] ?? "")),
+                "pending_name" => trim((string)($pending_names[$i] ?? "")),
+                "file" => $files[$i] ?? null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function _save_ptw_other_items(int $application_id, $def): void
+    {
+        $def_id = (int)$def->id;
+        $category = (string)$def->category;
+        $existing_response = $this->_get_existing_ptw_other_response($application_id, $category, $def);
+        $stored_definition_id = $def_id > 0 ? $def_id : null;
+        $post_rows = $this->_get_ptw_other_post_rows($category);
+
+        $has_any_other_data = false;
+        foreach ($post_rows as $row) {
+            if (
+                trim((string)$row["label"]) !== ""
+                || trim((string)$row["existing_path"]) !== ""
+                || $this->_ptw_pending_upload_exists((string)$row["pending_token"])
+                || $this->_ptw_file_has_upload($row["file"])
+            ) {
+                $has_any_other_data = true;
+                break;
+            }
+        }
+
+        if (!$has_any_other_data) {
+            if ($existing_response) {
+                $this->Ptw_requirement_responses_model->ci_save([
+                    "is_checked" => 0,
+                    "value_text" => null,
+                    "attachment_path" => null,
+                ], (int)$existing_response->id);
+                $this->_delete_removed_ptw_other_attachments((int)$existing_response->id, []);
+            }
+            return;
+        }
+
+        $response_data = [
+            "ptw_application_id" => $application_id,
+            "ptw_requirement_definition_id" => $stored_definition_id,
+            "is_checked" => 0,
+            "value_text" => null,
+            "attachment_path" => null,
+        ];
+        if ($existing_response) {
+            unset($response_data["ptw_requirement_definition_id"]);
+            $this->Ptw_requirement_responses_model->ci_save(clean_data($response_data), (int)$existing_response->id);
+            $response_id = (int)$existing_response->id;
+        } else {
+            $response_id = $this->_insert_ptw_virtual_other_response($response_data);
+        }
+
+        if (!$response_id) {
+            return;
+        }
+
+        $items = [];
+        $kept_attachment_ids = [];
+        foreach ($post_rows as $index => $row) {
+            $label = trim((string)$row["label"]);
+            $file = $row["file"];
+            $has_new_upload = $this->_ptw_file_has_upload($file);
+            $has_existing_attachment = trim((string)$row["existing_path"]) !== "";
+            $pending_token = (string)$row["pending_token"];
+            $has_pending_attachment = $this->_ptw_pending_upload_exists($pending_token);
+
+            if ($label === "" && !$has_new_upload && !$has_existing_attachment && !$has_pending_attachment) {
+                continue;
+            }
+
+            $item = [
+                "label" => $label,
+                "attachment_id" => 0,
+                "attachment_path" => "",
+                "attachment_name" => "",
+            ];
+
+            if ($has_new_upload) {
+                $rel_dir = "ptw/app_{$application_id}/requirements/";
+                $dir = WRITEPATH . "uploads/" . $rel_dir;
+                if (!is_dir($dir)) {
+                    mkdir($dir, 0775, true);
+                }
+
+                $safe_ext = strtolower((string)$file->getClientExtension());
+                $new_name = "other_{$def_id}_{$index}_" . uniqid("", true) . "." . $safe_ext;
+                $file->move($dir, $new_name);
+                $rel_path = $rel_dir . $new_name;
+
+                $att_data = [
+                    "ptw_requirement_id" => $stored_definition_id,
+                    "ptw_application_id" => $application_id,
+                    "ptw_requirement_response_id" => $response_id,
+                    "file_name" => $file->getClientName(),
+                    "file_path" => $rel_path,
+                    "file_type" => (string)$file->getClientMimeType(),
+                    "file_size" => (int)$file->getSize(),
+                    "uploaded_by" => (int)$this->login_user->id,
+                ];
+                $attachment_id = (int)$this->Ptw_attachments_model->ci_save($att_data);
+
+                $item["attachment_id"] = $attachment_id;
+                $item["attachment_path"] = $rel_path;
+                $item["attachment_name"] = (string)$file->getClientName();
+                $kept_attachment_ids[] = $attachment_id;
+                $this->_delete_ptw_pending_upload($pending_token);
+            } elseif ($has_pending_attachment) {
+                $consumed = $this->_consume_ptw_pending_upload($pending_token, $application_id, "other_{$def_id}_{$index}_");
+                if ($consumed) {
+                    $att_data = [
+                        "ptw_requirement_id" => $stored_definition_id,
+                        "ptw_application_id" => $application_id,
+                        "ptw_requirement_response_id" => $response_id,
+                        "file_name" => $consumed["file_name"],
+                        "file_path" => $consumed["file_path"],
+                        "file_type" => $consumed["file_type"],
+                        "file_size" => (int)$consumed["file_size"],
+                        "uploaded_by" => (int)$this->login_user->id,
+                    ];
+                    $attachment_id = (int)$this->Ptw_attachments_model->ci_save($att_data);
+
+                    $item["attachment_id"] = $attachment_id;
+                    $item["attachment_path"] = $consumed["file_path"];
+                    $item["attachment_name"] = $consumed["file_name"];
+                    $kept_attachment_ids[] = $attachment_id;
+                }
+            } elseif ($has_existing_attachment) {
+                $existing_item = $this->_get_existing_ptw_other_attachment_item(
+                    $application_id,
+                    $response_id,
+                    (int)$row["existing_id"],
+                    (string)$row["existing_path"]
+                );
+                if ($existing_item) {
+                    $item["attachment_id"] = (int)$existing_item["attachment_id"];
+                    $item["attachment_path"] = (string)$existing_item["attachment_path"];
+                    $item["attachment_name"] = (string)$existing_item["attachment_name"];
+                    if ($item["attachment_id"]) {
+                        $kept_attachment_ids[] = (int)$item["attachment_id"];
+                    }
+                }
+            }
+
+            if ($item["label"] !== "" || $item["attachment_path"] !== "") {
+                $items[] = $item;
+            }
+        }
+
+        $first_attachment_path = null;
+        foreach ($items as $item) {
+            if (!empty($item["attachment_path"])) {
+                $first_attachment_path = $item["attachment_path"];
+                break;
+            }
+        }
+
+        $payload = $items ? json_encode([
+            "virtual_type" => "other_requirement",
+            "category" => $category,
+            "items" => $items,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+        $this->Ptw_requirement_responses_model->ci_save([
+            "is_checked" => $items ? 1 : 0,
+            "value_text" => $payload,
+            "attachment_path" => $first_attachment_path,
+        ], $response_id);
+
+        $this->_delete_removed_ptw_other_attachments($response_id, $kept_attachment_ids);
+    }
+
+    private function _insert_ptw_virtual_other_response(array $response_data): int
+    {
+        $db = db_connect();
+        $table = $db->prefixTable("ptw_requirement_responses");
+        $clean_data = clean_data($response_data);
+        $clean_data["ptw_requirement_definition_id"] = null;
+        $db->table($table)->insert($clean_data);
+
+        return (int)$db->insertID();
+    }
+
+    private function _get_existing_ptw_other_response(int $application_id, string $category, $def = null)
+    {
+        $legacy_definition_id = (int)($def->id ?? 0);
+        if ($legacy_definition_id > 0) {
+            $legacy = $this->Ptw_requirement_responses_model->get_one_by_app_and_def($application_id, $legacy_definition_id);
+            if ($legacy) {
+                return $legacy;
+            }
+        }
+
+        foreach ($this->Ptw_requirement_responses_model->get_by_application($application_id)->getResult() as $row) {
+            $definition_id = (int)($row->ptw_requirement_definition_id ?? 0);
+            if ($definition_id > 0) {
+                continue;
+            }
+
+            $text = trim((string)($row->value_text ?? ""));
+            if ($text === "" || ($text[0] ?? "") !== "{") {
+                continue;
+            }
+
+            $decoded = json_decode($text, true);
+            if (
+                is_array($decoded)
+                && (string)($decoded["virtual_type"] ?? "") === "other_requirement"
+                && (string)($decoded["category"] ?? "") === $category
+            ) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    private function _get_existing_ptw_other_attachment_item(int $application_id, int $response_id, int $attachment_id, string $path): ?array
+    {
+        $db = db_connect();
+        $att_table = $db->prefixTable("ptw_attachments");
+        $params = [$application_id, $response_id];
+        $where = "ptw_application_id=? AND ptw_requirement_response_id=? AND deleted=0";
+
+        if ($attachment_id > 0) {
+            $where .= " AND id=?";
+            $params[] = $attachment_id;
+        } else {
+            $where .= " AND file_path=?";
+            $params[] = $path;
+        }
+
+        $row = $db->query("SELECT id, file_name, file_path FROM $att_table WHERE $where LIMIT 1", $params)->getRow();
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            "attachment_id" => (int)$row->id,
+            "attachment_path" => (string)$row->file_path,
+            "attachment_name" => (string)$row->file_name,
+        ];
+    }
+
+    private function _delete_removed_ptw_other_attachments(int $response_id, array $kept_attachment_ids): void
+    {
+        $db = db_connect();
+        $att_table = $db->prefixTable("ptw_attachments");
+        $kept_attachment_ids = array_values(array_unique(array_filter(array_map("intval", $kept_attachment_ids))));
+
+        if ($kept_attachment_ids) {
+            $placeholders = implode(",", array_fill(0, count($kept_attachment_ids), "?"));
+            $params = array_merge([$response_id], $kept_attachment_ids);
+            $db->query("UPDATE $att_table SET deleted=1 WHERE ptw_requirement_response_id=? AND deleted=0 AND id NOT IN ($placeholders)", $params);
+        } else {
+            $db->query("UPDATE $att_table SET deleted=1 WHERE ptw_requirement_response_id=? AND deleted=0", [$response_id]);
         }
     }
 
@@ -851,22 +1557,7 @@ HTML;
 
     private function _group_definitions(array $defs): array
     {
-        $grouped = [
-            "hazard_document" => [],
-            "ppe" => [],
-            "preparation" => [],
-            "other" => [],
-        ];
-
-        foreach ($defs as $d) {
-            $cat = (string) $d->category;
-            if (!isset($grouped[$cat])) {
-                $grouped[$cat] = [];
-            }
-            $grouped[$cat][] = $d;
-        }
-
-        return $grouped;
+        return ptw_group_definitions_with_default_others($defs);
     }
 
     private function _generate_ptw_reference(int $id): string
@@ -944,8 +1635,8 @@ HTML;
         if ($stage === "terminal") $stageClass = "badge bg-dark";
         if ($stage === "completed") $stageClass = "badge bg-success";
 
-        $statusBadge = "<span class='" . $statusClass . "'>" . ucwords(str_replace("_", " ", $status)) . "</span>";
-        $stageLabel = $stage !== "" ? strtoupper(str_replace("_", " ", $stage)) : "-";
+        $statusBadge = "<span class='" . $statusClass . "'>" . ptw_status_display_label($status) . "</span>";
+        $stageLabel = ptw_stage_display_label($stage);
         $stageBadge = "<span class='" . $stageClass . "'>" . esc($stageLabel) . "</span>";
         $statusStage = "<div class='d-flex justify-content-center align-items-center gap-1 flex-wrap'>" . $statusBadge . $stageBadge . "</div>";
 

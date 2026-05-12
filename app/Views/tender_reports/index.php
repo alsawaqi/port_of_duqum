@@ -42,9 +42,8 @@ $(document).ready(function () {
             {name: "workflow_stage", class: "w180", options: [
                 {id: "", text: "- Stage -"},
                 {id: "bidding", text: "Bidding"},
-                {id: "technical_3key", text: "3-Key Technical Opening"},
+                {id: "technical_3key", text: "Bid Opening"},
                 {id: "technical", text: "Technical"},
-                {id: "committee_3key", text: "3-Key Commercial Opening"},
                 {id: "commercial", text: "Commercial"},
                 {id: "award_decision", text: "Award Decision"}
             ]}

@@ -14,6 +14,7 @@ class Users_model extends Crud_model {
     function authenticate($email, $password) {
 
         $email = $this->_get_clean_value(array("email" => $email), "email");
+        $email = $this->_resolve_vendor_cr_login_email($email) ?: $email;
 
         $this->db_builder->select("id,user_type,client_id,password");
         $result = $this->db_builder->getWhere(array('email' => $email, 'status' => 'active', 'deleted' => 0, 'disable_login' => 0));
@@ -25,16 +26,100 @@ class Users_model extends Crud_model {
 
         if ($result_count === 1) {
             $user_info = $result->getRow();
+            if (!$this->_vendor_user_can_login((int)$user_info->id)) {
+                return false;
+            }
             return $this->verify_password($user_info, $password);
         } else {
             //same email on multiple client contacts
             //check with the password
             foreach ($result->getResult() as $user_info) {
+                if (!$this->_vendor_user_can_login((int)$user_info->id)) {
+                    continue;
+                }
                 if ($this->verify_password($user_info, $password)) {
                     return true;
                 }
             }
         }
+    }
+
+    private function _resolve_vendor_cr_login_email($identifier): string
+    {
+        $identifier = trim((string)$identifier);
+        if ($identifier === "" || filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return "";
+        }
+
+        $vendors_table = $this->db->prefixTable("vendors");
+        $vendor_users_table = $this->db->prefixTable("vendor_users");
+        $users_table = $this->db->prefixTable("users");
+
+        $rows = $this->db->query(
+            "SELECT $users_table.email
+             FROM $vendors_table
+             INNER JOIN $vendor_users_table
+                ON $vendor_users_table.vendor_id = $vendors_table.id
+               AND $vendor_users_table.deleted = 0
+               AND $vendor_users_table.status = 'active'
+               AND $vendor_users_table.is_owner = 1
+             INNER JOIN $users_table
+                ON $users_table.id = $vendor_users_table.user_id
+               AND $users_table.deleted = 0
+               AND $users_table.status = 'active'
+               AND $users_table.disable_login = 0
+             WHERE $vendors_table.deleted = 0
+               AND $vendors_table.cr_number = ?
+               AND $vendors_table.status IN (" . $this->_vendor_login_status_sql() . ")
+             LIMIT 2",
+            [$identifier]
+        )->getResult();
+
+        return count($rows) === 1 ? (string)$rows[0]->email : "";
+    }
+
+    private function _vendor_user_can_login(int $user_id): bool
+    {
+        if (!$user_id) {
+            return false;
+        }
+
+        $vendors_table = $this->db->prefixTable("vendors");
+        $vendor_users_table = $this->db->prefixTable("vendor_users");
+
+        $rows = $this->db->query(
+            "SELECT $vendors_table.status
+             FROM $vendor_users_table
+             INNER JOIN $vendors_table
+                ON $vendors_table.id = $vendor_users_table.vendor_id
+               AND $vendors_table.deleted = 0
+             WHERE $vendor_users_table.deleted = 0
+               AND $vendor_users_table.status = 'active'
+               AND $vendor_users_table.user_id = ?
+             LIMIT 2",
+            [$user_id]
+        )->getResult();
+
+        if (!count($rows)) {
+            return true;
+        }
+
+        foreach ($rows as $row) {
+            if (!in_array(strtolower((string)$row->status), vendor_login_allowed_statuses(), true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function _vendor_login_status_sql(): string
+    {
+        $statuses = array_map(function ($status) {
+            return $this->db->escape($status);
+        }, vendor_login_allowed_statuses());
+
+        return implode(", ", $statuses);
     }
 
     private function verify_password($user_info, $password) {

@@ -58,7 +58,7 @@ class Tender_bids_model extends Crud_model
                    AND $tb.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status = 'closed'
-                  AND $t.workflow_stage = 'technical'
+                  AND $t.workflow_stage IN ('technical', 'commercial', 'award_decision')
                 GROUP BY
                     $t.id,
                     $t.reference,
@@ -110,7 +110,7 @@ class Tender_bids_model extends Crud_model
                    AND $tb.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status = 'closed'
-                  AND $t.workflow_stage = 'technical'
+                  AND $t.workflow_stage IN ('technical', 'commercial', 'award_decision')
                   AND $t.id = ?
                 GROUP BY
                     $t.id,
@@ -155,7 +155,7 @@ class Tender_bids_model extends Crud_model
                     ON $t.id = $tb.tender_id
                    AND $t.deleted = 0
                    AND $t.status = 'closed'
-                   AND $t.workflow_stage = 'technical'
+                   AND $t.workflow_stage IN ('technical', 'commercial', 'award_decision')
                 INNER JOIN $ttm
                     ON $ttm.tender_id = $t.id
                    AND $ttm.deleted = 0
@@ -205,9 +205,7 @@ class Tender_bids_model extends Crud_model
         $ttm = $this->db->prefixTable("tender_team_members");
         $tb = $this->db->prefixTable("tender_bids");
 
-        $sql = "SELECT *
-                FROM (
-                SELECT
+        $sql = "SELECT
                     $t.id,
                     $t.reference,
                     $t.title,
@@ -242,62 +240,18 @@ class Tender_bids_model extends Crud_model
                     $t.closing_at,
                     $t.bid_opening_at
                 HAVING COUNT(DISTINCT $tb.id) > 0
-
-                UNION ALL
-
-                SELECT
-                    $t.id,
-                    $t.reference,
-                    $t.title,
-                    $t.status,
-                    $t.workflow_stage,
-                    'commercial' AS opening_stage,
-                    $t.closing_at,
-                    $t.committee_3key_start_at AS opening_start_at,
-                    $t.committee_3key_end_at AS opening_end_at,
-                    COUNT(DISTINCT $tb.id) AS bids_count,
-                    SUM(CASE WHEN $tb.status = 'submitted' THEN 1 ELSE 0 END) AS pending_technical_count,
-                    SUM(CASE WHEN $tb.status = 'accepted' THEN 1 ELSE 0 END) AS accepted_bids_count
-                FROM $t
-                INNER JOIN $ttm
-                    ON $ttm.tender_id = $t.id
-                   AND $ttm.deleted = 0
-                   AND $ttm.is_active = 1
-                   AND $ttm.user_id = ?
-                   AND $ttm.team_role IN ('chairman', 'secretary', 'itc_member')
-                INNER JOIN $tb
-                    ON $tb.tender_id = $t.id
-                   AND $tb.deleted = 0
-                WHERE $t.deleted = 0
-                  AND $t.status = 'closed'
-                  AND $t.workflow_stage = 'committee_3key'
-                GROUP BY
-                    $t.id,
-                    $t.reference,
-                    $t.title,
-                    $t.status,
-                    $t.workflow_stage,
-                    $t.closing_at,
-                    $t.committee_3key_start_at,
-                    $t.committee_3key_end_at
-                HAVING COUNT(DISTINCT $tb.id) > 0
-                   AND SUM(CASE WHEN $tb.status = 'submitted' THEN 1 ELSE 0 END) = 0
-                   AND SUM(CASE WHEN $tb.status = 'accepted' THEN 1 ELSE 0 END) > 0
-                ) openings
                 ORDER BY
-                    CASE opening_stage WHEN 'technical' THEN 0 ELSE 1 END ASC,
-                    CASE WHEN opening_end_at IS NULL THEN 1 ELSE 0 END ASC,
-                    opening_end_at ASC,
-                    id DESC";
+                    CASE WHEN $t.bid_opening_at IS NULL THEN 1 ELSE 0 END ASC,
+                    $t.bid_opening_at ASC,
+                    $t.id DESC";
 
-        return $this->db->query($sql, [$user_id, $user_id])->getResult();
+        return $this->db->query($sql, [$user_id])->getResult();
     }
 
     public function get_unlocked_tenders_for_commercial_user(int $user_id)
     {
         $t = $this->db->prefixTable("tenders");
         $ttm = $this->db->prefixTable("tender_team_members");
-        $tbo = $this->db->prefixTable("tender_bid_openings");
         $tb = $this->db->prefixTable("tender_bids");
 
         $sql = "SELECT
@@ -318,23 +272,13 @@ class Tender_bids_model extends Crud_model
                    AND $ttm.is_active = 1
                    AND $ttm.team_role = 'commercial_evaluator'
                    AND $ttm.user_id = ?
-                INNER JOIN (
-                    SELECT tender_id, MAX(id) AS max_id
-                    FROM $tbo
-                    WHERE deleted = 0
-                      AND stage = 'commercial'
-                      AND status = 'unlocked'
-                    GROUP BY tender_id
-                ) latest_opening
-                    ON latest_opening.tender_id = $t.id
-                INNER JOIN $tbo opening
-                    ON opening.id = latest_opening.max_id
                 LEFT JOIN $tb
                     ON $tb.tender_id = $t.id
                    AND $tb.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status = 'closed'
-                  AND $t.workflow_stage = 'commercial'
+                  AND $t.workflow_stage IN ('commercial', 'award_decision')
+                  AND $t.commercial_unlocked_at IS NOT NULL
                 GROUP BY
                     $t.id,
                     $t.reference,
@@ -358,7 +302,6 @@ class Tender_bids_model extends Crud_model
     {
         $t = $this->db->prefixTable("tenders");
         $ttm = $this->db->prefixTable("tender_team_members");
-        $tbo = $this->db->prefixTable("tender_bid_openings");
         $tb = $this->db->prefixTable("tender_bids");
 
         $sql = "SELECT
@@ -379,23 +322,13 @@ class Tender_bids_model extends Crud_model
                    AND $ttm.is_active = 1
                    AND $ttm.team_role = 'commercial_evaluator'
                    AND $ttm.user_id = ?
-                INNER JOIN (
-                    SELECT tender_id, MAX(id) AS max_id
-                    FROM $tbo
-                    WHERE deleted = 0
-                      AND stage = 'commercial'
-                      AND status = 'unlocked'
-                    GROUP BY tender_id
-                ) latest_opening
-                    ON latest_opening.tender_id = $t.id
-                INNER JOIN $tbo opening
-                    ON opening.id = latest_opening.max_id
                 LEFT JOIN $tb
                     ON $tb.tender_id = $t.id
                    AND $tb.deleted = 0
                 WHERE $t.deleted = 0
                   AND $t.status = 'closed'
-                  AND $t.workflow_stage = 'commercial'
+                  AND $t.workflow_stage IN ('commercial', 'award_decision')
+                  AND $t.commercial_unlocked_at IS NOT NULL
                   AND $t.id = ?
                 GROUP BY
                     $t.id,
@@ -416,7 +349,6 @@ $t.commercial_end_at
     {
         $t = $this->db->prefixTable("tenders");
         $ttm = $this->db->prefixTable("tender_team_members");
-        $tbo = $this->db->prefixTable("tender_bid_openings");
         $tb = $this->db->prefixTable("tender_bids");
         $v = $this->db->prefixTable("vendors");
         $tbd = $this->db->prefixTable("tender_bid_documents");
@@ -440,24 +372,13 @@ $t.commercial_end_at
                     ON $t.id = $tb.tender_id
                    AND $t.deleted = 0
                    AND $t.status = 'closed'
-                   AND $t.workflow_stage = 'commercial'
+                   AND $t.workflow_stage IN ('commercial', 'award_decision')
                 INNER JOIN $ttm
                     ON $ttm.tender_id = $t.id
                    AND $ttm.deleted = 0
                    AND $ttm.is_active = 1
                    AND $ttm.team_role = 'commercial_evaluator'
                    AND $ttm.user_id = ?
-                INNER JOIN (
-                    SELECT tender_id, MAX(id) AS max_id
-                    FROM $tbo
-                    WHERE deleted = 0
-                      AND stage = 'commercial'
-                      AND status = 'unlocked'
-                    GROUP BY tender_id
-                ) latest_opening
-                    ON latest_opening.tender_id = $t.id
-                INNER JOIN $tbo opening
-                    ON opening.id = latest_opening.max_id
                 INNER JOIN $v
                     ON $v.id = $tb.vendor_id
                    AND $v.deleted = 0
@@ -474,6 +395,7 @@ $t.commercial_end_at
                 WHERE $tb.deleted = 0
                   AND $tb.status = 'accepted'
                   AND $tb.tender_id = ?
+                  AND $t.commercial_unlocked_at IS NOT NULL
                 ORDER BY $tb.submitted_at ASC, $tb.id ASC";
 
         return $this->db->query($sql, [$user_id, $tender_id])->getResult();
@@ -513,7 +435,7 @@ $t.commercial_end_at
                     ON $t.id = $tb.tender_id
                    AND $t.deleted = 0
                    AND $t.status = 'closed'
-                   AND $t.workflow_stage = 'technical'
+                   AND $t.workflow_stage IN ('technical', 'commercial', 'award_decision')
                 INNER JOIN $ttm
                     ON $ttm.tender_id = $t.id
                    AND $ttm.deleted = 0
@@ -592,7 +514,7 @@ $t.commercial_end_at
                     ON $t.id = $tb.tender_id
                    AND $t.deleted = 0
                    AND $t.status = 'closed'
-                   AND $t.workflow_stage = 'technical'
+                   AND $t.workflow_stage IN ('technical', 'commercial', 'award_decision')
                 INNER JOIN $ttm
                     ON $ttm.tender_id = $t.id
                    AND $ttm.deleted = 0
@@ -634,11 +556,10 @@ $t.commercial_end_at
     }
 
 
-    public function get_tender_bids_overview_for_commercial_user(int $tender_id, int $user_id)
+public function get_tender_bids_overview_for_commercial_user(int $tender_id, int $user_id)
 {
     $t = $this->db->prefixTable("tenders");
     $ttm = $this->db->prefixTable("tender_team_members");
-    $tbo = $this->db->prefixTable("tender_bid_openings");
     $tb = $this->db->prefixTable("tender_bids");
     $v = $this->db->prefixTable("vendors");
     $tbd = $this->db->prefixTable("tender_bid_documents");
@@ -679,24 +600,13 @@ $t.commercial_end_at
                 ON $t.id = $tb.tender_id
                AND $t.deleted = 0
                AND $t.status = 'closed'
-               AND $t.workflow_stage = 'commercial'
+               AND $t.workflow_stage IN ('commercial', 'award_decision')
             INNER JOIN $ttm
                 ON $ttm.tender_id = $t.id
                AND $ttm.deleted = 0
                AND $ttm.is_active = 1
                AND $ttm.team_role = 'commercial_evaluator'
                AND $ttm.user_id = ?
-            INNER JOIN (
-                SELECT tender_id, MAX(id) AS max_id
-                FROM $tbo
-                WHERE deleted = 0
-                  AND stage = 'commercial'
-                  AND status = 'unlocked'
-                GROUP BY tender_id
-            ) latest_opening
-                ON latest_opening.tender_id = $t.id
-            INNER JOIN $tbo opening
-                ON opening.id = latest_opening.max_id
             INNER JOIN $v
                 ON $v.id = $tb.vendor_id
                AND $v.deleted = 0
@@ -755,6 +665,7 @@ $t.commercial_end_at
             WHERE $tb.deleted = 0
               AND $tb.status = 'accepted'
               AND $tb.tender_id = ?
+              AND $t.commercial_unlocked_at IS NOT NULL
             ORDER BY
                 CASE WHEN $tb.total_amount IS NULL THEN 1 ELSE 0 END ASC,
                 $tb.total_amount ASC,
@@ -768,7 +679,6 @@ public function get_tender_bid_for_commercial_user(int $tender_id, int $bid_id, 
 {
     $t = $this->db->prefixTable("tenders");
     $ttm = $this->db->prefixTable("tender_team_members");
-    $tbo = $this->db->prefixTable("tender_bid_openings");
     $tb = $this->db->prefixTable("tender_bids");
     $v = $this->db->prefixTable("vendors");
     $tbd = $this->db->prefixTable("tender_bid_documents");
@@ -809,24 +719,13 @@ public function get_tender_bid_for_commercial_user(int $tender_id, int $bid_id, 
                 ON $t.id = $tb.tender_id
                AND $t.deleted = 0
                AND $t.status = 'closed'
-               AND $t.workflow_stage = 'commercial'
+               AND $t.workflow_stage IN ('commercial', 'award_decision')
             INNER JOIN $ttm
                 ON $ttm.tender_id = $t.id
                AND $ttm.deleted = 0
                AND $ttm.is_active = 1
                AND $ttm.team_role = 'commercial_evaluator'
                AND $ttm.user_id = ?
-            INNER JOIN (
-                SELECT tender_id, MAX(id) AS max_id
-                FROM $tbo
-                WHERE deleted = 0
-                  AND stage = 'commercial'
-                  AND status = 'unlocked'
-                GROUP BY tender_id
-            ) latest_opening
-                ON latest_opening.tender_id = $t.id
-            INNER JOIN $tbo opening
-                ON opening.id = latest_opening.max_id
             INNER JOIN $v
                 ON $v.id = $tb.vendor_id
                AND $v.deleted = 0
@@ -886,6 +785,7 @@ public function get_tender_bid_for_commercial_user(int $tender_id, int $bid_id, 
               AND $tb.status = 'accepted'
               AND $tb.tender_id = ?
               AND $tb.id = ?
+              AND $t.commercial_unlocked_at IS NOT NULL
             LIMIT 1";
 
     return $this->db->query($sql, [$user_id, $tender_id, $bid_id])->getRow();

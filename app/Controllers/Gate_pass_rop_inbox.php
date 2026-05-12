@@ -3,6 +3,9 @@
 namespace App\Controllers;
 
 use App\Models\Gate_pass_requests_model;
+use App\Models\Gate_pass_companies_model;
+use App\Models\Gate_pass_departments_model;
+use App\Models\Gate_pass_purposes_model;
 use App\Models\Gate_pass_rop_users_model;
 use App\Models\Gate_pass_request_approvals_model;
 use App\Models\Gate_pass_request_visitors_model;
@@ -14,6 +17,9 @@ use App\Models\Gate_pass_blocked_visitors_model;
 class Gate_pass_rop_inbox extends Security_Controller
 {
     protected $Gate_pass_requests_model;
+    protected $Gate_pass_companies_model;
+    protected $Gate_pass_departments_model;
+    protected $Gate_pass_purposes_model;
     protected $Gate_pass_rop_users_model;
     protected $Gate_pass_request_approvals_model;
     protected $Gate_pass_request_visitors_model;
@@ -28,6 +34,9 @@ class Gate_pass_rop_inbox extends Security_Controller
         $this->access_only_team_members();
 
         $this->Gate_pass_requests_model = new Gate_pass_requests_model();
+        $this->Gate_pass_companies_model = new Gate_pass_companies_model();
+        $this->Gate_pass_departments_model = new Gate_pass_departments_model();
+        $this->Gate_pass_purposes_model = new Gate_pass_purposes_model();
         $this->Gate_pass_rop_users_model = new Gate_pass_rop_users_model();
         $this->Gate_pass_request_approvals_model = new Gate_pass_request_approvals_model();
         $this->Gate_pass_request_visitors_model = new Gate_pass_request_visitors_model();
@@ -46,16 +55,17 @@ class Gate_pass_rop_inbox extends Security_Controller
         $Stats = new \App\Models\Pod_dashboard_stats_model();
         // ROP stage is port-wide: KPIs cover all companies (no per-company filter).
         $view_data["kpis"] = $Stats->gate_pass_kpis(["stages" => ["rop"]]);
+        $view_data["companies"] = $this->Gate_pass_companies_model->get_details()->getResult();
+        $view_data["departments"] = $this->Gate_pass_departments_model->get_details()->getResult();
+        $view_data["purposes"] = $this->Gate_pass_purposes_model->get_details()->getResult();
+        $view_data["nationalities"] = $this->Gate_pass_request_visitors_model->get_distinct_nationalities()->getResult();
 
         return $this->template->rander("gate_pass_rop_inbox/index", $view_data);
     }
 
     public function export_list_csv()
     {
-        $options = [
-            "stage" => "rop",
-            "exclude_statuses" => ["returned"],
-        ];
+        $options = $this->_get_filter_options();
 
         $list = $this->Gate_pass_requests_model->get_details($options)->getResult();
 
@@ -93,10 +103,7 @@ class Gate_pass_rop_inbox extends Security_Controller
     public function list_data()
     {
         // All requests currently in the ROP stage (any company). Access is limited to admins and ROP users.
-        $options = [
-            "stage" => "rop",
-            "exclude_statuses" => ["returned"],
-        ];
+        $options = $this->_get_filter_options();
 
         $list = $this->Gate_pass_requests_model->get_details($options)->getResult();
         $result = [];
@@ -104,6 +111,49 @@ class Gate_pass_rop_inbox extends Security_Controller
             $result[] = $this->_make_row($data);
         }
         echo json_encode(["data" => $result]);
+    }
+
+    private function _get_filter_options(): array
+    {
+        $company_id = $this->request->getGet("company_id");
+        $department_id = $this->request->getGet("department_id");
+        $status = $this->request->getGet("status");
+        $gate_pass_purpose_id = $this->request->getGet("gate_pass_purpose_id");
+        $nationality = $this->request->getGet("nationality");
+        $date_from = $this->request->getGet("date_from");
+        $date_to = $this->request->getGet("date_to");
+
+        $options = [
+            "stage" => "rop",
+            "exclude_statuses" => ["returned"],
+        ];
+
+        if ($company_id !== null && $company_id !== "") {
+            $options["company_id"] = (int) $company_id;
+        }
+        if ($department_id !== null && $department_id !== "") {
+            $options["department_id"] = (int) $department_id;
+        }
+        if ($status !== null && $status !== "") {
+            $options["status"] = $status;
+            if ($status === "returned") {
+                unset($options["exclude_statuses"]);
+            }
+        }
+        if ($gate_pass_purpose_id !== null && $gate_pass_purpose_id !== "") {
+            $options["gate_pass_purpose_id"] = (int) $gate_pass_purpose_id;
+        }
+        if ($nationality !== null && $nationality !== "") {
+            $options["nationality"] = $nationality;
+        }
+        if ($date_from) {
+            $options["date_from"] = $date_from;
+        }
+        if ($date_to) {
+            $options["date_to"] = $date_to;
+        }
+
+        return $options;
     }
 
     private function _make_row($data)
@@ -386,20 +436,35 @@ class Gate_pass_rop_inbox extends Security_Controller
             $update = ["status" => "rop_approved", "stage" => "issued"];
             $this->Gate_pass_requests_model->ci_save($update, $request_id);
 
-            // Create pod_gate_passes record with qr_token for QR code download
-            $existing = $this->Gate_passes_model->get_by_request_id($request_id);
-            if (!$existing) {
-                $request = $this->Gate_pass_requests_model->get_one($request_id);
-                $qr_token = $this->Gate_passes_model->generate_qr_token();
-                $gate_pass_no = $this->Gate_passes_model->generate_gate_pass_no($request_id);
-                $now = get_current_utc_time();
+            // Create one QR/pass per visitor so group members can arrive independently.
+            $request = $this->Gate_pass_requests_model->get_one($request_id);
+            $visitors = $this->Gate_pass_request_visitors_model
+                ->get_details(["gate_pass_request_id" => $request_id])
+                ->getResult();
+            $targets = gate_pass_issue_targets($visitors);
+            $now = get_current_utc_time();
+
+            foreach ($targets as $target) {
+                $visitor_id = $target["visitor_id"] !== null ? (int)$target["visitor_id"] : null;
+                $existing = $this->Gate_passes_model->get_by_request_and_visitor($request_id, $visitor_id);
+                $validity_update = [
+                    "valid_from" => $request->visit_from ?? null,
+                    "valid_to" => $request->visit_to ?? null,
+                    "updated_at" => $now,
+                ];
+
+                if ($existing) {
+                    $this->Gate_passes_model->ci_save($validity_update, (int)$existing->id);
+                    continue;
+                }
+
                 $pass_data = [
                     "gate_pass_request_id" => $request_id,
-                    "gate_pass_no" => $gate_pass_no,
-                    "qr_token" => $qr_token,
+                    "gate_pass_request_visitor_id" => $visitor_id,
+                    "gate_pass_no" => $this->Gate_passes_model->generate_gate_pass_no($request_id, $visitor_id),
+                    "qr_token" => $this->Gate_passes_model->generate_qr_token(),
                     "status" => "active",
-                    // Scannable immediately after issue; visit window still shown from the request on scan UI
-                    "valid_from" => $now,
+                    "valid_from" => $request->visit_from ?? null,
                     "valid_to" => $request->visit_to ?? null,
                     "issued_by" => $this->login_user->id,
                     "issued_at" => $now,

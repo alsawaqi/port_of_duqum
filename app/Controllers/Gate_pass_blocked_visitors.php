@@ -18,14 +18,16 @@ class Gate_pass_blocked_visitors extends Security_Controller
         $this->Gate_pass_blocked_visitors_model = new Gate_pass_blocked_visitors_model();
         $this->Gate_pass_rop_users_model = new Gate_pass_rop_users_model();
 
-        if (!$this->login_user->is_admin && !$this->Gate_pass_rop_users_model->is_rop_user((int) $this->login_user->id)) {
-            app_redirect("forbidden");
+        if (!$this->Gate_pass_rop_users_model->is_rop_user((int) $this->login_user->id)) {
+            $this->access_only_gate_pass("blocked_visitors", "view");
         }
     }
 
     public function index()
     {
-        return $this->template->rander("gate_pass_blocked_visitors/index");
+        return $this->template->rander("gate_pass_blocked_visitors/index", [
+            "can_create_blocked_visitors" => $this->_can_manage_blocked_visitors("create"),
+        ]);
     }
 
     public function list_data()
@@ -44,6 +46,7 @@ class Gate_pass_blocked_visitors extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
         $id = (int) $this->request->getPost("id");
+        $this->_access_blocked_visitors($id ? "update" : "create");
 
         $view_data["model_info"] = $id ? $this->Gate_pass_blocked_visitors_model->get_details(["id" => $id])->getRow() : null;
 
@@ -59,6 +62,8 @@ class Gate_pass_blocked_visitors extends Security_Controller
         ]);
 
         $id = (int) $this->request->getPost("id");
+        $this->_access_blocked_visitors($id ? "update" : "create");
+
         $existing = $id ? $this->Gate_pass_blocked_visitors_model->get_details(["id" => $id])->getRow() : null;
         if ($id && !$existing) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
@@ -90,6 +95,8 @@ class Gate_pass_blocked_visitors extends Security_Controller
     public function unblock_modal_form()
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
+        $this->_access_blocked_visitors("update");
+
         $id = (int) $this->request->getPost("id");
         $model_info = $this->Gate_pass_blocked_visitors_model->get_details(["id" => $id])->getRow();
         if (!$model_info) {
@@ -108,6 +115,7 @@ class Gate_pass_blocked_visitors extends Security_Controller
             "id" => "required|numeric",
             "unblock_reason" => "permit_empty",
         ]);
+        $this->_access_blocked_visitors("update");
 
         $id = (int) $this->request->getPost("id");
         $ok = $this->Gate_pass_blocked_visitors_model->unblock_visitor(
@@ -182,8 +190,9 @@ class Gate_pass_blocked_visitors extends Security_Controller
             ]
         );
 
+        $can_update = $this->_can_manage_blocked_visitors("update");
         if ($status === "blocked") {
-            $toggle = modal_anchor(
+            $toggle = $can_update ? modal_anchor(
                 get_uri("gate_pass_blocked_visitors/unblock_modal_form"),
                 "<i data-feather='unlock' class='icon-16'></i> " . app_lang("gate_pass_unblock"),
                 [
@@ -191,9 +200,9 @@ class Gate_pass_blocked_visitors extends Security_Controller
                     "title" => app_lang("gate_pass_unblock"),
                     "data-post-id" => $row->id,
                 ]
-            );
+            ) : "";
         } else {
-            $toggle = modal_anchor(
+            $toggle = $can_update ? modal_anchor(
                 get_uri("gate_pass_blocked_visitors/modal_form"),
                 "<i data-feather='slash' class='icon-16'></i> " . app_lang("gate_pass_block_again"),
                 [
@@ -201,10 +210,10 @@ class Gate_pass_blocked_visitors extends Security_Controller
                     "title" => app_lang("gate_pass_block_again"),
                     "data-post-id" => $row->id,
                 ]
-            );
+            ) : "";
         }
 
-        $edit = modal_anchor(
+        $edit = $can_update ? modal_anchor(
             get_uri("gate_pass_blocked_visitors/modal_form"),
             "<i data-feather='edit' class='icon-16'></i>",
             [
@@ -212,7 +221,7 @@ class Gate_pass_blocked_visitors extends Security_Controller
                 "title" => app_lang("edit"),
                 "data-post-id" => $row->id,
             ]
-        );
+        ) : "";
 
         $actions = "<div class='gp-blocked-actions'>" . $history . $edit . $toggle . "</div>";
 
@@ -229,5 +238,20 @@ class Gate_pass_blocked_visitors extends Security_Controller
             esc($unblocked_by ?: "-"),
             $actions,
         ];
+    }
+
+    private function _can_manage_blocked_visitors(string $action): bool
+    {
+        return $this->login_user->is_admin
+            || $this->Gate_pass_rop_users_model->is_rop_user((int) $this->login_user->id)
+            || $this->can_gate_pass("blocked_visitors", $action);
+    }
+
+    private function _access_blocked_visitors(string $action): void
+    {
+        if (!$this->_can_manage_blocked_visitors($action)) {
+            app_redirect("forbidden");
+            exit;
+        }
     }
 }

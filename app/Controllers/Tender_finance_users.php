@@ -14,10 +14,7 @@ class Tender_finance_users extends Security_Controller
     {
         parent::__construct();
         $this->access_only_team_members();
-
-        if (!$this->login_user->is_admin) {
-            app_redirect("forbidden");
-        }
+        $this->access_only_tender("finance_users", "view");
 
         $this->Tender_finance_users_model = new Tender_finance_users_model();
         $this->Gate_pass_companies_model = new Gate_pass_companies_model();
@@ -68,7 +65,9 @@ class Tender_finance_users extends Security_Controller
 
     public function index()
     {
-        return $this->template->rander("tender_finance_users/index");
+        return $this->template->rander("tender_finance_users/index", [
+            "can_create_tender_user" => $this->can_tender("finance_users", "create"),
+        ]);
     }
 
     public function list_data()
@@ -85,6 +84,7 @@ class Tender_finance_users extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
         $id = (int)$this->request->getPost("id");
+        $this->access_only_tender("finance_users", $id ? "update" : "create");
 
         $model_info = $id ? $this->Tender_finance_users_model->get_details(["id" => $id])->getRow() : null;
 
@@ -109,6 +109,7 @@ class Tender_finance_users extends Security_Controller
         ]);
 
         $id = (int)$this->request->getPost("id");
+        $this->access_only_tender("finance_users", $id ? "update" : "create");
         $company_id = (int)$this->request->getPost("company_id");
 
         try {
@@ -132,6 +133,7 @@ class Tender_finance_users extends Security_Controller
     public function delete()
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
+        $this->access_only_tender("finance_users", "delete");
         $id = (int)$this->request->getPost("id");
 
         $pivot = $this->Tender_finance_users_model->get_one($id);
@@ -150,13 +152,18 @@ class Tender_finance_users extends Security_Controller
     {
         $name = trim(($d->first_name ?? "") . " " . ($d->last_name ?? "")); if ($name === "") $name = "-";
 
-        $options = modal_anchor(get_uri("tender_finance_users/modal_form"), "<i data-feather='edit' class='icon-16'></i>", [
-            "class" => "edit", "title" => app_lang("edit"), "data-post-id" => $d->id
-        ]);
-        $options .= js_anchor("<i data-feather='x' class='icon-16'></i>", [
-            "title" => app_lang("delete"), "class" => "delete", "data-id" => $d->id,
-            "data-action-url" => get_uri("tender_finance_users/delete"), "data-action" => "delete-confirmation"
-        ]);
+        $options = "";
+        if ($this->can_tender("finance_users", "update")) {
+            $options .= modal_anchor(get_uri("tender_finance_users/modal_form"), "<i data-feather='edit' class='icon-16'></i>", [
+                "class" => "edit", "title" => app_lang("edit"), "data-post-id" => $d->id
+            ]);
+        }
+        if ($this->can_tender("finance_users", "delete")) {
+            $options .= js_anchor("<i data-feather='x' class='icon-16'></i>", [
+                "title" => app_lang("delete"), "class" => "delete", "data-id" => $d->id,
+                "data-action-url" => get_uri("tender_finance_users/delete"), "data-action" => "delete-confirmation"
+            ]);
+        }
 
         return [
             $d->company_name ?? "-",

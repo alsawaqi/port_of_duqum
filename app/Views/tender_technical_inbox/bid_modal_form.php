@@ -1,8 +1,11 @@
-<?php echo form_open(get_uri('tender_technical_inbox/save_bid_evaluation'), ['id' => 'tender-technical-bid-form', 'class' => 'general-form']); ?>
+<?php echo form_open_multipart(get_uri('tender_technical_inbox/save_bid_evaluation'), ['id' => 'tender-technical-bid-form', 'class' => 'general-form']); ?>
 <input type="hidden" name="tender_id" value="<?php echo (int) ($tender->id ?? 0); ?>" />
 <input type="hidden" name="bid_id" value="<?php echo (int) ($bid->id ?? 0); ?>" />
 
 <?php
+$finding_attachments = $finding_attachments ?? [];
+$internal_messages = $internal_messages ?? [];
+$internal_attachments = $internal_attachments ?? [];
 $status = strtolower((string) ($bid->status ?? 'submitted'));
 $current_decision = $status === 'accepted' || $status === 'rejected' ? $status : '';
 $locked_by_other = !$editable;
@@ -155,6 +158,62 @@ $technical_bid_document_actions = function ($doc_id) {
             <input type="hidden" name="evaluation_comment" value="<?php echo esc((string) ($active_evaluation->comments ?? '')); ?>" />
         <?php } ?>
     </div>
+
+    <div class="form-group mt15 mb0">
+        <label><strong>Technical Findings Documents</strong></label>
+        <?php if (!empty($finding_attachments)) { ?>
+            <div class="d-flex flex-wrap gap-1 mb10">
+                <?php foreach ($finding_attachments as $attachment) { ?>
+                    <a href="<?php echo get_uri("tender_technical_inbox/download_finding_document/" . (int) $attachment->id); ?>" class="btn btn-default btn-sm">
+                        <i data-feather="paperclip" class="icon-14"></i>
+                        <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                    </a>
+                <?php } ?>
+            </div>
+        <?php } else { ?>
+            <div class="text-off mb10">No findings documents uploaded yet.</div>
+        <?php } ?>
+
+        <?php if ($editable) { ?>
+            <input type="file" name="technical_finding_files[]" class="form-control" multiple>
+            <small class="text-off">Upload the technical team's findings, notes, comparison sheets, or supporting evidence for this score.</small>
+        <?php } ?>
+    </div>
+
+    <div class="mt15 internal-clarification-thread">
+        <h5 class="mb10">Internal Procurement Clarifications</h5>
+        <?php if (empty($internal_messages)) { ?>
+            <div class="alert alert-light mb0">No internal clarification messages have been recorded for this bid.</div>
+        <?php } else { ?>
+            <div class="technical-internal-thread">
+                <?php foreach ($internal_messages as $message) {
+                    $message_attachments = $internal_attachments[(int) $message->id] ?? [];
+                    $is_procurement_reply = strtolower((string) ($message->type ?? "")) === "technical_clarification_response";
+                ?>
+                    <div class="internal-thread-item <?php echo $is_procurement_reply ? "procurement-reply" : "evaluator-request"; ?>">
+                        <div class="d-flex justify-content-between gap-2 flex-wrap mb5">
+                            <strong><?php echo esc($is_procurement_reply ? (trim((string) ($message->created_by_name ?? "")) ?: "Procurement") : "Technical Team"); ?></strong>
+                            <span class="text-off"><?php echo !empty($message->published_at ?: $message->created_at) ? format_to_datetime($message->published_at ?: $message->created_at) : "-"; ?></span>
+                        </div>
+                        <?php if (!empty($message->subject)) { ?>
+                            <div class="fw-semibold mb5"><?php echo esc($message->subject); ?></div>
+                        <?php } ?>
+                        <div><?php echo nl2br(esc($message->message ?? "")); ?></div>
+                        <?php if ($message_attachments) { ?>
+                            <div class="d-flex flex-wrap gap-1 mt10">
+                                <?php foreach ($message_attachments as $attachment) { ?>
+                                    <a href="<?php echo get_uri("tender_technical_inbox/download_clarification_attachment/" . (int) $attachment->id); ?>" class="btn btn-default btn-sm">
+                                        <i data-feather="paperclip" class="icon-14"></i>
+                                        <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                                    </a>
+                                <?php } ?>
+                            </div>
+                        <?php } ?>
+                    </div>
+                <?php } ?>
+            </div>
+        <?php } ?>
+    </div>
 </div>
 
 <div class="modal-footer">
@@ -162,6 +221,37 @@ $technical_bid_document_actions = function ($doc_id) {
     <?php if ($editable) { ?>
         <button type="submit" class="btn btn-primary">Save Evaluation</button>
     <?php } ?>
+</div>
+
+<?php echo form_close(); ?>
+
+<?php echo form_open_multipart(get_uri('tender_technical_inbox/request_clarification'), ['id' => 'technical-clarification-request-form', 'class' => 'general-form']); ?>
+<input type="hidden" name="tender_id" value="<?php echo (int) ($tender->id ?? 0); ?>" />
+<input type="hidden" name="bid_id" value="<?php echo (int) ($bid->id ?? 0); ?>" />
+
+<div class="modal-body border-top">
+    <div class="mb10">
+        <h5 class="mb5">Ask Procurement For Clarification</h5>
+        <div class="text-off">Use this when the vendor's technical submission needs more information. Procurement will contact the vendor and forward the response back to the technical team.</div>
+    </div>
+    <div class="form-group">
+        <label>Subject</label>
+        <input type="text" name="subject" class="form-control" maxlength="255" value="Technical clarification request - <?php echo esc($bid->vendor_name ?? 'Vendor'); ?>">
+    </div>
+    <div class="form-group">
+        <label>Clarification Required</label>
+        <textarea name="message" class="form-control" rows="3" required placeholder="Describe what procurement should clarify with this vendor"></textarea>
+    </div>
+    <div class="form-group mb0">
+        <label>Attach Supporting Files</label>
+        <input type="file" name="clarification_files[]" class="form-control" multiple>
+    </div>
+</div>
+
+<div class="modal-footer">
+    <button type="submit" class="btn btn-default">
+        <i data-feather="message-square" class="icon-16"></i> Send Clarification Request
+    </button>
 </div>
 
 <?php echo form_close(); ?>
@@ -194,8 +284,44 @@ $(document).ready(function () {
         }
     });
 
+    $("#technical-clarification-request-form").appForm({
+        onSuccess: function (response) {
+            appAlert.success(response.message || "Clarification request sent.", {duration: 2000});
+            setTimeout(function () {
+                if (response.redirect_url) {
+                    window.location.href = response.redirect_url;
+                } else {
+                    window.location.reload();
+                }
+            }, 500);
+        }
+    });
+
     if (typeof feather !== "undefined") {
         feather.replace();
     }
 });
 </script>
+
+<style>
+.technical-internal-thread {
+    display: grid;
+    gap: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #f8fafc;
+    border: 1px solid #e5e9f2;
+    border-radius: 8px;
+    padding: 12px;
+}
+.internal-thread-item {
+    border: 1px solid #dfe6f1;
+    border-radius: 8px;
+    background: #fff;
+    padding: 12px;
+}
+.internal-thread-item.procurement-reply {
+    border-color: #b9d7ff;
+    background: #f2f7ff;
+}
+</style>

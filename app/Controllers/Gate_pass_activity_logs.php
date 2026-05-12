@@ -5,7 +5,7 @@ namespace App\Controllers;
 use App\Models\Gate_pass_request_audit_log_model;
 
 /**
- * Admin-only: gate pass request audit trail across all requests.
+ * Gate pass request audit trail across all requests.
  */
 class Gate_pass_activity_logs extends Security_Controller
 {
@@ -13,9 +13,7 @@ class Gate_pass_activity_logs extends Security_Controller
     {
         parent::__construct();
         $this->access_only_team_members();
-        if (!$this->login_user->is_admin) {
-            app_redirect("forbidden");
-        }
+        $this->access_only_gate_pass("activity_logs", "view");
     }
 
     public function index()

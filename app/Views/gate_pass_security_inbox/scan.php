@@ -57,6 +57,7 @@
                         <div class="text-off" id="info_sub"></div>
                     </div>
                     <div class="pull-right">
+                        <span class="badge bg-success" id="info_validity"></span>
                         <span class="badge bg-primary" id="info_status"></span>
                         <span class="badge bg-success" id="info_waived" style="display:none;">Waived</span>
                     </div>
@@ -79,6 +80,14 @@
                 <div class="col-md-4"><div class="card p10 gp-pro-stat-card"><div class="text-off">Company</div><div id="gp_company" class="font-16"><strong>-</strong></div></div></div>
                 <div class="col-md-4"><div class="card p10 gp-pro-stat-card"><div class="text-off">Department</div><div id="gp_department" class="font-16"><strong>-</strong></div></div></div>
                 <div class="col-md-4"><div class="card p10 gp-pro-stat-card"><div class="text-off">Fee</div><div id="gp_fee" class="font-16"><strong>-</strong></div></div></div>
+            </div>
+
+            <div class="card p10 gp-pro-stat-card mt10" id="gp_scan_visitors_box" style="display:none;">
+                <div class="clearfix mb5">
+                    <strong class="pull-left">Visitors for this scan action</strong>
+                    <span class="text-off pull-right font-12">Select who is entering/exiting now</span>
+                </div>
+                <div id="gp_scan_visitors_list" class="gp-scan-visitor-checks"></div>
             </div>
 
             <div class="mt15">
@@ -130,6 +139,24 @@
         </div>
     </div>
 </div>
+
+<style>
+.gp-scan-visitor-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.gp-scan-visitor-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 10px;
+    border: 1px solid rgba(15,23,42,.1);
+    border-radius: 10px;
+    background: #fff;
+}
+.gp-scan-visitor-check input { margin-top: 3px; }
+.gp-scan-visitor-check span,
+.gp-scan-visitor-check small { display: block; }
+.gp-scan-visitor-name { font-weight: 700; color: #0f172a; line-height: 1.25; }
+.gp-scan-visitor-blocked { border-color: rgba(220,53,69,.35); background: rgba(220,53,69,.04); }
+</style>
 
 <script>
 $(document).ready(function () {
@@ -220,7 +247,14 @@ $(document).ready(function () {
         $("#gp_department").text(d.department || "-");
         $("#gp_fee").text((d.currency || "") + " " + (d.fee_amount || "0.000"));
 
+        var holderLine = d.pass_holder ? ("Pass holder: " + d.pass_holder) : "";
+        if (d.pass_holder_id_number) holderLine += " | ID: " + d.pass_holder_id_number;
+        if (d.pass_holder_nationality) holderLine += " | Nationality: " + d.pass_holder_nationality;
+        $("#info_sub").text(holderLine);
         $("#info_status").text(d.status_label || d.status || "-");
+        $("#info_validity")
+            .text(d.validity_label || "Valid")
+            .attr("class", "badge " + (d.validity_badge_class || "bg-success"));
         if (parseInt(d.fee_is_waived || 0) === 1) $("#info_waived").show(); else $("#info_waived").hide();
 
         const blockedCount = parseInt(d.blocked_visitors_count || 0);
@@ -236,6 +270,52 @@ $(document).ready(function () {
         }
 
         $("#btn_save_action").prop("disabled", false);
+        renderVisitorChecks(d.visitors || [], parseInt(d.assigned_visitor_id || 0));
+    }
+
+    function renderVisitorChecks(visitors, assignedVisitorId) {
+        const $box = $("#gp_scan_visitors_box");
+        const $list = $("#gp_scan_visitors_list");
+        $list.empty();
+
+        if (!Array.isArray(visitors) || !visitors.length) {
+            $box.hide();
+            return;
+        }
+
+        visitors.forEach(function (visitor) {
+            const id = parseInt(visitor.id || 0);
+            if (!id) return;
+            const checked = assignedVisitorId > 0 && id === assignedVisitorId;
+            const blocked = parseInt(visitor.is_blocked || 0) === 1;
+            const bits = [];
+            if (visitor.id_number) bits.push("ID: " + visitor.id_number);
+            if (visitor.nationality) bits.push(visitor.nationality);
+            if (blocked) bits.push("Blocked");
+
+            const $label = $("<label/>", { class: "gp-scan-visitor-check" + (blocked ? " gp-scan-visitor-blocked" : "") });
+            $("<input/>", {
+                type: "checkbox",
+                name: "scan_visitor_ids[]",
+                value: id,
+                checked: checked
+            }).appendTo($label);
+            $("<span/>", { class: "gp-scan-visitor-name", text: visitor.name || ("Visitor #" + id) }).appendTo($label);
+            if (bits.length) {
+                $("<small/>", { class: "text-off", text: bits.join(" | ") }).appendTo($label);
+            }
+            $list.append($label);
+        });
+
+        $box.show();
+    }
+
+    function selectedVisitorIds() {
+        const ids = [];
+        $("#gp_scan_visitors_list input[name='scan_visitor_ids[]']:checked").each(function () {
+            ids.push($(this).val());
+        });
+        return ids;
     }
 
     function lookup(silent){
@@ -302,6 +382,7 @@ $(document).ready(function () {
                 gate_pass_id: currentGatePassId,
                 action: action,
                 note: note,
+                visitor_ids: selectedVisitorIds(),
                 "<?php echo csrf_token(); ?>": "<?php echo csrf_hash(); ?>"
             },
             success: function(res){

@@ -28,12 +28,10 @@
                 "id" => "email",
                 "name" => "email",
                 "class" => "form-control p10",
-                "placeholder" => app_lang('email'),
+                "placeholder" => app_lang('email_or_cr_number'),
                 "autofocus" => true,
                 "data-rule-required" => true,
-                "data-msg-required" => app_lang("field_required"),
-                "data-rule-email" => true,
-                "data-msg-email" => app_lang("enter_valid_email")
+                "data-msg-required" => app_lang("field_required")
             ));
             ?>
         </div>
@@ -78,4 +76,4 @@
     $(document).ready(function () {
         $("#signin-form").appForm({ajaxSubmit: false, isModal: false});
     });
-</script>    
+</script>

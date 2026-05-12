@@ -35,4 +35,16 @@ class Gate_pass_request_visitors_model extends Crud_model
 
         return $this->db->query($sql);
     }
+
+    function get_distinct_nationalities()
+    {
+        $visitors = $this->db->prefixTable("gate_pass_request_visitors");
+
+        return $this->db->query(
+            "SELECT DISTINCT TRIM(nationality) AS nationality
+             FROM $visitors
+             WHERE deleted=0 AND TRIM(COALESCE(nationality, '')) <> ''
+             ORDER BY TRIM(nationality) ASC"
+        );
+    }
 }

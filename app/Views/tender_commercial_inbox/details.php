@@ -97,6 +97,43 @@ $commercial_doc_button = function ($doc_id, string $label) {
 
     <div class="card gp-pro-card mb15">
         <div class="card-header">
+            <h4 class="mb0">General Message To Procurement</h4>
+        </div>
+        <div class="card-body">
+            <?php echo form_open_multipart(get_uri("tender_commercial_inbox/request_clarification"), [
+                "id" => "commercial-general-clarification-form",
+                "class" => "general-form",
+                "role" => "form"
+            ]); ?>
+                <input type="hidden" name="tender_id" value="<?php echo (int) ($tender->id ?? 0); ?>" />
+                <input type="hidden" name="bid_id" value="0" />
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group mb15">
+                            <label>Subject</label>
+                            <input type="text" name="subject" class="form-control" maxlength="255" value="General commercial clarification request">
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="form-group mb15">
+                            <label>Message</label>
+                            <textarea name="message" class="form-control" rows="2" required placeholder="Ask procurement a general commercial clarification for this tender"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group mb15">
+                    <label>Attach Files</label>
+                    <input type="file" name="clarification_files[]" class="form-control" multiple>
+                </div>
+                <button type="submit" class="btn btn-default">
+                    <i data-feather="message-square" class="icon-16"></i> Send To Procurement
+                </button>
+            <?php echo form_close(); ?>
+        </div>
+    </div>
+
+    <div class="card gp-pro-card mb15">
+        <div class="card-header">
             <h4 class="mb0">Tender Documents</h4>
         </div>
         <div class="card-body p0">
@@ -327,3 +364,16 @@ $commercial_doc_button = function ($doc_id, string $label) {
         </div>
     </div>
 </div>
+
+<script>
+$(document).ready(function () {
+    $("#commercial-general-clarification-form").appForm({
+        onSuccess: function (response) {
+            appAlert.success(response.message || "Message sent to procurement.", {duration: 2000});
+            setTimeout(function () {
+                window.location.reload();
+            }, 500);
+        }
+    });
+});
+</script>

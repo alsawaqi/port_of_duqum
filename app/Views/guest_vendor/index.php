@@ -271,18 +271,57 @@
         .gv-ready .gv-section:nth-child(3) {
             transition-delay: .15s;
         }
+
+        .gv-document-row {
+            border: 1px solid rgba(15, 23, 42, .08);
+            border-radius: 14px;
+            background: #fbfdff;
+            padding: 14px 14px 2px;
+            margin-bottom: 12px;
+        }
+
+        .gv-document-row-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .gv-document-row-title {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 13px;
+        }
+
+        .gv-document-remove {
+            border: 0;
+            background: rgba(239, 68, 68, .10);
+            color: #b91c1c;
+            border-radius: 999px;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gv-add-document {
+            border-radius: 12px;
+            font-weight: 700;
+        }
     </style>
 
     <div class="gv-shell">
         <div class="card gv-card">
             <div class="gv-hero">
-                <h1>Guest Vendor Application</h1>
-                <p>Fill in the details below. Once submitted, our team will review your application.</p>
+                <h1><?php echo app_lang("guest_vendor_application"); ?></h1>
+                <p><?php echo app_lang("guest_vendor_application_subtitle"); ?></p>
 
                 <div class="gv-badges">
-                    <span class="gv-badge"><i data-feather="shield"></i> Secure submission</span>
-                    <span class="gv-badge"><i data-feather="clock"></i> Quick review</span>
-                    <span class="gv-badge"><i data-feather="check-circle"></i> Clear validation</span>
+                    <span class="gv-badge"><i data-feather="shield"></i> <?php echo app_lang("secure_submission"); ?></span>
+                    <span class="gv-badge"><i data-feather="clock"></i> <?php echo app_lang("quick_review"); ?></span>
+                    <span class="gv-badge"><i data-feather="check-circle"></i> <?php echo app_lang("clear_validation"); ?></span>
                 </div>
             </div>
 
@@ -303,8 +342,8 @@
                 <!-- Section 1: Vendor info -->
                 <div class="gv-section">
                     <div class="gv-section-title">
-                        <h5><span class="dot"></span>Vendor Information</h5>
-                        <p class="gv-help">Company profile details</p>
+                        <h5><span class="dot"></span><?php echo app_lang("vendor_information"); ?></h5>
+                        <p class="gv-help"><?php echo app_lang("company_profile_details"); ?></p>
                     </div>
 
                     <div class="row">
@@ -363,14 +402,14 @@
 
                         <div class="col-lg-6">
                             <div class="form-group">
-                                <label for="cr_number">CR Number <span class="text-danger">*</span></label>
+                                <label for="cr_number"><?php echo app_lang("cr_number"); ?> <span class="text-danger">*</span></label>
                                 <?php
                                 echo form_input([
                                     "id" => "cr_number",
                                     "name" => "cr_number",
                                     "value" => "",
                                     "class" => "form-control",
-                                    "placeholder" => "Commercial registration number",
+                                    "placeholder" => app_lang("commercial_registration_number"),
                                     "data-rule-required" => true,
                                     "data-msg-required" => app_lang('field_required')
                                 ]);
@@ -397,14 +436,14 @@
 
                         <div class="col-lg-6">
                             <div class="form-group">
-                                <label for="contact_person">Contact Person <span class="text-danger">*</span></label>
+                                <label for="contact_person"><?php echo app_lang("contact_person"); ?> <span class="text-danger">*</span></label>
                                 <?php
                                 echo form_input([
                                     "id" => "contact_person",
                                     "name" => "contact_person",
                                     "value" => "",
                                     "class" => "form-control",
-                                    "placeholder" => "Primary contact name",
+                                    "placeholder" => app_lang("primary_contact_name"),
                                     "data-rule-required" => true,
                                     "data-msg-required" => app_lang('field_required')
                                 ]);
@@ -414,14 +453,14 @@
 
                         <div class="col-lg-6">
                             <div class="form-group">
-                                <label for="contact_designation">Contact Designation</label>
+                                <label for="contact_designation"><?php echo app_lang("contact_designation"); ?></label>
                                 <?php
                                 echo form_input([
                                     "id" => "contact_designation",
                                     "name" => "contact_designation",
                                     "value" => "",
                                     "class" => "form-control",
-                                    "placeholder" => "Role / designation"
+                                    "placeholder" => app_lang("role_designation")
                                 ]);
                                 ?>
                             </div>
@@ -432,12 +471,12 @@
                 <!-- Section 2: Location -->
                 <div class="gv-section">
                     <div class="gv-section-title">
-                        <h5><span class="dot"></span>Location</h5>
-                        <p class="gv-help">Select your country, region, and city</p>
+                        <h5><span class="dot"></span><?php echo app_lang("location"); ?></h5>
+                        <p class="gv-help"><?php echo app_lang("select_country_region_city"); ?></p>
                     </div>
 
                     <div class="row">
-                        <div class="col-lg-4">
+                        <div class="col-lg-3">
                             <div class="form-group">
                                 <label for="country_id"><?php echo app_lang('country'); ?></label>
                                 <?php
@@ -451,7 +490,7 @@
                             </div>
                         </div>
 
-                        <div class="col-lg-4">
+                        <div class="col-lg-3">
                             <div class="form-group">
                                 <label for="region_id"><?php echo app_lang('region'); ?></label>
                                 <?php
@@ -465,7 +504,7 @@
                             </div>
                         </div>
 
-                        <div class="col-lg-4">
+                        <div class="col-lg-3">
                             <div class="form-group">
                                 <label for="city_id"><?php echo app_lang('city'); ?></label>
                                 <?php
@@ -533,12 +572,12 @@
                 <!-- Section 3: Login user -->
                 <div class="gv-section">
                     <div class="gv-section-title">
-                        <h5><span class="dot"></span>Login User</h5>
-                        <p class="gv-help">Account details for vendor portal access</p>
+                        <h5><span class="dot"></span><?php echo app_lang("login_user"); ?></h5>
+                        <p class="gv-help"><?php echo app_lang("vendor_login_user_help"); ?></p>
                     </div>
 
                     <div class="row">
-                        <div class="col-lg-4">
+                        <div class="col-lg-3">
                             <div class="form-group">
                                 <label for="user_name"><?php echo app_lang('name'); ?> <span class="text-danger">*</span></label>
                                 <?php
@@ -555,7 +594,7 @@
                             </div>
                         </div>
 
-                        <div class="col-lg-4">
+                        <div class="col-lg-3">
                             <div class="form-group">
                                 <label for="user_email"><?php echo app_lang('email'); ?> <span class="text-danger">*</span></label>
                                 <?php
@@ -575,9 +614,9 @@
                             </div>
                         </div>
 
-                        <div class="col-lg-4">
+                        <div class="col-lg-3">
                             <div class="form-group">
-                                <label for="password"><?php echo app_lang('password'); ?></label>
+                                <label for="password"><?php echo app_lang('password'); ?> <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <?php
                                     echo form_password([
@@ -586,14 +625,36 @@
                                         "value" => "",
                                         "class" => "form-control",
                                         "placeholder" => app_lang('password'),
-                                        "autocomplete" => "new-password"
+                                        "autocomplete" => "new-password",
+                                        "data-rule-required" => true,
+                                        "data-msg-required" => app_lang('field_required')
                                     ]);
                                     ?>
                                     <button class="btn btn-outline-secondary" type="button" id="toggle-password" style="border-radius: 12px;">
                                         <i data-feather="eye" class="icon-16"></i>
                                     </button>
                                 </div>
-                                <small class="text-muted">Use a strong password for better security.</small>
+                                <small class="text-muted"><?php echo app_lang("password_security_hint"); ?></small>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-3">
+                            <div class="form-group">
+                                <label for="password_confirm"><?php echo app_lang('password_confirm'); ?> <span class="text-danger">*</span></label>
+                                <?php
+                                echo form_password([
+                                    "id" => "password_confirm",
+                                    "name" => "password_confirm",
+                                    "value" => "",
+                                    "class" => "form-control",
+                                    "placeholder" => app_lang('password_confirm'),
+                                    "autocomplete" => "new-password",
+                                    "data-rule-required" => true,
+                                    "data-msg-required" => app_lang('field_required'),
+                                    "data-rule-equalTo" => "#password",
+                                    "data-msg-equalTo" => app_lang("passwords_do_not_match")
+                                ]);
+                                ?>
                             </div>
                         </div>
                     </div>
@@ -604,9 +665,9 @@
                 <!-- Section 4: Documents -->
                 <div class="gv-section">
                     <div class="gv-section-title">
-                        <h5><span class="dot"></span>Documents</h5>
+                        <h5><span class="dot"></span><?php echo app_lang("documents"); ?></h5>
                         <p class="gv-help">
-                            Upload at least one company document. Your application will be reviewed based on these.
+                            <?php echo app_lang("guest_vendor_documents_help"); ?>
                         </p>
                     </div>
 
@@ -618,10 +679,10 @@
                                 </label>
                                 <?php
                                 echo form_dropdown(
-                                    "vendor_document_type_id",
+                                    "vendor_document_type_id[]",
                                     $vendor_document_types_dropdown,
                                     "",
-                                    "class='select2 validate-hidden' id='vendor_document_type_id'
+                                    "class='select2 validate-hidden gv-document-type' id='vendor_document_type_id'
                      data-rule-required='true'
                      data-msg-required='" . app_lang('field_required') . "'"
                                 );
@@ -644,7 +705,7 @@
                                 ]);
                                 ?>
                                 <small class="text-muted">
-                                    Allowed formats: PDF, image files, etc.
+                                    <?php echo app_lang("allowed_document_formats"); ?>
                                 </small>
                             </div>
                         </div>
@@ -658,7 +719,7 @@
                                 <?php
                                 echo form_input([
                                     "id"   => "issued_at",
-                                    "name" => "issued_at",
+                                    "name" => "issued_at[]",
                                     "type" => "date",
                                     "class" => "form-control",
                                 ]);
@@ -672,7 +733,7 @@
                                 <?php
                                 echo form_input([
                                     "id"   => "expires_at",
-                                    "name" => "expires_at",
+                                    "name" => "expires_at[]",
                                     "type" => "date",
                                     "class" => "form-control",
                                 ]);
@@ -680,13 +741,17 @@
                             </div>
                         </div>
                     </div>
+                    <div id="guest-vendor-extra-documents"></div>
+                    <button type="button" class="btn btn-default gv-add-document" data-gv-document-add>
+                        <i data-feather="plus-circle" class="icon-16"></i> <?php echo app_lang("add_document"); ?>
+                    </button>
                 </div>
 
             </div>
 
             <div class="gv-footer">
                 <p class="note mb0">
-                    By submitting, you confirm the information is accurate and you agree to our review process.
+                    <?php echo app_lang("guest_vendor_submit_note"); ?>
                 </p>
 
                 <button type="submit" class="btn btn-primary gv-btn">
@@ -717,6 +782,73 @@
             allowClear: true
         });
 
+        $("#document_file").attr("name", "file[]");
+
+        var documentTypeOptionsHtml = <?php
+            $document_type_options_html = "";
+            foreach ($vendor_document_types_dropdown as $value => $label) {
+                $document_type_options_html .= "<option value=\"" . esc($value) . "\">" . esc($label) . "</option>";
+            }
+            echo json_encode($document_type_options_html);
+        ?>;
+
+        var documentIndex = 1;
+        $("[data-gv-document-add]").on("click", function() {
+            documentIndex++;
+            var row = $(`
+                <div class="gv-document-row" data-gv-document-row>
+                    <div class="gv-document-row-header">
+                        <span class="gv-document-row-title"><?php echo app_lang("document"); ?> ${documentIndex}</span>
+                        <button type="button" class="gv-document-remove" data-gv-document-remove aria-label="<?php echo app_lang("remove"); ?>">
+                            <i data-feather="x" class="icon-14"></i>
+                        </button>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label><?php echo app_lang('document_type'); ?> <span class="text-danger">*</span></label>
+                                <select name="vendor_document_type_id[]" class="select2 validate-hidden gv-document-type" data-rule-required="true" data-msg-required="<?php echo app_lang('field_required'); ?>">
+                                    ${documentTypeOptionsHtml}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label><?php echo app_lang('document'); ?> <span class="text-danger">*</span></label>
+                                <input type="file" name="file[]" class="form-control" data-rule-required="true" data-msg-required="<?php echo app_lang('field_required'); ?>">
+                                <small class="text-muted"><?php echo app_lang("allowed_document_formats"); ?></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label><?php echo app_lang('issued_at'); ?></label>
+                                <input type="date" name="issued_at[]" class="form-control">
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label><?php echo app_lang('expires_at'); ?></label>
+                                <input type="date" name="expires_at[]" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            $("#guest-vendor-extra-documents").append(row);
+            row.find(".gv-document-type").select2({
+                width: "100%",
+                placeholder: "",
+                allowClear: true
+            });
+            if (window.feather) feather.replace();
+        });
+
+        $(document).on("click", "[data-gv-document-remove]", function() {
+            $(this).closest("[data-gv-document-row]").remove();
+        });
+
         // Password show/hide
         $("#toggle-password").on("click", function() {
             const $pw = $("#password");
@@ -731,8 +863,7 @@
             $("#vendor-email-error").addClass("d-none").text("");
             $("#user-email-error").addClass("d-none").text("");
 
-            $("#email").removeClass("is-invalid gv-shake");
-            $("#user_email").removeClass("is-invalid gv-shake");
+            $("#email, #user_email, #cr_number, #password_confirm").removeClass("is-invalid gv-shake");
         }
 
         function shake($el) {
@@ -753,6 +884,14 @@
                 $i.addClass("is-invalid");
                 shake($i);
                 $("#user-email-error").removeClass("d-none").text(message);
+            }
+            if (field !== "email" && field !== "user_email") {
+                const $i = $("#" + field);
+                if ($i.length) {
+                    $i.addClass("is-invalid");
+                    shake($i);
+                }
+                appAlert.error(message);
             }
         }
 
@@ -807,7 +946,9 @@
                 });
 
                 $("#guest-vendor-form")[0].reset();
-                $("#vendor_group_id, #country_id, #region_id, #city_id").val("").trigger("change");
+                $("#vendor_group_id, #country_id, #region_id, #city_id, #vendor_document_type_id").val("").trigger("change");
+                $("#guest-vendor-extra-documents").empty();
+                documentIndex = 1;
 
                 // subtle success “reveal”
                 $(".gv-section").css({
@@ -830,8 +971,10 @@
                 if (res && res.errors) {
                     if (res.errors.email) showError("email", res.errors.email);
                     if (res.errors.user_email) showError("user_email", res.errors.user_email);
+                    if (res.errors.cr_number) showError("cr_number", res.errors.cr_number);
+                    if (res.errors.password_confirm) showError("password_confirm", res.errors.password_confirm);
 
-                    if (res.errors.email || res.errors.user_email) {
+                    if (res.errors.email || res.errors.user_email || res.errors.cr_number || res.errors.password_confirm) {
                         return false;
                     }
                 }

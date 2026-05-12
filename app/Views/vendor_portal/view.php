@@ -125,6 +125,23 @@
             }
         );
 
+        const initialHash = window.location.hash;
+        let $initialTab = $();
+        if (initialHash) {
+            $("#vendor-portal-tabs a[data-bs-toggle='tab']").each(function() {
+                if ($(this).attr("href") === initialHash) {
+                    $initialTab = $(this);
+                }
+            });
+        }
+
+        if ($initialTab.length) {
+            $("#vendor-portal-tabs a[data-bs-toggle='tab']").removeClass("active").attr("aria-selected", "false");
+            $("#vendor-portal-tabs-content .tab-pane").removeClass("show active");
+            $initialTab.addClass("active").attr("aria-selected", "true");
+            $($initialTab.attr("href")).addClass("show active");
+        }
+
         // Load initial tab
         loadTab($("#vendor-portal-tabs a.active"));
 

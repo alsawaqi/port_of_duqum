@@ -4,13 +4,16 @@ namespace App\Controllers;
 
 use App\Models\Vendors_model;
 use App\Models\Vendor_groups_model;
+use App\Models\Vendor_grades_model;
 
 class Vendors extends Security_Controller
 {
 
     protected $Vendors_model;
     protected $Vendor_groups_model;
+    protected $Vendor_grades_model;
     protected $db;
+    private $vendor_grades_dropdown_cache = null;
 
     function __construct()
     {
@@ -20,6 +23,7 @@ class Vendors extends Security_Controller
 
         $this->Vendors_model = new Vendors_model();
         $this->Vendor_groups_model = new Vendor_groups_model();
+        $this->Vendor_grades_model = new Vendor_grades_model();
         $this->db = db_connect();
     }
 
@@ -69,6 +73,8 @@ class Vendors extends Security_Controller
             $groups_dropdown[$g->id] = $g->name . " (" . $g->code . ")";
         }
         $view_data["vendor_groups_dropdown"] = $groups_dropdown;
+
+        $view_data["vendor_grades_dropdown"] = $this->_get_vendor_grades_dropdown();
 
         // Countries dropdown (use your existing Country_model if you have it)
         // If you already have Country_model, replace this with: $this->Country_model->get_dropdown_list(...)
@@ -122,6 +128,26 @@ class Vendors extends Security_Controller
         return $this->template->view("vendors/modal_form", $view_data);
     }
 
+    private function _get_vendor_grades_dropdown(): array
+    {
+        if ($this->vendor_grades_dropdown_cache !== null) {
+            return $this->vendor_grades_dropdown_cache;
+        }
+
+        $dropdown = ["" => "- " . app_lang("select_vendor_grade") . " -"];
+        $grades = $this->Vendor_grades_model->get_details()->getResult();
+        foreach ($grades as $grade) {
+            if ((int)($grade->is_active ?? 0) !== 1) {
+                continue;
+            }
+
+            $dropdown[$grade->id] = vendor_grade_label($grade->name ?? "", $grade->code ?? "");
+        }
+
+        $this->vendor_grades_dropdown_cache = $dropdown;
+        return $dropdown;
+    }
+
     public function save()
     {
         $db = $this->db; // use the same connection everywhere
@@ -130,6 +156,7 @@ class Vendors extends Security_Controller
             $this->validate_submitted_data([
                 "id"             => "numeric",
                 "vendor_group_id" => "required|numeric",
+                "vendor_grade_id" => "permit_empty|numeric",
                 "vendor_name"    => "required",
                 "email"          => "required|valid_email",
 
@@ -139,9 +166,9 @@ class Vendors extends Security_Controller
                 "postal_code" => "permit_empty",
 
                 // optional
-                "country_id"     => "numeric",
-                "region_id"      => "numeric",
-                "city_id"        => "numeric",
+                "country_id"     => "permit_empty|numeric",
+                "region_id"      => "permit_empty|numeric",
+                "city_id"        => "permit_empty|numeric",
 
                 // login user fields (required on create)
                 "user_name"      => "required",
@@ -198,6 +225,7 @@ class Vendors extends Security_Controller
 
             $vendor_data = [
                 "vendor_group_id" => (int) $this->request->getPost("vendor_group_id"),
+                "vendor_grade_id" => $this->request->getPost("vendor_grade_id") ? (int) $this->request->getPost("vendor_grade_id") : null,
                 "vendor_name"     => $this->request->getPost("vendor_name"),
                 "email"           => $vendor_email,
 
@@ -370,7 +398,7 @@ class Vendors extends Security_Controller
         $id = (int) $this->request->getPost("id");
         $status = strtolower(trim((string)$this->request->getPost("status")));
 
-        $allowed = ["new", "pending_payment", "submitted", "approved", "rejected", "inactive", "active"];
+        $allowed = vendor_status_options();
         if (!in_array($status, $allowed, true)) {
             echo json_encode(["success" => false, "message" => "Invalid status: " . $status]);
             return;
@@ -388,6 +416,25 @@ class Vendors extends Security_Controller
             "updated_by" => $this->login_user->id
         ];
 
+        $from_status = (string)($vendor->status ?? "");
+        if ($status === "approved") {
+            $data["registration_valid_from"] = date("Y-m-d");
+            $valid_to = $this->_calculate_vendor_valid_to($vendor);
+            if ($valid_to) {
+                $data["registration_valid_to"] = $valid_to;
+            }
+        }
+
+        if ($status === vendor_blocked_status()) {
+            $data["blocked_reason"] = $data["blocked_reason"] ?? null;
+            $data["blocked_by"] = $this->login_user->id;
+            $data["blocked_at"] = get_current_utc_time();
+        } elseif ($from_status === vendor_blocked_status()) {
+            $data["blocked_reason"] = null;
+            $data["blocked_by"] = null;
+            $data["blocked_at"] = null;
+        }
+
         $data = clean_data($data);
 
         $ok = $this->Vendors_model->ci_save($data, $id);
@@ -398,7 +445,233 @@ class Vendors extends Security_Controller
             return;
         }
 
+        $this->_record_vendor_status_history($id, $from_status, $status);
+
         echo json_encode(["success" => true, "message" => app_lang("record_saved")]);
+    }
+
+    public function update_grade()
+    {
+        $this->access_only_vendors_update();
+
+        $this->validate_submitted_data([
+            "id" => "required|numeric",
+            "vendor_grade_id" => "permit_empty|numeric"
+        ]);
+
+        $id = (int)$this->request->getPost("id");
+        $vendor = $this->Vendors_model->get_one($id);
+        if (!$vendor || (int)$vendor->deleted === 1) {
+            echo json_encode(["success" => false, "message" => app_lang("record_not_found")]);
+            return;
+        }
+
+        $grade_id = $this->request->getPost("vendor_grade_id");
+        $grade_id = $grade_id ? (int)$grade_id : null;
+
+        if ($grade_id) {
+            $grade = $this->Vendor_grades_model->get_one($grade_id);
+            if (!$grade || (int)$grade->deleted === 1 || (int)$grade->is_active !== 1) {
+                echo json_encode(["success" => false, "message" => app_lang("vendor_grade_not_available")]);
+                return;
+            }
+        }
+
+        $data = clean_data([
+            "vendor_grade_id" => $grade_id,
+            "updated_by" => $this->login_user->id
+        ]);
+
+        if ($this->Vendors_model->ci_save($data, $id)) {
+            echo json_encode([
+                "success" => true,
+                "data" => $this->_row_data($id),
+                "id" => $id,
+                "message" => app_lang("record_saved")
+            ]);
+        } else {
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+        }
+    }
+
+    public function block_modal_form()
+    {
+        $this->access_only_vendors_update();
+        $this->validate_submitted_data(["id" => "required|numeric"]);
+
+        $id = (int)$this->request->getPost("id");
+        $vendor = $this->Vendors_model->get_one($id);
+        if (!$vendor || (int)$vendor->deleted === 1) {
+            show_404();
+        }
+
+        return $this->template->view("vendors/block_modal_form", ["vendor" => $vendor]);
+    }
+
+    public function block()
+    {
+        $this->access_only_vendors_update();
+
+        $this->validate_submitted_data([
+            "id" => "required|numeric",
+            "reason" => "required"
+        ]);
+
+        $id = (int)$this->request->getPost("id");
+        $reason = trim((string)$this->request->getPost("reason"));
+        $vendor = $this->Vendors_model->get_one($id);
+        if (!$vendor || (int)$vendor->deleted === 1) {
+            echo json_encode(["success" => false, "message" => app_lang("record_not_found")]);
+            return;
+        }
+
+        $from_status = (string)($vendor->status ?? "");
+        $to_status = vendor_blocked_status();
+        $data = clean_data([
+            "status" => $to_status,
+            "blocked_reason" => $reason,
+            "blocked_by" => $this->login_user->id,
+            "blocked_at" => get_current_utc_time(),
+            "updated_by" => $this->login_user->id
+        ]);
+
+        if (!$this->Vendors_model->ci_save($data, $id)) {
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            return;
+        }
+
+        $this->_record_vendor_status_history($id, $from_status, $to_status, $reason);
+
+        echo json_encode([
+            "success" => true,
+            "data" => $this->_row_data($id),
+            "id" => $id,
+            "message" => app_lang("vendor_blocked_successfully")
+        ]);
+    }
+
+    public function unblock()
+    {
+        $this->access_only_vendors_update();
+        $this->validate_submitted_data(["id" => "required|numeric"]);
+
+        $id = (int)$this->request->getPost("id");
+        $vendor = $this->Vendors_model->get_one($id);
+        if (!$vendor || (int)$vendor->deleted === 1) {
+            echo json_encode(["success" => false, "message" => app_lang("record_not_found")]);
+            return;
+        }
+
+        $from_status = (string)($vendor->status ?? "");
+        if ($from_status !== vendor_blocked_status()) {
+            echo json_encode(["success" => false, "message" => app_lang("vendor_is_not_blocked")]);
+            return;
+        }
+
+        $to_status = $this->_last_status_before_block($id);
+        $data = clean_data([
+            "status" => $to_status,
+            "blocked_reason" => null,
+            "blocked_by" => null,
+            "blocked_at" => null,
+            "updated_by" => $this->login_user->id
+        ]);
+
+        if ($to_status === "approved") {
+            $data["registration_valid_from"] = $vendor->registration_valid_from ?: date("Y-m-d");
+            if (empty($vendor->registration_valid_to)) {
+                $valid_to = $this->_calculate_vendor_valid_to($vendor);
+                if ($valid_to) {
+                    $data["registration_valid_to"] = $valid_to;
+                }
+            }
+        }
+
+        if (!$this->Vendors_model->ci_save($data, $id)) {
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            return;
+        }
+
+        $this->_record_vendor_status_history($id, $from_status, $to_status, app_lang("vendor_unblocked"));
+
+        echo json_encode([
+            "success" => true,
+            "data" => $this->_row_data($id),
+            "id" => $id,
+            "message" => app_lang("vendor_unblocked_successfully")
+        ]);
+    }
+
+    private function _last_status_before_block(int $vendor_id): string
+    {
+        $history_table = $this->db->prefixTable("vendor_status_histories");
+        $row = $this->db->query(
+            "SELECT from_status
+             FROM $history_table
+             WHERE vendor_id=? AND deleted=0 AND to_status=?
+             ORDER BY COALESCE(action_at, created_at) DESC, id DESC
+             LIMIT 1",
+            [$vendor_id, vendor_blocked_status()]
+        )->getRow();
+
+        $previous = strtolower(trim((string)($row->from_status ?? "")));
+        if ($previous && in_array($previous, vendor_status_options(), true) && $previous !== vendor_blocked_status()) {
+            return $previous;
+        }
+
+        return "approved";
+    }
+
+
+    private function _calculate_vendor_valid_to($vendor): ?string
+    {
+        $group_id = (int)($vendor->vendor_group_id ?? 0);
+        if (!$group_id) {
+            return null;
+        }
+
+        $group = $this->Vendor_groups_model->get_one($group_id);
+        $days = (int)($group->default_validity_days ?? 0);
+        if ($days <= 0) {
+            return null;
+        }
+
+        return date("Y-m-d", strtotime("+" . $days . " days"));
+    }
+
+    private function _record_vendor_status_history(int $vendor_id, string $from_status, string $to_status, string $reason = ""): void
+    {
+        if ($from_status === $to_status) {
+            return;
+        }
+
+        $action_map = [
+            "submitted" => "submit",
+            "approved" => "approve",
+            "rejected" => "reject",
+            "revise" => "revise",
+            vendor_blocked_status() => "block",
+        ];
+
+        $action = $action_map[$to_status] ?? null;
+        if ($from_status === vendor_blocked_status() && $to_status !== vendor_blocked_status()) {
+            $action = "unblock";
+        }
+
+        $history = [
+            "vendor_id" => $vendor_id,
+            "from_status" => $from_status ?: null,
+            "to_status" => $to_status,
+            "action" => $action,
+            "reason" => $reason ?: null,
+            "action_by" => $this->login_user->id ?? null,
+            "action_at" => get_current_utc_time(),
+            "created_at" => get_current_utc_time(),
+            "updated_at" => get_current_utc_time(),
+            "deleted" => 0,
+        ];
+
+        $this->db->table($this->db->prefixTable("vendor_status_histories"))->insert(clean_data($history));
     }
 
 
@@ -469,7 +742,7 @@ class Vendors extends Security_Controller
         $this->access_only_vendors_view();
 
         $vendor_id = (int)$vendor_id;
-        $vendor = $this->Vendors_model->get_one($vendor_id);
+        $vendor = $this->Vendors_model->get_details(["id" => $vendor_id])->getRow();
 
         if (!$vendor || (int)$vendor->deleted === 1) {
             app_redirect("vendors");
@@ -881,8 +1154,19 @@ class Vendors extends Security_Controller
         $can_update = $this->can_update_vendors();
         $can_delete = $this->can_delete_vendors();
 
+        if ($can_update) {
+            $gradeSelect = "<select class='form-select form-select-sm js-vendor-grade' data-id='{$data->id}'>";
+            foreach ($this->_get_vendor_grades_dropdown() as $grade_id => $label) {
+                $selected = ((string)($data->vendor_grade_id ?? "") === (string)$grade_id) ? "selected" : "";
+                $gradeSelect .= "<option value='" . esc($grade_id) . "' {$selected}>" . esc($label) . "</option>";
+            }
+            $gradeSelect .= "</select>";
+        } else {
+            $gradeSelect = "<span class='badge bg-light text-dark'>" . esc(vendor_grade_label($data->vendor_grade_name ?? "", $data->vendor_grade_code ?? "")) . "</span>";
+        }
+
         // status dropdown (same as yours)
-        $allowedStatuses = ["new", "pending_payment", "submitted", "approved", "rejected", "inactive", "active"];
+        $allowedStatuses = vendor_status_options();
         if ($can_update) {
             $statusSelect = "<select class='form-select form-select-sm js-vendor-status' data-id='{$data->id}'>";
             foreach ($allowedStatuses as $st) {
@@ -911,6 +1195,20 @@ class Vendors extends Security_Controller
                 "title" => app_lang("edit"),
                 "data-post-id" => $data->id
             ]);
+
+            if (($data->status ?? "") === vendor_blocked_status()) {
+                $actions .= js_anchor("<i data-feather='unlock' class='icon-16'></i>", [
+                    "title" => app_lang("unblock_vendor"),
+                    "class" => "js-vendor-unblock",
+                    "data-id" => $data->id
+                ]);
+            } else {
+                $actions .= modal_anchor(get_uri("vendors/block_modal_form"), "<i data-feather='slash' class='icon-16'></i>", [
+                    "class" => "edit",
+                    "title" => app_lang("block_vendor"),
+                    "data-post-id" => $data->id
+                ]);
+            }
         }
         if ($can_delete) {
             $actions .= js_anchor("<i data-feather='x' class='icon-16'></i>", [
@@ -924,6 +1222,7 @@ class Vendors extends Security_Controller
 
         return [
             $groupLabel,
+            $gradeSelect,
             esc($data->vendor_name ?? "-"),
             esc($data->email ?? "-"),
             $locationCell,

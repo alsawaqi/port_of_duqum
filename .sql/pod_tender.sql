@@ -110,7 +110,7 @@ CREATE TABLE `pod_tender_invited_vendors` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `tender_id` bigint(20) UNSIGNED NOT NULL,
   `vendor_id` bigint(20) UNSIGNED NOT NULL,
-  `invite_status` enum('sent','delivered','opened','declined') NOT NULL DEFAULT 'sent',
+  `invite_status` enum('sent','delivered','opened','declined','pending_approval','approved','rejected') NOT NULL DEFAULT 'sent',
   `invited_by` bigint(20) UNSIGNED DEFAULT NULL,
   `invited_at` datetime DEFAULT NULL,
   `deleted` tinyint(1) NOT NULL DEFAULT 0,

@@ -755,16 +755,7 @@ $view_data["currency_dropdown"] = $currency_dropdown;
 
     private function _calculate_visit_days(?string $visit_from, ?string $visit_to): int
 {
-    if (!$visit_from || !$visit_to) return 0;
-
-    // Use date-only for day counting (inclusive)
-    $start = new \DateTime(substr($visit_from, 0, 10));
-    $end   = new \DateTime(substr($visit_to, 0, 10));
-
-    $diff = $start->diff($end);
-    if ($diff->invert) return 0;
-
-    return (int)$diff->days + 1; // inclusive
+    return gate_pass_visit_duration_days($visit_from, $visit_to);
 }
 
 
@@ -827,8 +818,12 @@ function calc_fee_preview()
             ->getResult();
 
         $view_data["gate_pass"] = null;
-        if ($request->status === "rop_approved") {
-            $view_data["gate_pass"] = $this->Gate_passes_model->get_by_request_id($request->id);
+        $view_data["gate_passes"] = [];
+        if ($this->_gate_pass_request_is_issued($request)) {
+            $view_data["gate_passes"] = $this->Gate_passes_model
+                ->get_all_by_request_id($request->id)
+                ->getResult();
+            $view_data["gate_pass"] = $view_data["gate_passes"][0] ?? null;
         }
 
         $view_data["status_label"] = gate_pass_request_status_display($request);
@@ -993,17 +988,21 @@ function calc_fee_preview()
     {
         $this->validate_submitted_data([
             "gate_pass_request_id" => "required|numeric",
+            "gate_pass_id" => "numeric",
         ]);
         $request_id = (int)$this->request->getPost("gate_pass_request_id");
+        $gate_pass_id = (int)$this->request->getPost("gate_pass_id");
 
         $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
         if (!$request || $request->deleted) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
-        if ($request->status !== "rop_approved") {
+        if (!$this->_gate_pass_request_is_issued($request)) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
-        $gate_pass = $this->Gate_passes_model->get_by_request_id($request_id);
+        $gate_pass = $gate_pass_id > 0
+            ? $this->Gate_passes_model->get_by_id_for_request($gate_pass_id, $request_id)
+            : $this->Gate_passes_model->get_by_request_id($request_id);
         if (!$gate_pass || empty($gate_pass->qr_token)) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
@@ -1016,9 +1015,10 @@ function calc_fee_preview()
     /**
      * Output QR code image for download (only when request status is rop_approved and user has access).
      */
-    function download_qr($request_id = 0)
+    function download_qr($request_id = 0, $gate_pass_id = 0)
     {
         validate_numeric_value($request_id);
+        validate_numeric_value($gate_pass_id);
         $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
         if (!$request || $request->deleted) {
             app_redirect("forbidden");
@@ -1026,10 +1026,12 @@ function calc_fee_preview()
         if (!$this->_can_view_request_details($request)) {
             app_redirect("forbidden");
         }
-        if ($request->status !== "rop_approved") {
+        if (!$this->_gate_pass_request_is_issued($request)) {
             app_redirect("forbidden");
         }
-        $gate_pass = $this->Gate_passes_model->get_by_request_id($request_id);
+        $gate_pass = (int)$gate_pass_id > 0
+            ? $this->Gate_passes_model->get_by_id_for_request((int)$gate_pass_id, (int)$request_id)
+            : $this->Gate_passes_model->get_by_request_id($request_id);
         if (!$gate_pass || empty($gate_pass->qr_token)) {
             app_redirect("forbidden");
         }
@@ -1042,16 +1044,17 @@ function calc_fee_preview()
         $inline = (int) $this->request->getGet("inline") === 1;
         $this->_audit_gate_pass_print((int)$gate_pass->id, $inline ? "view_png" : "download_png");
         $this->response->setHeader("Content-Type", "image/png");
-        $this->response->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . "; filename=\"gate-pass-qr-" . (int)$request_id . ".png\"");
+        $this->response->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . "; filename=\"gate-pass-qr-" . (int)$request_id . "-" . (int)$gate_pass->id . ".png\"");
         return $this->response->setBody($img);
     }
 
     /**
      * Printable PDF gate pass (reference, visit window, visitors/vehicles, QR) — only when ROP-approved.
      */
-    public function download_gate_pass_pdf($request_id = 0)
+    public function download_gate_pass_pdf($request_id = 0, $gate_pass_id = 0)
     {
         validate_numeric_value($request_id);
+        validate_numeric_value($gate_pass_id);
         $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
         if (!$request || $request->deleted) {
             app_redirect("forbidden");
@@ -1059,10 +1062,12 @@ function calc_fee_preview()
         if (!$this->_can_view_request_details($request)) {
             app_redirect("forbidden");
         }
-        if ($request->status !== "rop_approved") {
+        if (!$this->_gate_pass_request_is_issued($request)) {
             app_redirect("forbidden");
         }
-        $gate_pass = $this->Gate_passes_model->get_by_request_id($request_id);
+        $gate_pass = (int)$gate_pass_id > 0
+            ? $this->Gate_passes_model->get_by_id_for_request((int)$gate_pass_id, (int)$request_id)
+            : $this->Gate_passes_model->get_by_request_id($request_id);
         if (!$gate_pass || empty($gate_pass->qr_token)) {
             app_redirect("forbidden");
         }
@@ -1074,7 +1079,19 @@ function calc_fee_preview()
             ->get_details(["gate_pass_request_id" => $request_id])
             ->getResult();
 
-        $html = $this->_gate_pass_pdf_html($request, $gate_pass, $visitors, $vehicles);
+        $assigned_visitor = null;
+        $visitor_id = (int)($gate_pass->gate_pass_request_visitor_id ?? 0);
+        if ($visitor_id > 0) {
+            foreach ($visitors as $visitor) {
+                if ((int)($visitor->id ?? 0) === $visitor_id) {
+                    $assigned_visitor = $visitor;
+                    break;
+                }
+            }
+        }
+        $pdf_visitors = $assigned_visitor ? [$assigned_visitor] : $visitors;
+
+        $html = $this->_gate_pass_pdf_html($request, $gate_pass, $pdf_visitors, $vehicles, $assigned_visitor);
 
         $pdf = new Pdf("");
         $pdf->setPrintHeader(false);
@@ -1087,7 +1104,7 @@ function calc_fee_preview()
         $this->_audit_gate_pass_print((int)$gate_pass->id, "download_pdf");
 
         $safeRef = preg_replace("/[^A-Za-z0-9_-]+/", "_", (string)($request->reference ?? "request")) ?: "gate-pass";
-        $fileName = "gate-pass-" . $safeRef . ".pdf";
+        $fileName = "gate-pass-" . $safeRef . "-" . (int)$gate_pass->id . ".pdf";
         $binary = $pdf->Output($fileName, "S");
 
         return $this->response
@@ -1119,7 +1136,7 @@ function calc_fee_preview()
         }
     }
 
-    private function _gate_pass_pdf_html($request, $gate_pass, array $visitors, array $vehicles): string
+    private function _gate_pass_pdf_html($request, $gate_pass, array $visitors, array $vehicles, $assigned_visitor = null): string
     {
         $h = static function ($v): string {
             return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8");
@@ -1127,6 +1144,7 @@ function calc_fee_preview()
 
         $visitFrom = !empty($request->visit_from) ? format_to_date($request->visit_from) : "—";
         $visitTo = !empty($request->visit_to) ? format_to_date($request->visit_to) : "—";
+        $duration = gate_pass_visit_duration_label($request->visit_from ?? null, $request->visit_to ?? null);
         $reqType = strtolower(trim((string)($request->request_type ?? "both")));
         $reqTypeLabel = $reqType === "person"
             ? $h(app_lang("gate_pass_request_type_display_person"))
@@ -1180,6 +1198,8 @@ function calc_fee_preview()
         $lblVisit = $h(app_lang("visit"));
         $lblFrom = $h(app_lang("visit_from"));
         $lblTo = $h(app_lang("visit_to"));
+        $lblDuration = $h(app_lang("gate_pass_visit_duration_days"));
+        $lblPassHolder = $h(app_lang("gate_pass_pass_holder"));
         $lblReqType = $h(app_lang("gate_pass_request_type_label"));
         $lblFee = $h(app_lang("fee_amount"));
         $lblVisitors = $h(app_lang("visitors"));
@@ -1193,9 +1213,12 @@ function calc_fee_preview()
 
         $ref = $h($request->reference ?? "");
         $gpNo = $h($gate_pass->gate_pass_no ?? "");
+        $passHolder = $h($assigned_visitor ? ($assigned_visitor->full_name ?? "") : app_lang("gate_pass_request_level_pass"));
+        $durationDisp = $h($duration);
         $co = $h($request->company_name ?? "");
         $dept = $h($request->department_name ?? "");
         $purpose = $h($request->purpose_name ?? "");
+        $footerNote = $h(app_lang("gate_pass_pdf_footer_note"));
 
         return <<<HTML
 <style>
@@ -1216,8 +1239,10 @@ function calc_fee_preview()
   <tr><td class="k">{$lblCompany}</td><td>{$co}</td></tr>
   <tr><td class="k">{$lblDept}</td><td>{$dept}</td></tr>
   <tr><td class="k">{$lblPurpose}</td><td>{$purpose}</td></tr>
+  <tr><td class="k">{$lblPassHolder}</td><td>{$passHolder}</td></tr>
   <tr><td class="k">{$lblFrom}</td><td>{$visitFrom}</td></tr>
   <tr><td class="k">{$lblTo}</td><td>{$visitTo}</td></tr>
+  <tr><td class="k">{$lblDuration}</td><td>{$durationDisp}</td></tr>
   <tr><td class="k">{$lblReqType}</td><td>{$reqTypeLabel}</td></tr>
   <tr><td class="k">{$lblFee}</td><td>{$feeDisp}</td></tr>
 </table>
@@ -1232,8 +1257,16 @@ function calc_fee_preview()
   <tbody>{$vehicleRows}</tbody>
 </table>
 <div class="qr"><div style="font-size:10px;font-weight:bold;margin-bottom:4px;">{$lblQr}</div>{$qrTag}</div>
-<p class="muted">{$h(app_lang("gate_pass_pdf_footer_note"))}</p>
+<p class="muted">{$footerNote}</p>
 HTML;
+    }
+
+    private function _gate_pass_request_is_issued($request): bool
+    {
+        $status = strtolower(trim((string)($request->status ?? "")));
+        $stage = strtolower(trim((string)($request->stage ?? "")));
+
+        return $stage === "issued" && in_array($status, ["rop_approved", "issued"], true);
     }
 
     /**

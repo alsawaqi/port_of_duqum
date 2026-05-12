@@ -10,25 +10,44 @@
                     <div class="col-md-2 col-sm-6">
                         <label class="form-label"><?php echo app_lang("company"); ?></label>
                         <select name="company_id" id="filter_company_id" class="form-control">
-                            <option value="">— <?php echo app_lang("all"); ?> —</option>
+                            <option value="">- <?php echo app_lang("all"); ?> -</option>
                             <?php foreach ($companies as $c): ?>
                                 <option value="<?php echo (int)$c->id; ?>"><?php echo esc($c->name); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2 col-sm-6">
-                        <label class="form-label"><?php echo app_lang("department"); ?></label>
+                        <label class="form-label"><?php echo app_lang("gate_pass_concerned_department"); ?></label>
                         <select name="department_id" id="filter_department_id" class="form-control">
-                            <option value="">— <?php echo app_lang("all"); ?> —</option>
+                            <option value="">- <?php echo app_lang("all"); ?> -</option>
                             <?php foreach ($departments as $d): ?>
-                                <option value="<?php echo (int)$d->id; ?>"><?php echo esc($d->name); ?></option>
+                                <?php
+                                $department_label = trim((string)($d->name ?? ""));
+                                $department_company = trim((string)($d->company_name ?? ""));
+                                if ($department_company !== "") {
+                                    $department_label .= " (" . $department_company . ")";
+                                }
+                                ?>
+                                <option value="<?php echo (int)$d->id; ?>"><?php echo esc($department_label); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-2 col-sm-6">
+                        <label class="form-label"><?php echo app_lang("nationality"); ?></label>
+                        <select name="nationality" id="filter_nationality" class="form-control">
+                            <option value="">- <?php echo app_lang("all"); ?> -</option>
+                            <?php foreach (($nationalities ?? []) as $n): ?>
+                                <?php $nationality = trim((string)($n->nationality ?? "")); ?>
+                                <?php if ($nationality !== ""): ?>
+                                    <option value="<?php echo esc($nationality); ?>"><?php echo esc($nationality); ?></option>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2 col-sm-6">
                         <label class="form-label"><?php echo app_lang("status"); ?></label>
                         <select name="status" id="filter_status" class="form-control">
-                            <option value="">— <?php echo app_lang("all"); ?> —</option>
+                            <option value="">- <?php echo app_lang("all"); ?> -</option>
                             <option value="draft"><?php echo app_lang("gate_pass_status_draft"); ?></option>
                             <option value="submitted"><?php echo app_lang("gate_pass_status_submitted"); ?></option>
                             <option value="department_approved"><?php echo app_lang("gate_pass_status_department_approved"); ?></option>
@@ -45,7 +64,7 @@
                     <div class="col-md-2 col-sm-6">
                         <label class="form-label"><?php echo app_lang("purpose"); ?></label>
                         <select name="gate_pass_purpose_id" id="filter_purpose_id" class="form-control">
-                            <option value="">— <?php echo app_lang("all"); ?> —</option>
+                            <option value="">- <?php echo app_lang("all"); ?> -</option>
                             <?php foreach ($purposes as $p): ?>
                                 <option value="<?php echo (int)$p->id; ?>"><?php echo esc($p->name); ?></option>
                             <?php endforeach; ?>
@@ -87,6 +106,7 @@ $(document).ready(function () {
         return {
             company_id: $("#filter_company_id").val() || "",
             department_id: $("#filter_department_id").val() || "",
+            nationality: $("#filter_nationality").val() || "",
             status: $("#filter_status").val() || "",
             gate_pass_purpose_id: $("#filter_purpose_id").val() || "",
             date_from: $("#filter_date_from").val() || "",
@@ -114,9 +134,10 @@ $(document).ready(function () {
             columns: [
                 { title: "<?php echo app_lang('reference'); ?>" },
                 { title: "<?php echo app_lang('company'); ?>" },
-                { title: "<?php echo app_lang('department'); ?>" },
+                { title: "<?php echo app_lang('gate_pass_concerned_department'); ?>" },
                 { title: "<?php echo app_lang('requester'); ?>" },
                 { title: "<?php echo app_lang('phone'); ?>" },
+                { title: "<?php echo app_lang('nationality'); ?>" },
                 { title: "<?php echo app_lang('purpose'); ?>" },
                 { title: "<?php echo app_lang('visit_from'); ?>" },
                 { title: "<?php echo app_lang('visit_to'); ?>" },

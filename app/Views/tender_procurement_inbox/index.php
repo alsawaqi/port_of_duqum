@@ -63,6 +63,8 @@ $(document).ready(function () {
             {title: "Type"},
             {title: "Request Source"},
             {title: "Tender Status"},
+            {title: "Manager Approval"},
+            {title: "Workflow Stage"},
             {title: "Submission Deadline"},
             {title: '<i data-feather="menu" class="icon-16"></i>', class: "text-center option w150"}
         ]
@@ -79,7 +81,7 @@ $(document).ready(function () {
     });
 
     $(document).on("click", ".cancel-tender", function () {
-        if (confirm("Cancel this tender?")) {
+        if (confirm("Submit this tender cancellation to the procurement manager for approval?")) {
             postAction($(this), {tender_id: $(this).attr("data-tender-id")});
         }
     });

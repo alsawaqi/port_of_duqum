@@ -46,8 +46,11 @@ if ($stage === "security")   $stage_class = "badge-soft-warning";
 if ($stage === "rop")        $stage_class = "badge-soft-danger";
 if ($stage === "issued")     $stage_class = "badge-soft-success";
 
-$show_qr_section = ($status === "rop_approved" && !empty($gate_pass) && !empty($gate_pass->qr_token));
-$qr_image_url = $show_qr_section ? get_uri("gate_pass_portal/download_qr/" . (int)$request->id . "?inline=1") : "";
+$gate_passes = $gate_passes ?? [];
+if (empty($gate_passes) && !empty($gate_pass)) {
+    $gate_passes = [$gate_pass];
+}
+$show_qr_section = ($stage === "issued" && in_array($status, ["rop_approved", "issued"], true) && !empty($gate_passes));
 
 $approval_history = $approval_history ?? [];
 $latest_return = null;
@@ -232,6 +235,7 @@ if ($return_stage_label === $return_stage_lang_key) {
                         <thead>
                             <tr>
                                 <th><?php echo app_lang("gate_pass_scan_time"); ?></th>
+                                <th><?php echo app_lang("visitor"); ?></th>
                                 <th><?php echo app_lang("gate_pass_scan_action"); ?></th>
                                 <th><?php echo app_lang("gate_pass_scan_performed_by"); ?></th>
                                 <th><?php echo app_lang("note"); ?></th>
@@ -249,9 +253,20 @@ if ($return_stage_label === $return_stage_lang_key) {
                                 $who = trim(trim((string)($log->performed_by_first_name ?? "")) . " " . trim((string)($log->performed_by_last_name ?? "")));
                                 $when = !empty($log->recorded_at) ? format_to_datetime($log->recorded_at) : "-";
                                 $note = trim((string)($log->note ?? ""));
+                                $visitor = trim((string)($log->visitor_full_name ?? ""));
+                                if ($visitor === "" && !empty($log->gate_pass_request_visitor_id)) {
+                                    $visitor = "#" . (int)$log->gate_pass_request_visitor_id;
+                                }
+                                $visitor_id_number = trim((string)($log->visitor_id_number ?? ""));
                                 ?>
                                 <tr>
                                     <td><?php echo esc($when); ?></td>
+                                    <td>
+                                        <?php echo esc($visitor !== "" ? $visitor : "-"); ?>
+                                        <?php if ($visitor_id_number !== ""): ?>
+                                            <div class="text-off font-12"><?php echo app_lang("id_number"); ?>: <?php echo esc($visitor_id_number); ?></div>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><?php echo esc($action_disp); ?></td>
                                     <td><?php echo esc($who !== "" ? $who : ("#" . (int)($log->performed_by ?? 0))); ?></td>
                                     <td><?php echo $note !== "" ? nl2br(esc($note)) : "—"; ?></td>
@@ -484,22 +499,56 @@ if ($return_stage_label === $return_stage_lang_key) {
                 </div>
             </div>
             <div class="p20 pt10">
-                <div class="d-flex flex-wrap align-items-center gap-3">
-                    <?php if ($qr_image_url): ?>
-                        <div class="gp-qr-wrap">
-                            <img src="<?php echo esc($qr_image_url); ?>" alt="QR Code" class="gp-qr-img" width="200" height="200" />
+                <div class="gp-issued-pass-grid">
+                    <?php foreach ($gate_passes as $issued_pass): ?>
+                        <?php
+                        $pass_id = (int)($issued_pass->id ?? 0);
+                        $visitor_name = trim((string)($issued_pass->visitor_full_name ?? ""));
+                        $visitor_id_number = trim((string)($issued_pass->visitor_id_number ?? ""));
+                        $visitor_nationality = trim((string)($issued_pass->visitor_nationality ?? ""));
+                        $pass_holder = $visitor_name !== "" ? $visitor_name : app_lang("gate_pass_request_level_pass");
+                        $valid_from_raw = ($request->visit_from ?? null) ?: $issued_pass->valid_from;
+                        $valid_to_raw = ($request->visit_to ?? null) ?: $issued_pass->valid_to;
+                        $validity = gate_pass_validity_status($valid_from_raw, $valid_to_raw);
+                        $qr_image_url = get_uri("gate_pass_portal/download_qr/" . (int)$request->id . "/" . $pass_id . "?inline=1");
+                        $qr_download_url = get_uri("gate_pass_portal/download_qr/" . (int)$request->id . "/" . $pass_id);
+                        $pdf_url = get_uri("gate_pass_portal/download_gate_pass_pdf/" . (int)$request->id . "/" . $pass_id);
+                        ?>
+                        <div class="gp-issued-pass-card">
+                            <div class="gp-issued-pass-main">
+                                <div class="gp-qr-wrap">
+                                    <img src="<?php echo esc($qr_image_url); ?>" alt="QR Code" class="gp-qr-img" width="170" height="170" />
+                                </div>
+                                <div class="gp-issued-pass-info">
+                                    <div class="gp-issued-pass-topline">
+                                        <span class="badge <?php echo esc($validity["badge_class"]); ?>"><?php echo esc($validity["label"]); ?></span>
+                                        <span class="gp-issued-pass-no"><?php echo esc($issued_pass->gate_pass_no ?? ""); ?></span>
+                                    </div>
+                                    <h5 class="gp-issued-pass-holder"><?php echo esc($pass_holder); ?></h5>
+                                    <div class="gp-issued-pass-meta">
+                                        <?php if ($visitor_id_number !== ""): ?>
+                                            <span><?php echo app_lang("id_number"); ?>: <?php echo esc($visitor_id_number); ?></span>
+                                        <?php endif; ?>
+                                        <?php if ($visitor_nationality !== ""): ?>
+                                            <span><?php echo app_lang("nationality"); ?>: <?php echo esc($visitor_nationality); ?></span>
+                                        <?php endif; ?>
+                                        <span><?php echo app_lang("visit_from"); ?>: <?php echo $valid_from_raw ? esc(format_to_date($valid_from_raw)) : "-"; ?></span>
+                                        <span><?php echo app_lang("visit_to"); ?>: <?php echo $valid_to_raw ? esc(format_to_date($valid_to_raw)) : "-"; ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="gp-issued-pass-actions">
+                                <a href="<?php echo esc($qr_download_url); ?>" class="btn btn-primary gp-btn-primary gp-pro-btn" target="_blank" download>
+                                    <i data-feather="download" class="icon-16"></i> <?php echo app_lang("download_qr_code"); ?>
+                                </a>
+                                <a href="<?php echo esc($pdf_url); ?>" class="btn btn-default gp-detail-btn-secondary gp-pro-btn" target="_blank" rel="noopener">
+                                    <i data-feather="file-text" class="icon-16"></i> <?php echo app_lang("gate_pass_download_pdf"); ?>
+                                </a>
+                            </div>
                         </div>
-                    <?php endif; ?>
-                    <div class="d-flex flex-wrap align-items-stretch gap-2">
-                        <a href="<?php echo get_uri("gate_pass_portal/download_qr/" . (int)$request->id); ?>" class="btn btn-primary gp-btn-primary gp-pro-btn" target="_blank" download>
-                            <i data-feather="download" class="icon-16"></i> <?php echo app_lang("download_qr_code"); ?>
-                        </a>
-                        <a href="<?php echo get_uri("gate_pass_portal/download_gate_pass_pdf/" . (int)$request->id); ?>" class="btn btn-default gp-detail-btn-secondary gp-pro-btn" target="_blank" rel="noopener">
-                            <i data-feather="file-text" class="icon-16"></i> <?php echo app_lang("gate_pass_download_pdf"); ?>
-                        </a>
-                    </div>
-                    <p class="text-off font-12 mb0 mt10"><?php echo app_lang("gate_pass_pdf_hint"); ?></p>
+                    <?php endforeach; ?>
                 </div>
+                <p class="text-off font-12 mb0 mt10"><?php echo app_lang("gate_pass_pdf_hint"); ?></p>
             </div>
         </div>
     <?php endif; ?>
@@ -768,6 +817,15 @@ if ($return_stage_label === $return_stage_lang_key) {
 .gp-muted { color: rgba(0,0,0,.55); }
 .gp-qr-wrap { padding: 8px; border: 1px solid rgba(0,0,0,.08); border-radius: 12px; background: #fff; }
 .gp-qr-img { display: block; border-radius: 8px; }
+.gp-issued-pass-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.gp-issued-pass-card { border: 1px solid rgba(15,23,42,.08); border-radius: 14px; padding: 14px; background: linear-gradient(180deg, #fff, rgba(248,250,252,.85)); box-shadow: 0 8px 24px rgba(15,23,42,.05); }
+.gp-issued-pass-main { display: flex; gap: 14px; align-items: flex-start; }
+.gp-issued-pass-info { flex: 1; min-width: 0; }
+.gp-issued-pass-topline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.gp-issued-pass-no { font-size: 12px; color: var(--gp-d-muted); font-weight: 700; }
+.gp-issued-pass-holder { margin: 0 0 8px; font-size: 16px; font-weight: 800; color: var(--gp-d-ink); line-height: 1.25; }
+.gp-issued-pass-meta { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; }
+.gp-issued-pass-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 /* Soft badges */
 .badge-soft-secondary { background: rgba(108,117,125,.15); color:#2f343a; border:1px solid rgba(108,117,125,.25); }

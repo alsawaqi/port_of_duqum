@@ -5,11 +5,49 @@ namespace App\Models;
 class Tender_evaluations_model extends Crud_model
 {
     protected $table = null;
+    private static bool $late_evaluation_audit_schema_checked = false;
 
     public function __construct()
     {
         $this->table = "tender_evaluations";
         parent::__construct($this->table);
+        $this->ensure_late_evaluation_audit_schema();
+    }
+
+    public function ensure_late_evaluation_audit_schema(): void
+    {
+        if (self::$late_evaluation_audit_schema_checked) {
+            return;
+        }
+
+        $table = $this->db->prefixTable("tender_evaluations");
+        $columns = [
+            "review_started_at" => "ALTER TABLE `$table` ADD COLUMN `review_started_at` DATETIME DEFAULT NULL AFTER `comments`",
+            "review_duration_seconds" => "ALTER TABLE `$table` ADD COLUMN `review_duration_seconds` INT(11) DEFAULT NULL AFTER `review_started_at`",
+            "deadline_at" => "ALTER TABLE `$table` ADD COLUMN `deadline_at` DATETIME DEFAULT NULL AFTER `review_duration_seconds`",
+            "submitted_after_deadline" => "ALTER TABLE `$table` ADD COLUMN `submitted_after_deadline` TINYINT(1) NOT NULL DEFAULT 0 AFTER `deadline_at`",
+            "late_review_status" => "ALTER TABLE `$table` ADD COLUMN `late_review_status` ENUM('pending','accepted','rejected') DEFAULT NULL AFTER `submitted_after_deadline`",
+            "late_reviewed_by" => "ALTER TABLE `$table` ADD COLUMN `late_reviewed_by` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `late_review_status`",
+            "late_reviewed_at" => "ALTER TABLE `$table` ADD COLUMN `late_reviewed_at` DATETIME DEFAULT NULL AFTER `late_reviewed_by`",
+            "late_review_comment" => "ALTER TABLE `$table` ADD COLUMN `late_review_comment` TEXT DEFAULT NULL AFTER `late_reviewed_at`",
+        ];
+
+        foreach ($columns as $column => $sql) {
+            if (!$this->_column_exists($table, $column)) {
+                $this->db->query($sql);
+            }
+        }
+
+        self::$late_evaluation_audit_schema_checked = true;
+    }
+
+    private function _column_exists(string $table, string $column): bool
+    {
+        $row = $this->db->query(
+            "SHOW COLUMNS FROM `$table` LIKE " . $this->db->escape($column)
+        )->getRow();
+
+        return (bool) $row;
     }
 
     public function get_evaluator_stage_evaluations(int $tender_id, int $evaluator_id, string $type = "technical"): array

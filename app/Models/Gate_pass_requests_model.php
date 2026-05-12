@@ -19,6 +19,7 @@ class Gate_pass_requests_model extends Crud_model
         $departments = $this->db->prefixTable("departments");
         $purposes = $this->db->prefixTable("gate_pass_purposes");
         $users = $this->db->prefixTable("users");
+        $visitors = $this->db->prefixTable("gate_pass_request_visitors");
 
         $where = "WHERE $requests.deleted=0";
 
@@ -96,6 +97,16 @@ class Gate_pass_requests_model extends Crud_model
             $where .= " AND $requests.gate_pass_purpose_id=" . (int)$gate_pass_purpose_id;
         }
 
+        $nationality = trim((string)get_array_value($options, "nationality"));
+        if ($nationality !== "") {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM $visitors gp_nat
+                WHERE gp_nat.gate_pass_request_id=$requests.id
+                  AND gp_nat.deleted=0
+                  AND TRIM(gp_nat.nationality)=" . $this->db->escape($nationality) . "
+            )";
+        }
+
         // filter by date range (visit_from date)
         $date_from = get_array_value($options, "date_from");
         if ($date_from) {
@@ -114,7 +125,14 @@ class Gate_pass_requests_model extends Crud_model
                     $users.first_name AS requester_first_name,
                     $users.last_name AS requester_last_name,
                     COALESCE($users.phone, $users.alternative_phone) AS requester_phone,
-                    CONCAT($users.first_name,' ',$users.last_name) AS requester_name
+                    CONCAT($users.first_name,' ',$users.last_name) AS requester_name,
+                    (
+                        SELECT GROUP_CONCAT(DISTINCT TRIM(gpv.nationality) ORDER BY TRIM(gpv.nationality) SEPARATOR ', ')
+                        FROM $visitors gpv
+                        WHERE gpv.gate_pass_request_id=$requests.id
+                          AND gpv.deleted=0
+                          AND TRIM(COALESCE(gpv.nationality, '')) <> ''
+                    ) AS visitor_nationalities
                 FROM $requests
                 LEFT JOIN $companies ON $companies.id = $requests.company_id
                 LEFT JOIN $departments ON $departments.id = $requests.department_id

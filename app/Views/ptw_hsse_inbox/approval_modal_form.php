@@ -12,6 +12,16 @@
         </select>
     </div>
 
+    <div class="form-group" id="ptw-hsse-terminal-required-wrap">
+        <div class="form-check">
+            <input type="checkbox" name="terminal_approval_not_required" id="ptw-hsse-terminal-not-required" class="form-check-input" value="1" />
+            <label class="form-check-label" for="ptw-hsse-terminal-not-required">
+                Terminal approval is not required for this PTW
+            </label>
+        </div>
+        <small class="text-off">If checked, the PTW will be issued automatically after HMO approval.</small>
+    </div>
+
     <div class="form-group" id="ptw-hsse-reason-select-wrap" style="display:none;">
         <label><?php echo app_lang("reason"); ?> <span class="text-off">(<?php echo app_lang("optional"); ?>)</span></label>
         <select name="reason_id" id="ptw-hsse-reason-id" class="form-control">
@@ -52,10 +62,13 @@ $(document).ready(function () {
         $("#ptw-hsse-reason-select-wrap").toggle(needReason);
         $("#ptw-hsse-status-reason-wrap").toggle(needReason);
         $("#ptw-hsse-status-reason").prop("required", needReason);
+        $("#ptw-hsse-terminal-required-wrap").toggle(decision === "approved");
 
         if (!needReason) {
             $("#ptw-hsse-reason-id").val("0");
             $("#ptw-hsse-status-reason").val("");
+        } else {
+            $("#ptw-hsse-terminal-not-required").prop("checked", false);
         }
     }
 

@@ -4,6 +4,9 @@ $request = $request ?? null;
 $existing_team_ids = $existing_team_ids ?? ["technical" => [], "commercial" => [], "chairman" => 0, "secretary" => 0, "itc_member" => []];
 $existing_required_codes = $existing_required_codes ?? [];
 $bid_requirement_labels = $bid_requirement_labels ?? [];
+$testing_stage_options = $testing_stage_options ?? ["" => "- Keep normal date-based flow -"];
+$procurement_manager_status = (string)($tender->procurement_manager_status ?? "draft");
+$can_publish_after_manager_approval = $procurement_manager_status === "approved";
 
 $dtValue = function ($value) {
     if (empty($value)) {
@@ -23,7 +26,7 @@ $dtValue = function ($value) {
         <?php if (!empty($request->id)) { ?>
             <div class="alert alert-info">
                 This tender is linked to request <strong><?php echo esc($request->reference); ?></strong>.
-                Procurement can still complete the tender setup here and publish it directly.
+                Procurement can complete the setup here and submit it for procurement manager approval.
             </div>
         <?php } else { ?>
             <div class="alert alert-info">
@@ -101,13 +104,35 @@ $dtValue = function ($value) {
             </div>
             <div class="col-md-6">
                 <div class="form-group">
-                    <label>Publish After Save</label>
+                    <label><?php echo $can_publish_after_manager_approval ? "Publish After Manager Approval" : "Submit for Procurement Manager Approval"; ?></label>
                     <div class="mt10">
                         <label class="form-check">
-                            <input type="checkbox" class="form-check-input" name="publish_now" value="1" <?php echo (($tender->status ?? "draft") === "published" ? "" : "checked"); ?>>
-                            <span class="form-check-label">Release tender immediately after saving</span>
+                            <?php if ($can_publish_after_manager_approval) { ?>
+                                <input type="checkbox" class="form-check-input" name="publish_now" value="1" <?php echo (($tender->status ?? "draft") === "published" ? "" : "checked"); ?>>
+                                <span class="form-check-label">Release tender immediately after saving</span>
+                            <?php } else { ?>
+                                <input type="checkbox" class="form-check-input" name="submit_for_approval" value="1" checked>
+                                <span class="form-check-label">Send this tender to the procurement manager before publishing</span>
+                            <?php } ?>
                         </label>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Tender Fees (OMR)</label>
+                    <?php echo form_input([
+                        "name" => "tender_fee",
+                        "type" => "number",
+                        "step" => "0.001",
+                        "min" => "0",
+                        "value" => esc($tender->tender_fee ?? $request->tender_fee ?? ""),
+                        "class" => "form-control",
+                        "placeholder" => "0.000",
+                    ]); ?>
                 </div>
             </div>
         </div>
@@ -115,6 +140,18 @@ $dtValue = function ($value) {
         <div class="form-group">
             <label>Brief Description</label>
             <textarea name="brief_description" class="form-control" rows="3"><?php echo esc($tender->brief_description ?? $request->brief_description ?? ""); ?></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Temporary Testing Stage</label>
+            <?php
+            echo form_dropdown(
+                "testing_workflow_stage",
+                $testing_stage_options,
+                "",
+                "class='form-control select2' id='testing_workflow_stage'"
+            );
+            ?>
         </div>
 
         <hr>
@@ -155,7 +192,7 @@ $dtValue = function ($value) {
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Tender Submission Deadline</label>
-                    <input type="datetime-local" name="closing_at" class="form-control" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>" required>
+                    <input type="datetime-local" name="closing_at" class="form-control" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>">
                 </div>
             </div>
             <div class="col-md-6">

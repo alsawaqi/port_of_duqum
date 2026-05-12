@@ -3,12 +3,16 @@ $summary = $summary ?? [];
 $timeline = $timeline ?? [];
 $teams = $teams ?? [];
 $vendors = $vendors ?? [];
+$weighted_evaluation_scores = $weighted_evaluation_scores ?? [];
 $technical_evaluations = $technical_evaluations ?? [];
 $commercial_evaluations = $commercial_evaluations ?? [];
 $communications = $communications ?? [];
 $extensions = $extensions ?? [];
 $workflow_history = $workflow_history ?? [];
 $opening_audit = $opening_audit ?? [];
+$opening_session = $opening_session ?? null;
+$opening_signatures = $opening_signatures ?? [];
+$proposal_review = $proposal_review ?? null;
 $tender_documents = $tender_documents ?? [];
 $document_access = $document_access ?? [];
 $rfq_detail = $rfq_detail ?? null;
@@ -27,6 +31,22 @@ $money_value = function ($value, string $currency = "OMR") {
     return number_format((float) $value, 3) . " " . esc($currency);
 };
 
+$score_value = function ($value, int $decimals = 3) {
+    if ($value === null || $value === "" || !is_numeric($value)) {
+        return "-";
+    }
+
+    return number_format((float) $value, $decimals);
+};
+
+$percent_value = function ($value) {
+    if ($value === null || $value === "" || !is_numeric($value)) {
+        return "-";
+    }
+
+    return number_format((float) $value, 2) . "%";
+};
+
 $status_badge = function ($status) {
     $status = strtolower((string) $status);
     $class = [
@@ -38,20 +58,20 @@ $status_badge = function ($status) {
         "bidding" => "bg-primary",
         "technical_3key" => "bg-warning text-dark",
         "technical" => "bg-info text-dark",
-        "committee_3key" => "bg-warning text-dark",
         "commercial" => "bg-primary",
         "award_decision" => "bg-success",
         "submitted" => "bg-info text-dark",
         "accepted" => "bg-success",
+        "approved" => "bg-success",
         "rejected" => "bg-danger",
         "opened" => "bg-info text-dark",
         "sent" => "bg-secondary",
+        "pending_approval" => "bg-warning text-dark",
         "declined" => "bg-danger",
     ][$status] ?? "bg-light text-dark";
 
     $label = [
-        "technical_3key" => "3-Key Technical Opening",
-        "committee_3key" => "3-Key Commercial Opening",
+        "technical_3key" => "Bid Opening",
     ][$status] ?? ucwords(str_replace("_", " ", $status ?: "-"));
 
     return "<span class='badge $class'>" . esc($label) . "</span>";
@@ -119,14 +139,23 @@ $milestone_label = function ($code) {
 
 $workflow_stage_options = [
     "bidding" => "Bid Submission / Bidding",
-    "technical_3key" => "3-Key Technical Opening",
+    "technical_3key" => "Bid Opening",
     "technical" => "Technical Evaluation",
-    "committee_3key" => "3-Key Commercial Opening",
     "commercial" => "Commercial Evaluation",
     "award_decision" => "Award Decision",
 ];
 
 $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
+$opening_status = (string) ($opening_session->status ?? "");
+$opening_ready_for_technical = in_array($opening_status, ["signed", "manual_accepted"], true)
+    && (string) ($tender->status ?? "") === "closed"
+    && (string) ($tender->workflow_stage ?? "") === "technical_3key";
+$opening_signature_roles = ["chairman" => false, "secretary" => false, "itc_member" => false];
+foreach ($opening_signatures as $signature) {
+    if (!empty($signature->signed_at) && array_key_exists((string) ($signature->role ?? ""), $opening_signature_roles)) {
+        $opening_signature_roles[(string) $signature->role] = true;
+    }
+}
 ?>
 
 <div id="page-content" class="page-wrapper clearfix gp-pro-page tender-report-page">
@@ -151,11 +180,8 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                         <a href="<?php echo get_uri("tender_procurement_inbox/form?tender_id=" . (int) $tender->id); ?>" class="btn btn-default btn-sm">
                             <i data-feather="calendar" class="icon-14"></i> Edit Schedule
                         </a>
-                        <a href="<?php echo get_uri("tender_reports/bid_opening_form/" . (int) $tender->id . "/technical"); ?>" class="btn btn-default btn-sm" target="_blank">
-                            <i data-feather="clipboard" class="icon-14"></i> Technical Opening Form
-                        </a>
-                        <a href="<?php echo get_uri("tender_reports/bid_opening_form/" . (int) $tender->id . "/commercial"); ?>" class="btn btn-default btn-sm" target="_blank">
-                            <i data-feather="file-text" class="icon-14"></i> Commercial Opening Form
+                        <a href="<?php echo get_uri("tender_reports/bid_opening_form/" . (int) $tender->id); ?>" class="btn btn-default btn-sm" target="_blank">
+                            <i data-feather="clipboard" class="icon-14"></i> Bid Opening Form
                         </a>
                     </div>
                 </div>
@@ -245,6 +271,133 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
         </div>
     <?php } ?>
 
+    <?php if ($can_override_workflow && (string) ($tender->status ?? "") === "closed" && (string) ($tender->workflow_stage ?? "") === "technical_3key") { ?>
+        <div class="card gp-pro-card mb15 tender-opening-control">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb15">
+                    <div>
+                        <h4 class="mb5">Procurement Proposal Review</h4>
+                        <div class="text-off">After bid opening, procurement reviews both technical and commercial proposals before sending the tender to the concerned evaluation department.</div>
+                    </div>
+                    <span class="badge bg-light text-dark"><?php echo esc(ucwords(str_replace("_", " ", $opening_status ?: "pending"))); ?></span>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb10">
+                        <div class="tender-report-stat">
+                            <div class="text-off">Chairman Signature</div>
+                            <strong><?php echo $opening_signature_roles["chairman"] ? "Signed" : ($opening_status === "manual_accepted" ? "Bypassed" : "-"); ?></strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb10">
+                        <div class="tender-report-stat">
+                            <div class="text-off">Secretary / Member</div>
+                            <strong><?php echo ($opening_signature_roles["secretary"] && $opening_signature_roles["itc_member"]) ? "Signed" : ($opening_status === "manual_accepted" ? "Bypassed" : "-"); ?></strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb10">
+                        <div class="tender-report-stat">
+                            <div class="text-off">Next Action</div>
+                            <strong><?php echo $opening_ready_for_technical ? "Proposal Review" : "Waiting"; ?></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <?php if ($opening_ready_for_technical) { ?>
+                    <div class="proposal-review-documents table-responsive mt10 mb20">
+                        <table class="table table-bordered table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Vendor</th>
+                                    <th>Bid</th>
+                                    <th>Technical Proposal</th>
+                                    <th>Commercial Proposal</th>
+                                    <th>Bank Guarantee</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                $submitted_review_rows = 0;
+                                foreach ($vendors as $vendor) {
+                                    if (empty($vendor->bid_id)) {
+                                        continue;
+                                    }
+                                    $submitted_review_rows++;
+                                    $priced_doc_id = $vendor->commercial_priced_doc_id ?: $vendor->commercial_legacy_doc_id;
+                                ?>
+                                    <tr>
+                                        <td><strong><?php echo esc($vendor->vendor_name ?? "-"); ?></strong><br><span class="text-off"><?php echo esc($vendor->email ?? "-"); ?></span></td>
+                                        <td><?php echo $status_badge($vendor->bid_status ?? "submitted"); ?><br><span class="text-off"><?php echo $date_value($vendor->submitted_at ?? null); ?></span></td>
+                                        <td><?php echo $doc_button($vendor->technical_doc_id ?? 0, "technical", "Technical"); ?></td>
+                                        <td>
+                                            <?php echo $doc_button($vendor->commercial_unpriced_doc_id ?? 0, "commercial_unpriced", "Without Price"); ?>
+                                            <?php echo $doc_button($priced_doc_id, "commercial_priced", "With Price"); ?>
+                                        </td>
+                                        <td><?php echo $doc_button($vendor->bank_guarantee_doc_id ?? 0, "bank_guarantee", "Bank Guarantee"); ?></td>
+                                    </tr>
+                                <?php } ?>
+                                <?php if (!$submitted_review_rows) { ?>
+                                    <tr><td colspan="5" class="text-center text-off p20">No submitted bid documents are available for procurement review.</td></tr>
+                                <?php } ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php } ?>
+
+                <div class="row mt10">
+                    <div class="col-md-6">
+                        <?php echo form_open_multipart(get_uri("tender_reports/save_manual_bid_opening_form"), [
+                            "id" => "manual-bid-opening-form",
+                            "class" => "general-form",
+                            "role" => "form"
+                        ]); ?>
+                            <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+                            <div class="form-group">
+                                <label>Upload Manual Signed Bid Opening Form</label>
+                                <input type="file" name="manual_bid_opening_form" class="form-control" required>
+                            </div>
+                            <button type="submit" class="btn btn-default">
+                                <i data-feather="upload" class="icon-16"></i> Upload Manual Form
+                            </button>
+                        <?php echo form_close(); ?>
+                    </div>
+                    <div class="col-md-6">
+                        <?php echo form_open(get_uri("tender_reports/start_technical_review"), [
+                            "id" => "start-technical-review-form",
+                            "class" => "general-form",
+                            "role" => "form"
+                        ]); ?>
+                            <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+                            <div class="form-group mb10">
+                                <label class="d-flex align-items-center gap-2">
+                                    <input type="checkbox" name="technical_proposals_reviewed" value="1" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>>
+                                    <span>Confirm technical proposals reviewed</span>
+                                </label>
+                            </div>
+                            <div class="form-group mb10">
+                                <label class="d-flex align-items-center gap-2">
+                                    <input type="checkbox" name="commercial_proposals_reviewed" value="1" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>>
+                                    <span>Confirm commercial proposals reviewed</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>Procurement Review Note</label>
+                                <textarea name="proposal_review_note" class="form-control" rows="3" placeholder="Optional note before sending to evaluation team" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Technical Review Open Until</label>
+                                <input type="datetime-local" name="technical_end_at" class="form-control" value="<?php echo esc($default_open_until); ?>">
+                            </div>
+                            <button type="submit" class="btn btn-primary" title="Start Technical Review" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>>
+                                <i data-feather="play-circle" class="icon-16"></i> Confirm Review & Send to Technical Evaluation
+                            </button>
+                        <?php echo form_close(); ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php } ?>
+
     <div class="card gp-pro-card">
         <div class="card-body p0">
             <ul class="nav nav-tabs tender-report-tabs" role="tablist">
@@ -317,10 +470,10 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr><td>Technical Proposal</td><td>Technical evaluators, procurement, and admin after technical 3-key opening.</td><td><?php echo !empty($document_access["technical"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
-                                <tr><td>Commercial Proposal Without Price</td><td>Commercial evaluators, procurement, and admin after commercial 3-key opening.</td><td><?php echo !empty($document_access["commercial_unpriced"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
-                                <tr><td>Commercial Proposal With Price</td><td>Commercial evaluators, procurement, and admin after commercial 3-key opening only.</td><td><?php echo !empty($document_access["commercial_priced"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
-                                <tr><td>Bank Guarantee Documents</td><td>Commercial evaluators, procurement, and admin after commercial 3-key opening.</td><td><?php echo !empty($document_access["bank_guarantee"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
+                                <tr><td>Technical Proposal</td><td>Technical evaluators, procurement, and admin after the single 3-key bid opening is completed.</td><td><?php echo !empty($document_access["technical"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
+                                <tr><td>Commercial Proposal Without Price</td><td>Commercial evaluators, procurement, and admin after the single 3-key bid opening is completed.</td><td><?php echo !empty($document_access["commercial_unpriced"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
+                                <tr><td>Commercial Proposal With Price</td><td>Commercial evaluators, procurement, and admin after the single 3-key bid opening is completed.</td><td><?php echo !empty($document_access["commercial_priced"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
+                                <tr><td>Bank Guarantee Documents</td><td>Commercial evaluators, procurement, and admin after the single 3-key bid opening is completed.</td><td><?php echo !empty($document_access["bank_guarantee"]) ? "<span class='badge bg-success'>Open</span>" : "<span class='badge bg-warning text-dark'>3-Key Locked</span>"; ?></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -333,8 +486,8 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                             <div class="table-responsive">
                                 <table class="table table-bordered table-striped">
                                     <tbody>
-                                        <tr><th>RFQ No</th><td><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></td></tr>
-                                        <tr><th>RFQ Date</th><td><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></td></tr>
+                                        <tr><th>Reference Number</th><td><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></td></tr>
+                                        <tr><th>Request Date</th><td><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></td></tr>
                                         <tr><th>PR No</th><td><?php echo esc($rfq_detail->pr_no ?? "-"); ?></td></tr>
                                         <tr><th>Delivery Location</th><td><?php echo esc($rfq_detail->delivery_location ?? "-"); ?></td></tr>
                                         <tr><th>INCOTERM</th><td><?php echo esc($rfq_detail->incoterm ?? "-"); ?></td></tr>
@@ -420,6 +573,7 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                                 <tr>
                                     <th>Vendor</th>
                                     <th>Invite</th>
+                                    <th>Participation Approval</th>
                                     <th>Bid</th>
                                     <th>Submitted</th>
                                     <th>Amount</th>
@@ -430,14 +584,46 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                             </thead>
                             <tbody>
                                 <?php if (!$vendors) { ?>
-                                    <tr><td colspan="8" class="text-center text-off p20">No vendor participation recorded.</td></tr>
+                                    <tr><td colspan="9" class="text-center text-off p20">No vendor participation recorded.</td></tr>
                                 <?php } ?>
                                 <?php foreach ($vendors as $vendor) {
                                     $priced_doc_id = $vendor->commercial_priced_doc_id ?: $vendor->commercial_legacy_doc_id;
+                                    $participation_status = strtolower((string) ($vendor->invite_status ?? ""));
                                 ?>
                                     <tr>
                                         <td><strong><?php echo esc($vendor->vendor_name ?? "-"); ?></strong><br><span class="text-off"><?php echo esc($vendor->email ?? "-"); ?></span></td>
                                         <td><?php echo $status_badge($vendor->invite_status ?? "-"); ?><br><span class="text-off"><?php echo $date_value($vendor->invited_at ?? null); ?></span></td>
+                                        <td>
+                                            <?php if ($participation_status === "pending_approval") { ?>
+                                                <?php echo $status_badge("pending_approval"); ?>
+                                                <?php if ($can_override_workflow) { ?>
+                                                    <div class="mt10 d-flex flex-wrap gap-1">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-success btn-sm tender-vendor-participation-action"
+                                                            data-action-url="<?php echo get_uri("tender_reports/approve_vendor_participation"); ?>"
+                                                            data-tender-id="<?php echo (int) $tender->id; ?>"
+                                                            data-vendor-id="<?php echo (int) $vendor->vendor_id; ?>">
+                                                            <i data-feather="check" class="icon-14"></i> Approve participation
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-danger btn-sm tender-vendor-participation-action"
+                                                            data-action-url="<?php echo get_uri("tender_reports/reject_vendor_participation"); ?>"
+                                                            data-tender-id="<?php echo (int) $tender->id; ?>"
+                                                            data-vendor-id="<?php echo (int) $vendor->vendor_id; ?>">
+                                                            <i data-feather="x" class="icon-14"></i> Reject participation
+                                                        </button>
+                                                    </div>
+                                                <?php } ?>
+                                            <?php } elseif (in_array($participation_status, ["approved", "rejected", "declined"], true)) { ?>
+                                                <?php echo $status_badge($participation_status); ?>
+                                            <?php } elseif (in_array($participation_status, ["sent", "delivered", "opened"], true)) { ?>
+                                                <?php echo $status_badge("approved"); ?>
+                                            <?php } else { ?>
+                                                <span class="text-off">No request</span>
+                                            <?php } ?>
+                                        </td>
                                         <td><?php echo $status_badge($vendor->bid_status ?? "not submitted"); ?></td>
                                         <td><?php echo $date_value($vendor->submitted_at ?? null); ?></td>
                                         <td><?php echo $money_value($vendor->total_amount ?? null, $vendor->currency ?? "OMR"); ?></td>
@@ -465,11 +651,84 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                 </div>
 
                 <div class="tab-pane fade tender-report-section" id="tender-report-evaluations" role="tabpanel">
+                    <div class="tender-weighted-ranking mb25">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb15">
+                            <div>
+                                <h4 class="mb5">Weighted Evaluation Ranking</h4>
+                                <div class="text-off">Final score is calculated from the procurement technical and commercial weights for this tender.</div>
+                            </div>
+                            <?php if (!empty($weighted_evaluation_scores)) {
+                                $first_weight_row = $weighted_evaluation_scores[0];
+                            ?>
+                                <span class="badge bg-light text-dark">
+                                    Technical <?php echo $score_value($first_weight_row["technical_weight"] ?? null, 2); ?>% /
+                                    Commercial <?php echo $score_value($first_weight_row["commercial_weight"] ?? null, 2); ?>%
+                                </span>
+                            <?php } ?>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped tender-weighted-score-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Vendor</th>
+                                        <th>Technical Raw</th>
+                                        <th>Technical Weighted</th>
+                                        <th>Commercial Raw</th>
+                                        <th>Commercial Weighted</th>
+                                        <th>Final Weighted Score</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!$weighted_evaluation_scores) { ?>
+                                        <tr><td colspan="8" class="text-center text-off p20">No submitted bids are ready for weighted evaluation.</td></tr>
+                                    <?php } ?>
+                                    <?php foreach ($weighted_evaluation_scores as $index => $row) {
+                                        $is_complete = !empty($row["is_complete"]);
+                                    ?>
+                                        <tr class="<?php echo $is_complete ? "weighted-score-complete" : "weighted-score-incomplete"; ?>">
+                                            <td><span class="badge bg-light text-dark">#<?php echo $index + 1; ?></span></td>
+                                            <td>
+                                                <strong><?php echo esc($row["vendor_name"] ?? "-"); ?></strong>
+                                                <div class="text-off">Bid #<?php echo (int) ($row["bid_id"] ?? 0); ?></div>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo $score_value($row["technical_score"] ?? null); ?></strong>
+                                                <div class="text-off">of <?php echo $score_value($row["technical_score_max"] ?? null); ?> (<?php echo $percent_value($row["technical_percent"] ?? null); ?>)</div>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo $score_value($row["technical_weighted"] ?? null); ?></strong>
+                                                <div class="text-off">of <?php echo $score_value($row["technical_weight"] ?? null); ?> points</div>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo $score_value($row["commercial_score"] ?? null); ?></strong>
+                                                <div class="text-off">of <?php echo $score_value($row["commercial_score_max"] ?? null); ?> (<?php echo $percent_value($row["commercial_percent"] ?? null); ?>)</div>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo $score_value($row["commercial_weighted"] ?? null); ?></strong>
+                                                <div class="text-off">of <?php echo $score_value($row["commercial_weight"] ?? null); ?> points</div>
+                                            </td>
+                                            <td>
+                                                <strong class="final-weighted-score"><?php echo $score_value($row["final_weighted_score"] ?? null); ?></strong>
+                                                <div class="text-off">of <?php echo $score_value($row["max_weighted_score"] ?? null); ?> points</div>
+                                            </td>
+                                            <td>
+                                                <?php echo $is_complete ? "<span class='badge bg-success'>Complete</span>" : "<span class='badge bg-warning text-dark'>Waiting for both evaluations</span>"; ?>
+                                            </td>
+                                        </tr>
+                                    <?php } ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <h4 class="mb15">Technical Evaluation Summary</h4>
-                    <?php echo view("tender_reports/evaluation_table", ["rows" => $technical_evaluations, "status_badge" => $status_badge, "date_value" => $date_value]); ?>
+                    <?php echo view("tender_reports/evaluation_table", ["rows" => $technical_evaluations, "evaluation_attachments" => $technical_evaluation_attachments ?? [], "attachments_label" => "Technical Findings", "status_badge" => $status_badge, "date_value" => $date_value]); ?>
 
                     <h4 class="mb15 mt20">Commercial Evaluation Summary</h4>
-                    <?php echo view("tender_reports/evaluation_table", ["rows" => $commercial_evaluations, "status_badge" => $status_badge, "date_value" => $date_value]); ?>
+                    <?php echo view("tender_reports/evaluation_table", ["rows" => $commercial_evaluations, "evaluation_attachments" => $commercial_evaluation_attachments ?? [], "attachments_label" => "Commercial Findings", "status_badge" => $status_badge, "date_value" => $date_value]); ?>
                 </div>
 
                 <div class="tab-pane fade tender-report-section" id="tender-report-communications" role="tabpanel">
@@ -646,19 +905,20 @@ $default_open_until = date("Y-m-d\\TH:i", strtotime("+1 day"));
                     <h4 class="mb15">3-Key Opening Audit</h4>
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped">
-                            <thead><tr><th>Session</th><th>Stage</th><th>Status</th><th>Generated</th><th>Unlocked</th><th>Member</th><th>Role</th><th>Valid</th><th>IP</th></tr></thead>
+                            <thead><tr><th>Session</th><th>Stage</th><th>Status</th><th>Generated</th><th>Unlocked</th><th>Signed</th><th>Member</th><th>Role</th><th>Valid</th><th>IP</th></tr></thead>
                             <tbody>
                                 <?php if (!$opening_audit) { ?>
-                                    <tr><td colspan="9" class="text-center text-off p20">No 3-key opening audit records.</td></tr>
+                                    <tr><td colspan="10" class="text-center text-off p20">No 3-key opening audit records.</td></tr>
                                 <?php } ?>
                                 <?php foreach ($opening_audit as $audit) { ?>
                                     <tr>
                                         <td>#<?php echo (int) ($audit->opening_id ?? 0); ?></td>
-                                        <td><?php echo esc(ucwords(str_replace("_", " ", $audit->opening_stage ?? "-"))); ?></td>
+                                        <td>Bid Opening</td>
                                         <td><?php echo $status_badge($audit->opening_status ?? "-"); ?></td>
                                         <td><?php echo $date_value($audit->generated_at ?? null); ?></td>
                                         <td><?php echo $date_value($audit->unlocked_at ?? null); ?></td>
-                                        <td><?php echo esc(trim((string) ($audit->member_name ?? "")) ?: ($audit->member_email ?? "-")); ?></td>
+                                        <td><?php echo $date_value($audit->entry_signed_at ?? $audit->signed_at ?? null); ?></td>
+                                        <td><?php echo esc(trim((string) ($audit->signature_name ?? "")) ?: (trim((string) ($audit->member_name ?? "")) ?: ($audit->member_email ?? "-"))); ?></td>
                                         <td><?php echo esc(ucwords(str_replace("_", " ", $audit->role ?? "-"))); ?></td>
                                         <td><?php echo (int) ($audit->is_valid ?? 0) ? "<span class='badge bg-success'>Yes</span>" : "<span class='badge bg-secondary'>No</span>"; ?></td>
                                         <td><?php echo esc($audit->ip_address ?? "-"); ?></td>
@@ -711,6 +971,68 @@ $(document).ready(function () {
         });
     }
 
+    $("#manual-bid-opening-form").appForm({
+        isModal: false,
+        onSuccess: function (response) {
+            appAlert.success(response.message || "Manual form uploaded.", {duration: 2000});
+            setTimeout(function () {
+                window.location.href = response.redirect_url || window.location.href;
+                window.location.reload();
+            }, 450);
+        }
+    });
+
+    $("#start-technical-review-form").appForm({
+        isModal: false,
+        beforeAjaxSubmit: function () {
+            return confirm("Confirm procurement reviewed both technical and commercial proposals, then send this tender to technical evaluation?");
+        },
+        onSuccess: function (response) {
+            appAlert.success(response.message || "Procurement proposal review recorded.", {duration: 2000});
+            setTimeout(function () {
+                window.location.href = response.redirect_url || window.location.href;
+                window.location.reload();
+            }, 450);
+        }
+    });
+
+    $(document).on("click", ".tender-vendor-participation-action", function () {
+        var $button = $(this);
+        var isReject = ($button.data("action-url") || "").indexOf("reject_vendor_participation") !== -1;
+        var message = isReject ? "Reject this vendor participation request?" : "Approve this vendor participation request?";
+
+        if (!confirm(message)) {
+            return;
+        }
+
+        $button.prop("disabled", true);
+        $.ajax({
+            url: $button.data("action-url"),
+            type: "POST",
+            dataType: "json",
+            data: {
+                tender_id: $button.data("tender-id"),
+                vendor_id: $button.data("vendor-id")
+            },
+            success: function (response) {
+                if (response && response.success) {
+                    appAlert.success(response.message || "Participation decision saved.", {duration: 2000});
+                    setTimeout(function () {
+                        window.location.href = response.redirect_url || window.location.href;
+                        window.location.reload();
+                    }, 450);
+                } else {
+                    $button.prop("disabled", false);
+                    appAlert.error((response && response.message) || "Participation decision failed.");
+                }
+            },
+            error: function () {
+                $button.prop("disabled", false);
+                appAlert.error("Participation decision failed.");
+            }
+        });
+    });
+
     $('button[data-bs-toggle="tab"]').on("shown.bs.tab", function () {
         if (typeof feather !== "undefined") {
             feather.replace();
@@ -756,6 +1078,26 @@ $(document).ready(function () {
 }
 .tender-workflow-control {
     border-left: 4px solid #2f66f2;
+}
+.tender-opening-control {
+    border-left: 4px solid #1fa97a;
+}
+.tender-weighted-ranking {
+    border: 1px solid #dce8f8;
+    background: #fbfdff;
+    border-radius: 10px;
+    padding: 16px;
+}
+.tender-weighted-score-table th {
+    background: #f4f7fb;
+    color: #23324d;
+}
+.tender-weighted-score-table .final-weighted-score {
+    color: #1f6f4a;
+    font-size: 18px;
+}
+.weighted-score-incomplete {
+    opacity: 0.82;
 }
 .tender-timeline {
     position: relative;

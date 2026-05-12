@@ -3615,6 +3615,195 @@ if (!function_exists('gate_pass_requester_can_edit_request')) {
     }
 }
 
+if (!function_exists('gate_pass_visit_duration_days')) {
+
+    /**
+     * Count the assigned visit window as inclusive calendar days.
+     * Example: May 10 to May 10 = 1 day, May 10 to May 12 = 3 days.
+     */
+    function gate_pass_visit_duration_days(?string $visit_from, ?string $visit_to): int
+    {
+        $visit_from = trim((string) $visit_from);
+        $visit_to = trim((string) $visit_to);
+        if ($visit_from === "" || $visit_to === "") {
+            return 0;
+        }
+
+        try {
+            $start = new \DateTime(substr($visit_from, 0, 10));
+            $end = new \DateTime(substr($visit_to, 0, 10));
+        } catch (\Throwable $e) {
+            return 0;
+        }
+
+        $diff = $start->diff($end);
+        if ($diff->invert) {
+            return 0;
+        }
+
+        return (int) $diff->days + 1;
+    }
+}
+
+if (!function_exists('gate_pass_visit_duration_label')) {
+
+    /**
+     * Human-readable inclusive duration label for request detail cards and reports.
+     */
+    function gate_pass_visit_duration_label(?string $visit_from, ?string $visit_to, string $empty_value = "-"): string
+    {
+        $days = gate_pass_visit_duration_days($visit_from, $visit_to);
+        if ($days < 1) {
+            return $empty_value;
+        }
+
+        return $days . " " . ($days === 1 ? "day" : "days");
+    }
+}
+
+if (!function_exists('gate_pass_validity_status')) {
+
+    /**
+     * Validate a QR/pass against the assigned validity window.
+     *
+     * @return array{status:string,is_valid:bool,label:string,message:string,badge_class:string}
+     */
+    function gate_pass_validity_status(?string $valid_from, ?string $valid_to, ?string $now = null): array
+    {
+        $valid_from = trim((string) $valid_from);
+        $valid_to = trim((string) $valid_to);
+        $now = trim((string) ($now ?: date("Y-m-d H:i:s")));
+
+        $from_ts = $valid_from !== "" ? strtotime($valid_from) : false;
+        $to_ts = $valid_to !== "" ? strtotime($valid_to) : false;
+        $now_ts = strtotime($now);
+
+        if (!$from_ts || !$to_ts || !$now_ts || $to_ts < $from_ts) {
+            return [
+                "status" => "invalid_period",
+                "is_valid" => false,
+                "label" => "Invalid period",
+                "message" => "Gate pass validity period is not configured correctly.",
+                "badge_class" => "bg-secondary",
+            ];
+        }
+
+        if ($now_ts < $from_ts) {
+            return [
+                "status" => "not_yet_valid",
+                "is_valid" => false,
+                "label" => "Not valid yet",
+                "message" => "Gate pass is not valid yet. Valid from " . date("Y-m-d H:i", $from_ts) . ".",
+                "badge_class" => "bg-warning",
+            ];
+        }
+
+        if ($now_ts > $to_ts) {
+            return [
+                "status" => "expired",
+                "is_valid" => false,
+                "label" => "Expired",
+                "message" => "Gate pass has expired. Valid to " . date("Y-m-d H:i", $to_ts) . ".",
+                "badge_class" => "bg-danger",
+            ];
+        }
+
+        return [
+            "status" => "valid",
+            "is_valid" => true,
+            "label" => "Valid now",
+            "message" => "Gate pass is valid for the assigned period.",
+            "badge_class" => "bg-success",
+        ];
+    }
+}
+
+if (!function_exists('gate_pass_issue_targets')) {
+
+    /**
+     * ROP issues one pass per visitor so a group can arrive independently.
+     * When older/vehicle-only data has no visitor rows, keep a request-level fallback pass.
+     *
+     * @param list<object> $visitors
+     * @return list<array{visitor_id:?int,label:string}>
+     */
+    function gate_pass_issue_targets(array $visitors): array
+    {
+        $targets = [];
+        foreach ($visitors as $visitor) {
+            if (!$visitor || !is_object($visitor)) {
+                continue;
+            }
+            if ((int)($visitor->deleted ?? 0) === 1) {
+                continue;
+            }
+
+            $visitor_id = (int)($visitor->id ?? 0);
+            if ($visitor_id < 1) {
+                continue;
+            }
+
+            $label = trim((string)($visitor->full_name ?? ""));
+            if ($label === "") {
+                $label = "Visitor #" . $visitor_id;
+            }
+
+            $targets[] = [
+                "visitor_id" => $visitor_id,
+                "label" => $label,
+            ];
+        }
+
+        if (!$targets) {
+            $targets[] = [
+                "visitor_id" => null,
+                "label" => "Request pass",
+            ];
+        }
+
+        return $targets;
+    }
+}
+
+if (!function_exists('gate_pass_scan_visitor_ids_to_log')) {
+
+    /**
+     * Resolve which visitor rows should receive an entry/exit/check log.
+     *
+     * @param list<int|string> $posted_visitor_ids IDs selected by Security on scan screen.
+     * @param list<int|string> $request_visitor_ids Visitor IDs belonging to the request.
+     * @return list<int|null> Visitor IDs to log; null means request-level / vehicle-only scan.
+     */
+    function gate_pass_scan_visitor_ids_to_log(array $posted_visitor_ids, ?int $assigned_visitor_id, array $request_visitor_ids): array
+    {
+        $valid_ids = [];
+        foreach ($request_visitor_ids as $id) {
+            $id = (int)$id;
+            if ($id > 0) {
+                $valid_ids[$id] = true;
+            }
+        }
+
+        if (!$valid_ids) {
+            return [null];
+        }
+
+        $resolved = [];
+        foreach ($posted_visitor_ids as $id) {
+            $id = (int)$id;
+            if ($id > 0 && isset($valid_ids[$id])) {
+                $resolved[$id] = $id;
+            }
+        }
+
+        if (!$resolved && $assigned_visitor_id && isset($valid_ids[(int)$assigned_visitor_id])) {
+            $resolved[(int)$assigned_visitor_id] = (int)$assigned_visitor_id;
+        }
+
+        return array_values($resolved);
+    }
+}
+
 if (!function_exists('gate_pass_status_after_requester_resubmit')) {
 
     /**
@@ -3940,5 +4129,580 @@ if (!function_exists('gate_pass_audit_stage_label_for_log')) {
         ];
 
         return $map[$stage] ?? $stage;
+    }
+}
+
+if (!function_exists('ptw_is_other_requirement_definition')) {
+
+    function ptw_is_other_requirement_definition($definition): bool
+    {
+        if (!$definition) {
+            return false;
+        }
+
+        $category = strtolower(trim((string)($definition->category ?? "")));
+        if (!in_array($category, ["hazard_document", "ppe", "preparation"], true)) {
+            return false;
+        }
+
+        $label = strtolower(trim((string)($definition->label ?? "")));
+        $code = strtolower(trim((string)($definition->code ?? "")));
+
+        return $label === "other"
+            || in_array($code, ["haz_other_document", "ppe_other", "prep_other"], true)
+            || (bool) preg_match('/(^|_)other($|_)/', $code);
+    }
+}
+
+if (!function_exists('ptw_other_requirement_virtual_id')) {
+
+    function ptw_other_requirement_virtual_id(string $category): int
+    {
+        $map = [
+            "hazard_document" => -9001,
+            "ppe" => -9002,
+            "preparation" => -9003,
+        ];
+
+        return $map[$category] ?? -9000;
+    }
+}
+
+if (!function_exists('ptw_virtual_other_requirement_definition')) {
+
+    function ptw_virtual_other_requirement_definition(string $category): object
+    {
+        $labels = [
+            "hazard_document" => "Other",
+            "ppe" => "Other",
+            "preparation" => "Other",
+        ];
+
+        $text_labels = [
+            "hazard_document" => "Specify document name",
+            "ppe" => "Specify PPE",
+            "preparation" => "Specify preparation",
+        ];
+
+        return (object) [
+            "id" => ptw_other_requirement_virtual_id($category),
+            "category" => $category,
+            "code" => "ptw_default_other_" . $category,
+            "label" => $labels[$category] ?? "Other",
+            "requires_attachment" => $category === "hazard_document" ? 1 : 0,
+            "is_mandatory" => 0,
+            "has_text_input" => 1,
+            "text_label" => $text_labels[$category] ?? "Specify",
+            "allowed_extensions" => $category === "hazard_document" ? "pdf,docx,jpg,jpeg,png,webp" : null,
+            "help_text" => "Default Other option",
+            "is_virtual_other" => 1,
+        ];
+    }
+}
+
+if (!function_exists('ptw_group_definitions_with_default_others')) {
+
+    function ptw_group_definitions_with_default_others(array $defs): array
+    {
+        $grouped = [
+            "hazard_document" => [],
+            "ppe" => [],
+            "preparation" => [],
+            "other" => [],
+        ];
+
+        foreach ($defs as $d) {
+            if (ptw_is_other_requirement_definition($d)) {
+                continue;
+            }
+
+            $cat = (string)($d->category ?? "other");
+            if (!isset($grouped[$cat])) {
+                $grouped[$cat] = [];
+            }
+            $grouped[$cat][] = $d;
+        }
+
+        foreach (["hazard_document", "ppe", "preparation"] as $category) {
+            $grouped[$category][] = ptw_virtual_other_requirement_definition($category);
+        }
+
+        return $grouped;
+    }
+}
+
+if (!function_exists('ptw_terminal_approval_is_required')) {
+
+    function ptw_terminal_approval_is_required($application): bool
+    {
+        return (int)($application->terminal_approval_required ?? 1) !== 0;
+    }
+}
+
+if (!function_exists('ptw_hmo_approval_application_update')) {
+
+    function ptw_hmo_approval_application_update($application, string $now): array
+    {
+        if (ptw_terminal_approval_is_required($application)) {
+            return [
+                "updated_at" => $now,
+                "stage" => "terminal",
+                "status" => "submitted",
+                "completed_at" => null,
+            ];
+        }
+
+        return [
+            "updated_at" => $now,
+            "stage" => "completed",
+            "status" => "approved",
+            "completed_at" => $now,
+        ];
+    }
+}
+
+if (!function_exists('ptw_duration_from_seconds')) {
+
+    function ptw_duration_from_seconds($seconds, string $empty_value = "-"): string
+    {
+        $seconds = max(0, (int)$seconds);
+        if ($seconds <= 0) {
+            return $empty_value;
+        }
+
+        if ($seconds < 60) {
+            return "Less than 1 minute";
+        }
+
+        $units = [
+            "day" => 86400,
+            "hour" => 3600,
+            "minute" => 60,
+        ];
+        $parts = [];
+        foreach ($units as $label => $size) {
+            $value = intdiv($seconds, $size);
+            if ($value > 0) {
+                $parts[] = $value . " " . $label . ($value === 1 ? "" : "s");
+                $seconds -= $value * $size;
+            }
+        }
+
+        return implode(" ", array_slice($parts, 0, 3));
+    }
+}
+
+if (!function_exists('ptw_duration_between')) {
+
+    function ptw_duration_between($start, $end = null, string $empty_value = "-"): string
+    {
+        $start_ts = $start ? strtotime((string)$start) : false;
+        if (!$start_ts) {
+            return $empty_value;
+        }
+
+        $end_ts = $end ? strtotime((string)$end) : time();
+        if (!$end_ts) {
+            return $empty_value;
+        }
+
+        return ptw_duration_from_seconds($end_ts - $start_ts, $empty_value);
+    }
+}
+
+if (!function_exists('ptw_stage_display_label')) {
+
+    function ptw_stage_display_label($stage): string
+    {
+        $stage = strtolower(trim((string)$stage));
+        $map = [
+            "draft" => "Draft",
+            "hsse" => "HSSE",
+            "hmo" => "HMO",
+            "terminal" => "Terminal",
+            "completed" => "Completed",
+        ];
+
+        return $map[$stage] ?? ($stage !== "" ? ucwords(str_replace("_", " ", $stage)) : "-");
+    }
+}
+
+if (!function_exists('ptw_decision_display_label')) {
+
+    function ptw_decision_display_label($decision): string
+    {
+        $decision = strtolower(trim((string)$decision));
+        if ($decision === "") {
+            return "Pending";
+        }
+
+        $map = [
+            "approved" => "Approved",
+            "rejected" => "Rejected",
+            "revise" => "Revision requested",
+        ];
+
+        return $map[$decision] ?? ucwords(str_replace("_", " ", $decision));
+    }
+}
+
+if (!function_exists('ptw_status_display_label')) {
+
+    function ptw_status_display_label($status): string
+    {
+        $status = strtolower(trim((string)$status));
+        if ($status === "") {
+            return "-";
+        }
+
+        $map = [
+            "draft" => "Draft",
+            "submitted" => "Submitted",
+            "approved" => "Approved",
+            "rejected" => "Rejected",
+            "revise" => "Revision requested",
+            "in_review" => "In review",
+        ];
+
+        return $map[$status] ?? ucwords(str_replace("_", " ", $status));
+    }
+}
+
+if (!function_exists('ptw_readable_scalar_value')) {
+
+    function ptw_readable_scalar_value($key, $value): string
+    {
+        if ($value === null || $value === "") {
+            return "-";
+        }
+
+        $key = strtolower(trim((string)$key));
+        if ($key === "stage") {
+            return ptw_stage_display_label($value);
+        }
+        if ($key === "decision") {
+            return ptw_decision_display_label($value);
+        }
+        if (in_array($key, ["status", "previous_status"], true)) {
+            return ptw_status_display_label($value);
+        }
+        if ($key === "terminal_approval_required") {
+            return (int)$value === 0 ? "Not required" : "Required";
+        }
+        if ($key === "terminal_skipped") {
+            return (int)$value === 1 ? "Skipped" : "Not skipped";
+        }
+        if (is_bool($value)) {
+            return $value ? "Yes" : "No";
+        }
+        if (is_array($value)) {
+            $flat = [];
+            foreach ($value as $item) {
+                if (is_scalar($item)) {
+                    $flat[] = (string)$item;
+                }
+            }
+            if ($flat) {
+                return implode(", ", $flat);
+            }
+            $encoded = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            return $encoded !== false ? $encoded : "-";
+        }
+
+        return (string)$value;
+    }
+}
+
+if (!function_exists('ptw_readable_audit_meta_items')) {
+
+    function ptw_readable_audit_meta_items($meta): array
+    {
+        $raw = trim((string)$meta);
+        if ($raw === "") {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [["label" => "Details", "value" => $raw]];
+        }
+
+        $labels = [
+            "stage" => "Stage",
+            "decision" => "Decision",
+            "revision_no" => "Revision",
+            "remarks" => "Comments",
+            "status_change_reason" => "Reason",
+            "previous_status" => "Previous status",
+            "status" => "Status",
+            "terminal_approval_required" => "Terminal approval",
+            "terminal_skipped" => "Terminal step",
+        ];
+
+        $order = [
+            "stage",
+            "decision",
+            "revision_no",
+            "status",
+            "previous_status",
+            "terminal_approval_required",
+            "terminal_skipped",
+            "status_change_reason",
+            "remarks",
+        ];
+
+        $items = [];
+        $seen = [];
+        foreach (array_merge($order, array_keys($decoded)) as $key) {
+            if (isset($seen[$key]) || !array_key_exists($key, $decoded)) {
+                continue;
+            }
+            $seen[$key] = true;
+
+            $value = $decoded[$key];
+            if ($value === null || $value === "") {
+                continue;
+            }
+
+            $items[] = [
+                "label" => $labels[$key] ?? ucwords(str_replace("_", " ", (string)$key)),
+                "value" => ptw_readable_scalar_value($key, $value),
+            ];
+        }
+
+        return $items;
+    }
+}
+
+if (!function_exists('ptw_audit_action_display_label')) {
+
+    function ptw_audit_action_display_label($action): string
+    {
+        $action = strtolower(trim((string)$action));
+        if ($action === "") {
+            return "-";
+        }
+
+        $map = [
+            "applicant_submitted" => "Applicant submitted",
+            "applicant_updated_and_submitted" => "Applicant updated and submitted",
+            "applicant_resubmitted" => "Applicant resubmitted revision",
+            "applicant_created_draft" => "Applicant created draft",
+            "applicant_updated_draft" => "Applicant updated draft",
+            "hsse_approved" => "HSSE approved",
+            "hsse_revise" => "HSSE requested revision",
+            "hsse_rejected" => "HSSE rejected",
+            "hmo_approved" => "HMO approved",
+            "hmo_revise" => "HMO requested revision",
+            "hmo_rejected" => "HMO rejected",
+            "terminal_approved" => "Terminal approved",
+            "terminal_revise" => "Terminal requested revision",
+            "terminal_rejected" => "Terminal rejected",
+        ];
+
+        return $map[$action] ?? ucwords(str_replace("_", " ", $action));
+    }
+}
+
+if (!function_exists('ptw_index_requirement_responses_with_default_others')) {
+
+    function ptw_index_requirement_responses_with_default_others(array $responses, array $defs): array
+    {
+        $legacy_other_categories = [];
+        foreach ($defs as $def) {
+            $id = (int)($def->id ?? 0);
+            if ($id > 0 && ptw_is_other_requirement_definition($def)) {
+                $legacy_other_categories[$id] = (string)($def->category ?? "");
+            }
+        }
+
+        $indexed = [];
+        foreach ($responses as $row) {
+            $definition_id = (int)($row->ptw_requirement_definition_id ?? 0);
+            if ($definition_id > 0) {
+                if (isset($legacy_other_categories[$definition_id])) {
+                    $virtual_id = ptw_other_requirement_virtual_id($legacy_other_categories[$definition_id]);
+                    $indexed[$virtual_id] = $row;
+                } else {
+                    $indexed[$definition_id] = $row;
+                }
+                continue;
+            }
+
+            $text = trim((string)($row->value_text ?? ""));
+            if ($text === "" || ($text[0] ?? "") !== "{") {
+                continue;
+            }
+
+            $decoded = json_decode($text, true);
+            if (
+                is_array($decoded)
+                && (string)($decoded["virtual_type"] ?? "") === "other_requirement"
+                && !empty($decoded["category"])
+            ) {
+                $indexed[ptw_other_requirement_virtual_id((string)$decoded["category"])] = $row;
+            }
+        }
+
+        return $indexed;
+    }
+}
+
+if (!function_exists('ptw_decode_other_requirement_items')) {
+
+    function ptw_decode_other_requirement_items($response): array
+    {
+        if (!$response) {
+            return [];
+        }
+
+        $text = trim((string)($response->value_text ?? ""));
+        $items = [];
+
+        if ($text !== "" && ($text[0] ?? "") === "{") {
+            $decoded = json_decode($text, true);
+            if (is_array($decoded) && isset($decoded["items"]) && is_array($decoded["items"])) {
+                $items = $decoded["items"];
+            }
+        }
+
+        if (!$items) {
+            $label = $text;
+            if ($label === "" && !empty($response->attachment_path)) {
+                $label = "Other";
+            }
+
+            if ((int)($response->is_checked ?? 0) === 1 || $label !== "" || !empty($response->attachment_path)) {
+                $items[] = [
+                    "label" => $label,
+                    "attachment_path" => (string)($response->attachment_path ?? ""),
+                    "attachment_name" => !empty($response->attachment_path) ? basename((string)$response->attachment_path) : "",
+                ];
+            }
+        }
+
+        $clean = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $label = trim((string)($item["label"] ?? ""));
+            $path = trim((string)($item["attachment_path"] ?? ""));
+            $name = trim((string)($item["attachment_name"] ?? ""));
+            $id = (int)($item["attachment_id"] ?? 0);
+
+            if ($label === "" && $path === "") {
+                continue;
+            }
+
+            $clean[] = [
+                "label" => $label,
+                "attachment_id" => $id,
+                "attachment_path" => $path,
+                "attachment_name" => $name !== "" ? $name : ($path !== "" ? basename($path) : ""),
+            ];
+        }
+
+        return $clean;
+    }
+}
+
+if (!function_exists('ptw_format_other_requirement_items_text')) {
+
+    function ptw_format_other_requirement_items_text($response): string
+    {
+        $lines = [];
+        foreach (ptw_decode_other_requirement_items($response) as $item) {
+            $line = trim((string)($item["label"] ?? ""));
+            $attachment = trim((string)($item["attachment_name"] ?? ""));
+            if ($attachment !== "") {
+                $line .= ($line !== "" ? " - " : "") . $attachment;
+            }
+            if ($line !== "") {
+                $lines[] = $line;
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+}
+
+if (!function_exists('vendor_status_options')) {
+
+    function vendor_status_options(): array
+    {
+        return ["new", "pending_payment", "submitted", "approved", "rejected", "revise", "suspended", "expired"];
+    }
+}
+
+if (!function_exists('vendor_initial_registration_status')) {
+
+    function vendor_initial_registration_status(): string
+    {
+        return "new";
+    }
+}
+
+if (!function_exists('vendor_can_access_profile_portal')) {
+
+    function vendor_can_access_profile_portal(?string $status): bool
+    {
+        return in_array(strtolower(trim((string)$status)), vendor_login_allowed_statuses(), true);
+    }
+}
+
+if (!function_exists('vendor_can_access_tender_portal')) {
+
+    function vendor_can_access_tender_portal(?string $status): bool
+    {
+        return in_array(strtolower(trim((string)$status)), vendor_tender_allowed_statuses(), true);
+    }
+}
+
+if (!function_exists('vendor_tender_allowed_statuses')) {
+
+    function vendor_tender_allowed_statuses(): array
+    {
+        return ["new", "pending_payment", "submitted", "approved", "revise"];
+    }
+}
+
+if (!function_exists('vendor_blocked_status')) {
+
+    function vendor_blocked_status(): string
+    {
+        return "suspended";
+    }
+}
+
+if (!function_exists('vendor_login_allowed_statuses')) {
+
+    function vendor_login_allowed_statuses(): array
+    {
+        return ["new", "pending_payment", "submitted", "approved", "revise"];
+    }
+}
+
+if (!function_exists('vendor_grade_label')) {
+
+    function vendor_grade_label(?string $name, ?string $code): string
+    {
+        $name = trim((string)$name);
+        $code = trim((string)$code);
+
+        if ($name !== "" && $code !== "") {
+            return $code . " - " . $name;
+        }
+
+        if ($code !== "") {
+            return $code;
+        }
+
+        if ($name !== "") {
+            return $name;
+        }
+
+        return "-";
     }
 }

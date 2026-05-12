@@ -127,8 +127,7 @@ $module_status = static function ($status): string {
                 <div><small>Bids</small><strong><?php echo (int) ($tenders["bids"] ?? 0); ?></strong></div>
             </div>
             <div class="opr-breakdown"><?php echo $breakdown($tenders["stage"] ?? [], [
-                "technical_3key" => "3-Key Technical",
-                "committee_3key" => "3-Key Commercial",
+                "technical_3key" => "Bid Opening",
                 "award_decision" => "Award Decision",
             ]); ?></div>
         </section>

@@ -1,5 +1,9 @@
 <?php
 $replies = $replies ?? [];
+$attachments = $attachments ?? [];
+$vendors = $vendors ?? [];
+$root_attachments = $attachments[(int) ($clarification->id ?? 0)] ?? [];
+$audience = strtolower((string) ($clarification->internal_audience ?? ""));
 ?>
 
 <div id="page-content" class="page-wrapper clearfix gp-pro-page">
@@ -21,7 +25,7 @@ $replies = $replies ?? [];
             <div class="row">
                 <div class="col-md-6 mb10">
                     <strong>Vendor:</strong><br>
-                    <?php echo esc($vendor->vendor_name ?? '-'); ?>
+                    <?php echo !empty($vendor) ? esc($vendor->vendor_name ?? '-') : "General tender message"; ?>
                 </div>
                 <div class="col-md-6 mb10">
                     <strong>Asked At:</strong><br>
@@ -37,6 +41,16 @@ $replies = $replies ?? [];
         </div>
         <div class="card-body">
             <?php echo nl2br(esc($clarification->message ?? "")); ?>
+            <?php if ($root_attachments) { ?>
+                <div class="d-flex flex-wrap gap-1 mt10">
+                    <?php foreach ($root_attachments as $attachment) { ?>
+                        <a href="<?php echo get_uri("tender_clarifications/download_attachment/" . (int) $attachment->id); ?>" class="btn btn-default btn-sm">
+                            <i data-feather="paperclip" class="icon-14"></i>
+                            <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                        </a>
+                    <?php } ?>
+                </div>
+            <?php } ?>
         </div>
     </div>
 
@@ -61,6 +75,17 @@ $replies = $replies ?? [];
                                 </div>
                             </div>
                             <div class="mt10"><?php echo nl2br(esc($reply->message ?? "")); ?></div>
+                            <?php $reply_attachments = $attachments[(int) ($reply->id ?? 0)] ?? []; ?>
+                            <?php if ($reply_attachments) { ?>
+                                <div class="d-flex flex-wrap gap-1 mt10">
+                                    <?php foreach ($reply_attachments as $attachment) { ?>
+                                        <a href="<?php echo get_uri("tender_clarifications/download_attachment/" . (int) $attachment->id); ?>" class="btn btn-default btn-sm">
+                                            <i data-feather="paperclip" class="icon-14"></i>
+                                            <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                                        </a>
+                                    <?php } ?>
+                                </div>
+                            <?php } ?>
                         </div>
                     </div>
                 <?php } ?>
@@ -75,7 +100,7 @@ $replies = $replies ?? [];
             <h4 class="mb0">Reply To This Question</h4>
         </div>
         <div class="card-body">
-            <?php echo form_open(get_uri("tender_clarifications/save_reply"), [
+            <?php echo form_open_multipart(get_uri("tender_clarifications/save_reply"), [
                 "id" => "tender-clarification-reply-form",
                 "class" => "general-form",
                 "role" => "form"
@@ -84,20 +109,44 @@ $replies = $replies ?? [];
 
                 <div class="form-group">
                     <label>Reply Visibility</label>
-                    <?php echo form_dropdown(
-                        "visibility",
-                        [
-                            "vendor" => "Reply to this vendor only",
-                            "all" => "Publish to all participating vendors",
-                        ],
-                        "vendor",
-                        "class='form-control select2'"
-                    ); ?>
+                    <?php
+                    $visibility_options = [
+                        "all" => "Publish to all participating vendors",
+                    ];
+                    if (!empty($vendor)) {
+                        $visibility_options = ["vendor" => "Reply to this vendor only"] + $visibility_options;
+                    } elseif ($vendors) {
+                        $visibility_options = ["vendor" => "Reply to a selected vendor"] + $visibility_options;
+                    }
+                    if ($audience === "technical") {
+                        $visibility_options["technical"] = "Forward internally to technical team";
+                    } elseif ($audience === "commercial") {
+                        $visibility_options["commercial"] = "Forward internally to commercial team";
+                    }
+                    echo form_dropdown("visibility", $visibility_options, $audience ?: "all", "class='form-control select2'");
+                    ?>
                 </div>
+
+                <?php if (empty($vendor) && $vendors) { ?>
+                    <div class="form-group">
+                        <label>Selected Vendor</label>
+                        <select name="reply_vendor_id" class="form-control select2">
+                            <option value="">- Select vendor when replying to one vendor -</option>
+                            <?php foreach ($vendors as $vendor_row) { ?>
+                                <option value="<?php echo (int) $vendor_row->id; ?>"><?php echo esc($vendor_row->vendor_name ?? "-"); ?></option>
+                            <?php } ?>
+                        </select>
+                    </div>
+                <?php } ?>
 
                 <div class="form-group mb15">
                     <label>Reply Message</label>
                     <textarea name="message" class="form-control" rows="5" required placeholder="Write the clarification response here"></textarea>
+                </div>
+
+                <div class="form-group mb15">
+                    <label>Attach Files</label>
+                    <input type="file" name="clarification_files[]" class="form-control" multiple>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Send Reply</button>

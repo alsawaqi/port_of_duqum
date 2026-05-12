@@ -27,6 +27,157 @@ function ptw_input_class(string $field, array $field_errors): string {
     return isset($field_errors[$field]) ? ' is-invalid' : '';
 }
 
+function ptw_retained_file_badge(string $file_name): string {
+    if ($file_name === '') {
+        return '';
+    }
+
+    return '<div class="mt-1 text-success small"><i data-feather="paperclip" class="icon-13"></i> Retained file: ' . esc($file_name) . '</div>';
+}
+
+function ptw_split_other_definition(array $definitions): array {
+    $regular = [];
+    $other = null;
+
+    foreach ($definitions as $definition) {
+        if (ptw_is_other_requirement_definition($definition)) {
+            $other = $definition;
+            continue;
+        }
+        $regular[] = $definition;
+    }
+
+    return [$regular, $other];
+}
+
+function ptw_other_prefix(string $category): string {
+    return 'other_' . preg_replace('/[^a-z0-9_]/', '', strtolower($category));
+}
+
+function ptw_form_other_items(string $category, $response, array $old): array {
+    $prefix = ptw_other_prefix($category);
+    $old_labels = $old[$prefix . '_label'] ?? null;
+
+    if (is_array($old_labels)) {
+        $old_paths = $old[$prefix . '_existing_path'] ?? [];
+        $old_names = $old[$prefix . '_existing_name'] ?? [];
+        $old_ids = $old[$prefix . '_existing_id'] ?? [];
+        $pending_tokens = $old[$prefix . '_pending_token'] ?? [];
+        $pending_names = $old[$prefix . '_pending_name'] ?? [];
+        $count = max(count($old_labels), count((array)$old_paths), count((array)$old_names), count((array)$old_ids), count((array)$pending_tokens), count((array)$pending_names), 1);
+        $items = [];
+        for ($i = 0; $i < $count; $i++) {
+            $items[] = [
+                'label' => trim((string)($old_labels[$i] ?? '')),
+                'attachment_id' => (int)($old_ids[$i] ?? 0),
+                'attachment_path' => trim((string)($old_paths[$i] ?? '')),
+                'attachment_name' => trim((string)($old_names[$i] ?? '')),
+                'pending_token' => trim((string)($pending_tokens[$i] ?? '')),
+                'pending_name' => trim((string)($pending_names[$i] ?? '')),
+            ];
+        }
+    } else {
+        $items = ptw_decode_other_requirement_items($response);
+    }
+
+    return $items ?: [[
+        'label' => '',
+        'attachment_id' => 0,
+        'attachment_path' => '',
+        'attachment_name' => '',
+        'pending_token' => '',
+        'pending_name' => '',
+    ]];
+}
+
+function ptw_render_other_repeater(string $category, $definition, $response, array $old, array $field_errors): string {
+    if (!$definition) {
+        return '';
+    }
+
+    $prefix = ptw_other_prefix($category);
+    $requires_file = $category === 'hazard_document';
+    $title = [
+        'hazard_document' => 'Other hazard/document',
+        'ppe' => 'Other PPE',
+        'preparation' => 'Other preparation',
+    ][$category] ?? 'Other';
+    $placeholder = [
+        'hazard_document' => 'Specify document name',
+        'ppe' => 'Specify PPE',
+        'preparation' => 'Specify preparation',
+    ][$category] ?? 'Specify';
+    $items = ptw_form_other_items($category, $response, $old);
+
+    $render_row = static function (array $item, int $index, bool $requires_file, string $prefix, string $placeholder) use ($response, $field_errors): string {
+        $attachment_id = (int)($item['attachment_id'] ?? 0);
+        $attachment_path = (string)($item['attachment_path'] ?? '');
+        $attachment_name = (string)($item['attachment_name'] ?? '');
+        $pending_token = (string)($item['pending_token'] ?? '');
+        $pending_name = (string)($item['pending_name'] ?? '');
+        $label_error = "{$prefix}_label_{$index}";
+        $file_error = "{$prefix}_file_{$index}";
+        $download_id = $attachment_id ?: (!empty($response->id) && count(ptw_decode_other_requirement_items($response)) === 1 ? (int)$response->id : 0);
+        $file_html = '';
+
+        if ($requires_file) {
+            $file_html = '<div class="col-md-4">'
+                . '<input type="file" name="' . esc($prefix) . '_file[]" class="form-control form-control-sm' . (isset($field_errors[$file_error]) ? ' is-invalid' : '') . '">'
+                . ($attachment_path !== '' ? '<input type="hidden" name="' . esc($prefix) . '_existing_path[]" value="' . esc($attachment_path) . '">' : '<input type="hidden" name="' . esc($prefix) . '_existing_path[]" value="">')
+                . '<input type="hidden" name="' . esc($prefix) . '_existing_name[]" value="' . esc($attachment_name) . '">'
+                . '<input type="hidden" name="' . esc($prefix) . '_existing_id[]" value="' . $attachment_id . '">'
+                . '<input type="hidden" name="' . esc($prefix) . '_pending_token[]" value="' . esc($pending_token) . '">'
+                . '<input type="hidden" name="' . esc($prefix) . '_pending_name[]" value="' . esc($pending_name) . '">'
+                . ($download_id ? '<div class="mt-1">' . anchor(get_uri('ptw_portal/download_attachment/' . $download_id), '<i data-feather="paperclip" class="icon-13"></i> ' . esc($attachment_name ?: 'Current file'), ['class' => 'link']) . '</div>' : '')
+                . ptw_retained_file_badge($pending_name)
+                . ptw_field_err($file_error, $field_errors)
+                . '</div>';
+        } else {
+            $file_html = '<input type="hidden" name="' . esc($prefix) . '_existing_path[]" value="">'
+                . '<input type="hidden" name="' . esc($prefix) . '_existing_name[]" value="">'
+                . '<input type="hidden" name="' . esc($prefix) . '_existing_id[]" value="0">'
+                . '<input type="hidden" name="' . esc($prefix) . '_pending_token[]" value="">'
+                . '<input type="hidden" name="' . esc($prefix) . '_pending_name[]" value="">';
+        }
+
+        return '<div class="ptw-other-row" data-ptw-other-row>'
+            . '<div class="row align-items-start g-2">'
+            . '<div class="' . ($requires_file ? 'col-md-6' : 'col-md-10') . '">'
+            . '<input type="text" name="' . esc($prefix) . '_label[]" class="form-control form-control-sm' . (isset($field_errors[$label_error]) ? ' is-invalid' : '') . '" placeholder="' . esc($placeholder) . '" value="' . esc($item['label'] ?? '') . '">'
+            . ptw_field_err($label_error, $field_errors)
+            . '</div>'
+            . $file_html
+            . '<div class="col-md-2 text-end">'
+            . '<button type="button" class="btn btn-outline-danger btn-sm" data-ptw-other-remove><i data-feather="trash-2" class="icon-13"></i></button>'
+            . '</div>'
+            . '</div>'
+            . '</div>';
+    };
+
+    $rows = '';
+    foreach ($items as $index => $item) {
+        $rows .= $render_row($item, $index, $requires_file, $prefix, $placeholder);
+    }
+
+    $template = $render_row([
+        'label' => '',
+        'attachment_id' => 0,
+        'attachment_path' => '',
+        'attachment_name' => '',
+        'pending_token' => '',
+        'pending_name' => '',
+    ], 9999, $requires_file, $prefix, $placeholder);
+
+    return '<div class="ptw-other-block" data-ptw-other-category="' . esc($category) . '">'
+        . '<div class="ptw-other-head">'
+        . '<div><strong>' . esc($title) . '</strong><small class="text-muted d-block">Add as many other items as required.</small></div>'
+        . '<button type="button" class="btn btn-outline-primary btn-sm" data-ptw-other-add="' . esc($category) . '"><i data-feather="plus" class="icon-13 me-1"></i>Add</button>'
+        . '</div>'
+        . '<div data-ptw-other-list="' . esc($category) . '">' . $rows . '</div>'
+        . '<template data-ptw-other-template="' . esc($category) . '">' . $template . '</template>'
+        . '</div>';
+}
+
 // Determine which step has errors for auto-scroll
 $step_has_error = [1 => false, 2 => false, 3 => false, 4 => false, 5 => false, 6 => false];
 $step1_fields = ['company_name','applicant_name','applicant_position','contact_phone','contact_email'];
@@ -36,6 +187,9 @@ foreach ($step1_fields as $f) { if (isset($field_errors[$f])) $step_has_error[1]
 foreach ($step2_fields as $f) { if (isset($field_errors[$f])) $step_has_error[2] = true; }
 foreach ($field_errors as $k => $v) {
     if (strpos($k, 'req_') === 0) { $step_has_error[3] = true; $step_has_error[4] = true; $step_has_error[5] = true; }
+    if (strpos($k, 'other_hazard_document_') === 0) { $step_has_error[3] = true; }
+    if (strpos($k, 'other_ppe_') === 0) { $step_has_error[4] = true; }
+    if (strpos($k, 'other_preparation_') === 0) { $step_has_error[5] = true; }
 }
 foreach ($step6_fields as $f) { if (isset($field_errors[$f])) $step_has_error[6] = true; }
 
@@ -131,6 +285,28 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
 .ptw-req-row:hover { border-color: #93c5fd; background: #f8faff; }
 .ptw-req-row.has-error { border-color: #fca5a5; background: #fff5f5; }
 .ptw-req-row.is-checked { border-color: #6ee7b7; background: #f0fdf4; }
+.ptw-other-block {
+    border: 1px dashed #bfdbfe;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 12px;
+    background: #f8fbff;
+}
+.ptw-other-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.ptw-other-row {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: #fff;
+}
+.ptw-other-row:last-child { margin-bottom: 0; }
 
 /* PPE / Prep grid */
 .ptw-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
@@ -397,12 +573,16 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
             <div class="ptw-card-body">
                 <?php
                 $hazard_defs = $definitions_grouped['hazard_document'] ?? [];
-                if (empty($hazard_defs)):
+                [$hazard_regular_defs, $hazard_other_def] = ptw_split_other_definition($hazard_defs);
+                $hazard_other_def = $hazard_other_def ?: ptw_virtual_other_requirement_definition('hazard_document');
+                if (empty($hazard_regular_defs) && !$hazard_other_def):
                 ?>
                     <p class="text-muted mb-0">No hazard / document requirements defined.</p>
-                <?php else: foreach ($hazard_defs as $def):
+                <?php else: foreach ($hazard_regular_defs as $def):
                     $r = ptw_resp($responses, $def->id);
                     $checked = isset($old["req_{$def->id}_checked"]) ? (int)$old["req_{$def->id}_checked"] : ($r ? (int)$r->is_checked : 0);
+                    $pending_token = (string)($old["req_{$def->id}_pending_token"] ?? '');
+                    $pending_name = (string)($old["req_{$def->id}_pending_name"] ?? '');
                     $has_row_error = isset($field_errors["req_{$def->id}_checked"]) || isset($field_errors["req_{$def->id}_text"]) || isset($field_errors["req_{$def->id}_file"]);
                     $row_class = $has_row_error ? 'has-error' : ($checked ? 'is-checked' : '');
                 ?>
@@ -441,9 +621,12 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                                 <input type="file" name="req_<?php echo $def->id; ?>_file"
                                        class="form-control form-control-sm ptw-auto-check-file<?php echo isset($field_errors["req_{$def->id}_file"]) ? ' is-invalid' : ''; ?>"
                                        data-check-target="req_<?php echo $def->id; ?>_checked">
+                                <input type="hidden" name="req_<?php echo $def->id; ?>_pending_token" value="<?php echo esc($pending_token); ?>">
+                                <input type="hidden" name="req_<?php echo $def->id; ?>_pending_name" value="<?php echo esc($pending_name); ?>">
                                 <?php if (!empty($def->allowed_extensions)): ?>
                                     <small class="text-muted"><?php echo esc($def->allowed_extensions); ?></small>
                                 <?php endif; ?>
+                                <?php echo ptw_retained_file_badge($pending_name); ?>
                                 <?php echo ptw_field_err("req_{$def->id}_file", $field_errors); ?>
                             </div>
                             <div class="col-md-2 text-end">
@@ -453,7 +636,9 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                             </div>
                         </div>
                     </div>
-                <?php endforeach; endif; ?>
+                <?php endforeach; ?>
+                    <?php echo ptw_render_other_repeater('hazard_document', $hazard_other_def, $hazard_other_def ? ptw_resp($responses, $hazard_other_def->id) : null, $old, $field_errors); ?>
+                <?php endif; ?>
             </div>
         </div>
         <div class="ptw-nav">
@@ -472,12 +657,14 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
             <div class="ptw-card-body">
                 <?php
                 $ppe_defs = $definitions_grouped['ppe'] ?? [];
-                if (empty($ppe_defs)):
+                [$ppe_regular_defs, $ppe_other_def] = ptw_split_other_definition($ppe_defs);
+                $ppe_other_def = $ppe_other_def ?: ptw_virtual_other_requirement_definition('ppe');
+                if (empty($ppe_regular_defs) && !$ppe_other_def):
                 ?>
                     <p class="text-muted mb-0">No PPE requirements defined.</p>
                 <?php else: ?>
                 <div class="ptw-check-grid">
-                    <?php foreach ($ppe_defs as $def):
+                    <?php foreach ($ppe_regular_defs as $def):
                         $r = ptw_resp($responses, $def->id);
                         $checked = isset($old["req_{$def->id}_checked"]) ? (int)$old["req_{$def->id}_checked"] : (!empty($r) && (int)$r->is_checked === 1 ? 1 : 0);
                         $has_err = isset($field_errors["req_{$def->id}_checked"]) || isset($field_errors["req_{$def->id}_text"]);
@@ -508,6 +695,7 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php echo ptw_render_other_repeater('ppe', $ppe_other_def, $ppe_other_def ? ptw_resp($responses, $ppe_other_def->id) : null, $old, $field_errors); ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -527,12 +715,14 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
             <div class="ptw-card-body">
                 <?php
                 $prep_defs = $definitions_grouped['preparation'] ?? [];
-                if (empty($prep_defs)):
+                [$prep_regular_defs, $prep_other_def] = ptw_split_other_definition($prep_defs);
+                $prep_other_def = $prep_other_def ?: ptw_virtual_other_requirement_definition('preparation');
+                if (empty($prep_regular_defs) && !$prep_other_def):
                 ?>
                     <p class="text-muted mb-0">No preparation requirements defined.</p>
                 <?php else: ?>
                 <div class="ptw-check-grid">
-                    <?php foreach ($prep_defs as $def):
+                    <?php foreach ($prep_regular_defs as $def):
                         $r = ptw_resp($responses, $def->id);
                         $checked = isset($old["req_{$def->id}_checked"]) ? (int)$old["req_{$def->id}_checked"] : (!empty($r) && (int)$r->is_checked === 1 ? 1 : 0);
                         $has_err = isset($field_errors["req_{$def->id}_checked"]) || isset($field_errors["req_{$def->id}_text"]);
@@ -562,6 +752,7 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php echo ptw_render_other_repeater('preparation', $prep_other_def, $prep_other_def ? ptw_resp($responses, $prep_other_def->id) : null, $old, $field_errors); ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -926,6 +1117,72 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
             }
             checkbox.dispatchEvent(new Event('change'));
         });
+    });
+
+    document.querySelectorAll('[data-ptw-other-add]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var category = this.getAttribute('data-ptw-other-add');
+            var template = document.querySelector('[data-ptw-other-template="' + category + '"]');
+            var list = document.querySelector('[data-ptw-other-list="' + category + '"]');
+            if (!template || !list) {
+                return;
+            }
+
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = template.innerHTML;
+            var row = wrapper.firstElementChild;
+            if (!row) {
+                return;
+            }
+
+            row.querySelectorAll('input').forEach(function (input) {
+                input.value = '';
+            });
+            list.appendChild(row);
+            if (window.feather) {
+                window.feather.replace();
+            }
+        });
+    });
+
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-ptw-other-remove]');
+        if (!button) {
+            return;
+        }
+
+        var row = button.closest('[data-ptw-other-row]');
+        var list = row ? row.parentElement : null;
+        if (!row || !list) {
+            return;
+        }
+
+        if (list.querySelectorAll('[data-ptw-other-row]').length <= 1) {
+            var category = list.getAttribute('data-ptw-other-list');
+            var template = category ? document.querySelector('[data-ptw-other-template="' + category + '"]') : null;
+            if (template) {
+                var wrapper = document.createElement('div');
+                wrapper.innerHTML = template.innerHTML;
+                var blankRow = wrapper.firstElementChild;
+                if (blankRow) {
+                    blankRow.querySelectorAll('input').forEach(function (input) {
+                        input.value = '';
+                    });
+                    row.replaceWith(blankRow);
+                    if (window.feather) {
+                        window.feather.replace();
+                    }
+                    return;
+                }
+            }
+
+            row.querySelectorAll('input').forEach(function (input) {
+                input.value = '';
+            });
+            return;
+        }
+
+        row.remove();
     });
 
     /* ── Duration calculator ─────────────────────────────────── */

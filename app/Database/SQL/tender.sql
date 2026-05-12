@@ -7,6 +7,7 @@ ALTER TABLE `pod_tenders`
   ADD COLUMN `company_id` bigint(20) UNSIGNED DEFAULT NULL AFTER `title`,
   ADD COLUMN `department_id` bigint(20) UNSIGNED DEFAULT NULL AFTER `company_id`,
   ADD COLUMN `brief_description` text DEFAULT NULL AFTER `department_id`,
+  ADD COLUMN `tender_fee` DECIMAL(15,3) DEFAULT NULL AFTER `brief_description`,
   ADD COLUMN `release_at` datetime DEFAULT NULL AFTER `workflow_stage`,
   ADD COLUMN `document_purchase_deadline` datetime DEFAULT NULL AFTER `release_at`,
   ADD COLUMN `site_visit_at` datetime DEFAULT NULL AFTER `document_purchase_deadline`,
@@ -46,13 +47,25 @@ ALTER TABLE `pod_tenders`
     'bidding',
     'technical_3key',
     'technical',
-    'committee_3key',
     'commercial',
     'award_decision'
   ) NOT NULL DEFAULT 'bidding';
 
 ALTER TABLE `pod_tender_bid_openings`
-  MODIFY COLUMN `stage` enum('technical','commercial') NOT NULL DEFAULT 'commercial';
+  MODIFY COLUMN `stage` enum('technical','commercial') NOT NULL DEFAULT 'technical',
+  MODIFY COLUMN `status` varchar(50) NOT NULL DEFAULT 'codes_generated',
+  ADD COLUMN `signed_at` datetime DEFAULT NULL AFTER `unlocked_at`,
+  ADD COLUMN `manual_form_path` varchar(255) DEFAULT NULL AFTER `signed_at`,
+  ADD COLUMN `manual_form_original_name` varchar(255) DEFAULT NULL AFTER `manual_form_path`,
+  ADD COLUMN `manual_form_uploaded_by` bigint(20) UNSIGNED DEFAULT NULL AFTER `manual_form_original_name`,
+  ADD COLUMN `manual_form_uploaded_at` datetime DEFAULT NULL AFTER `manual_form_uploaded_by`;
+
+ALTER TABLE `pod_tender_bid_opening_entries`
+  ADD COLUMN `signature_statement` text DEFAULT NULL AFTER `confirmed_at`,
+  ADD COLUMN `signature_name` varchar(255) DEFAULT NULL AFTER `signature_statement`,
+  ADD COLUMN `signed_at` datetime DEFAULT NULL AFTER `signature_name`,
+  ADD COLUMN `signature_ip_address` varchar(45) DEFAULT NULL AFTER `signed_at`,
+  ADD COLUMN `signature_user_agent` text DEFAULT NULL AFTER `signature_ip_address`;
 
 CREATE TABLE `pod_tender_bid_requirements` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,

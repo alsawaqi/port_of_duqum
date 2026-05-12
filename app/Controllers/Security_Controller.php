@@ -87,6 +87,7 @@ protected function can_tender(string $section, string $action): bool
         "commercial_eval" => "tender_commercial_users",
         "committee" => "tender_committee_users",
         "procurement" => "tender_procurement_users",
+        "procurement_manager_inbox" => "tender_procurement_manager_users",
     ];
 
     if (isset($fallback_tables[$section])) {
@@ -143,6 +144,23 @@ protected function can_tender_3key_opening(): bool
     }
 
     return $this->has_active_tender_assignment("tender_committee_users");
+}
+
+protected function can_view_pod_reports(): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    return get_array_value($this->login_user->permissions, "can_view_pod_reports") == "1";
+}
+
+protected function access_only_pod_reports()
+{
+    if (!$this->can_view_pod_reports()) {
+        app_redirect("forbidden");
+        exit;
+    }
 }
 
     //prepear the login user's permissions
@@ -1899,6 +1917,78 @@ protected function access_only_vendor_groups_delete()
 
 
 // ---------------------------------------------------------
+// Vendors Master: Vendor Grades permissions
+// ---------------------------------------------------------
+protected function can_view_vendor_grades(): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    return get_array_value($this->login_user->permissions, "can_view_vendor_grades") == "1";
+}
+
+protected function can_create_vendor_grades(): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    return get_array_value($this->login_user->permissions, "can_create_vendor_grades") == "1";
+}
+
+protected function can_update_vendor_grades(): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    return get_array_value($this->login_user->permissions, "can_update_vendor_grades") == "1";
+}
+
+protected function can_delete_vendor_grades(): bool
+{
+    if ($this->login_user->is_admin) {
+        return true;
+    }
+
+    return get_array_value($this->login_user->permissions, "can_delete_vendor_grades") == "1";
+}
+
+protected function access_only_vendor_grades_view()
+{
+    if (!$this->can_view_vendor_grades()) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+protected function access_only_vendor_grades_create()
+{
+    if (!$this->can_create_vendor_grades()) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+protected function access_only_vendor_grades_update()
+{
+    if (!$this->can_update_vendor_grades()) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+protected function access_only_vendor_grades_delete()
+{
+    if (!$this->can_delete_vendor_grades()) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+
+// ---------------------------------------------------------
 // Vendors Master: Vendor Group Fees permissions
 // ---------------------------------------------------------
 protected function can_view_vendor_group_fees(): bool
@@ -2491,8 +2581,39 @@ protected function can_gate_pass(string $section, string $action): bool
     if ($this->login_user->is_admin) {
         return true;
     }
+
+    if ($section === "request_list" && $action === "view" && $this->_is_active_gate_pass_rop_user()) {
+        return true;
+    }
+
     $key = "can_{$action}_gate_pass_{$section}";
     return get_array_value($this->login_user->permissions, $key) == "1";
+}
+
+protected function _is_active_gate_pass_rop_user(): bool
+{
+    if (empty($this->login_user->id)) {
+        return false;
+    }
+
+    $db = db_connect();
+    $ropUsers = $db->prefixTable("gate_pass_rop_users");
+    $users = $db->prefixTable("users");
+
+    $row = $db->query(
+        "SELECT $ropUsers.id
+         FROM $ropUsers
+         INNER JOIN $users ON $users.id = $ropUsers.user_id
+         WHERE $ropUsers.deleted=0
+           AND $ropUsers.status='active'
+           AND $users.deleted=0
+           AND $users.status='active'
+           AND $ropUsers.user_id=?
+         LIMIT 1",
+        [(int) $this->login_user->id]
+    )->getRow();
+
+    return (bool) $row;
 }
 
 protected function access_only_gate_pass(string $section, string $action)

@@ -4,13 +4,51 @@ $bid = $bid ?? null;
 $required_sections = $required_sections ?? [];
 $clarifications = $clarifications ?? [];
 $clarification_open = $clarification_open ?? false;
+$clarification_attachments = $clarification_attachments ?? [];
+$clarification_scope_options = $clarification_scope_options ?? ["general" => "General", "tender" => "Tender / Procurement", "technical" => "Technical Team", "commercial" => "Commercial Team", "vendor" => "Vendor Specific"];
 $rfq_detail = $rfq_detail ?? null;
 $rfq_items = $rfq_items ?? [];
+$procurement_approved_for_submission = !empty($procurement_approved_for_submission);
+$procurement_approval_status = $procurement_approval_status ?? ($procurement_approved_for_submission ? "approved" : "required");
+$tender_fee_required = isset($tender_fee_required) ? (bool) $tender_fee_required : ((float) ($tender->tender_fee ?? 0) > 0);
+$tender_fee_paid = isset($tender_fee_paid) ? (bool) $tender_fee_paid : !$tender_fee_required;
+$tender_fee_payment_status = $tender_fee_payment_status ?? ($tender_fee_required ? ($tender_fee_paid ? "paid" : "unpaid") : "not_required");
 
 $submission_open = (($tender->status ?? "") === "published") && (($tender->workflow_stage ?? "bidding") === "bidding");
 if ($submission_open && !empty($tender->closing_at) && strtotime($tender->closing_at) <= time()) {
     $submission_open = false;
 }
+$submission_open = $submission_open && $procurement_approved_for_submission;
+
+$participation_status_label = function (string $status) {
+    $labels = [
+        "approved" => "Approved",
+        "pending_approval" => "Pending approval",
+        "required" => "Approval required",
+        "rejected" => "Rejected",
+        "declined" => "Declined",
+    ];
+
+    return $labels[$status] ?? ucwords(str_replace("_", " ", $status ?: "Approval required"));
+};
+
+$money_value = function ($value, string $currency = "OMR") {
+    if ($value === null || $value === "") {
+        return "-";
+    }
+
+    return number_format((float) $value, 3) . " " . esc($currency);
+};
+
+$fee_payment_status_label = function (string $status) {
+    $labels = [
+        "paid" => "Paid",
+        "unpaid" => "Payment required",
+        "not_required" => "Not required",
+    ];
+
+    return $labels[$status] ?? ucwords(str_replace("_", " ", $status ?: "-"));
+};
 
 $section_labels = [
     "technical" => "Technical Proposal",
@@ -64,8 +102,18 @@ $section_labels = [
         </div>
 
         <div class="col-md-4 mb15">
-            <div class="text-muted">Invite Status</div>
-            <div><?php echo esc(ucfirst($tender->invite_status ?? "sent")); ?></div>
+            <div class="text-muted">Participation Approval</div>
+            <div><?php echo esc($participation_status_label($procurement_approval_status)); ?></div>
+        </div>
+
+        <div class="col-md-4 mb15">
+            <div class="text-muted">Tender Fees</div>
+            <div><?php echo $money_value($tender->tender_fee ?? null); ?></div>
+        </div>
+
+        <div class="col-md-4 mb15">
+            <div class="text-muted">Fee Payment Status</div>
+            <div><?php echo esc($fee_payment_status_label($tender_fee_payment_status)); ?></div>
         </div>
 
         <div class="col-md-4 mb15">
@@ -144,8 +192,8 @@ $section_labels = [
     <h5 class="mb15">RFQ / RFP Details</h5>
 
     <div class="row">
-        <div class="col-md-4 mb15"><div class="text-muted">RFQ No</div><div><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></div></div>
-        <div class="col-md-4 mb15"><div class="text-muted">RFQ Date</div><div><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></div></div>
+        <div class="col-md-4 mb15"><div class="text-muted">Reference Number</div><div><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></div></div>
+        <div class="col-md-4 mb15"><div class="text-muted">Request Date</div><div><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></div></div>
         <div class="col-md-4 mb15"><div class="text-muted">PR No</div><div><?php echo esc($rfq_detail->pr_no ?? "-"); ?></div></div>
         <div class="col-md-4 mb15"><div class="text-muted">Delivery Location</div><div><?php echo esc($rfq_detail->delivery_location ?? "-"); ?></div></div>
         <div class="col-md-4 mb15"><div class="text-muted">INCOTERM</div><div><?php echo esc($rfq_detail->incoterm ?? "-"); ?></div></div>
@@ -280,15 +328,23 @@ $section_labels = [
     <h5 class="mb15">Clarifications & Replies</h5>
 
     <?php if ($clarification_open) { ?>
-        <?php echo form_open(get_uri("vendor_portal/save_clarification"), [
+        <?php echo form_open_multipart(get_uri("vendor_portal/save_clarification"), [
             "id" => "vendor-clarification-form",
             "class" => "general-form",
             "role" => "form"
         ]); ?>
             <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
             <div class="form-group">
+                <label>Clarification Type</label>
+                <?php echo form_dropdown("clarification_scope", $clarification_scope_options, "general", "class='form-control'"); ?>
+            </div>
+            <div class="form-group">
                 <label>Send Clarification</label>
                 <textarea name="message" class="form-control" rows="3" required placeholder="Write your clarification question here"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Attach Files</label>
+                <input type="file" name="clarification_files[]" class="form-control" multiple>
             </div>
             <button type="submit" class="btn btn-default">
                 <i data-feather="send" class="icon-16"></i> Submit Clarification
@@ -311,6 +367,8 @@ $section_labels = [
                     ? "You"
                     : (trim((string) ($item->created_by_name ?? '')) ?: "Procurement");
                 $message_time = $item->published_at ?: $item->created_at;
+                $scope_label = \App\Models\Tender_communications_model::clarification_scope_label($item->clarification_scope ?? "general");
+                $item_attachments = $clarification_attachments[(int) $item->id] ?? [];
                 ?>
                 <div class="d-flex mb10 <?php echo $is_vendor_message ? 'justify-content-end' : 'justify-content-start'; ?>">
                     <div class="vendor-chat-bubble <?php echo $is_vendor_message ? 'vendor-chat-bubble-self' : 'vendor-chat-bubble-other'; ?>">
@@ -318,10 +376,21 @@ $section_labels = [
                             <div class="fw-semibold"><?php echo esc($sender_name); ?></div>
                             <div><?php echo !empty($message_time) ? format_to_datetime($message_time) : "-"; ?></div>
                         </div>
+                        <div class="mb5"><span class="badge bg-light text-dark"><?php echo esc($scope_label); ?></span></div>
                         <?php if (!empty($item->subject)) { ?>
                             <div class="fw-semibold mb5"><?php echo esc($item->subject); ?></div>
                         <?php } ?>
                         <div><?php echo nl2br(esc($item->message ?? "")); ?></div>
+                        <?php if (!empty($item_attachments)) { ?>
+                            <div class="clarification-attachments mt10">
+                                <?php foreach ($item_attachments as $attachment) { ?>
+                                    <a href="<?php echo get_uri("vendor_portal/download_clarification_attachment/" . (int) $attachment->id); ?>" class="badge bg-light text-dark me-1 mb5">
+                                        <i data-feather="paperclip" class="icon-14"></i>
+                                        <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                                    </a>
+                                <?php } ?>
+                            </div>
+                        <?php } ?>
                     </div>
                 </div>
             <?php } ?>

@@ -16,6 +16,7 @@ class Vendors_model extends Crud_model
     {
         $vendors_table = $this->db->prefixTable("vendors");
         $groups_table  = $this->db->prefixTable("vendor_groups");
+        $grades_table  = $this->db->prefixTable("vendor_grades");
         $country_table = $this->db->prefixTable("country");
         $regions_table = $this->db->prefixTable("regions");
         $cities_table  = $this->db->prefixTable("cities");
@@ -37,11 +38,15 @@ class Vendors_model extends Crud_model
                 $vendors_table.*,
                 $groups_table.name AS vendor_group_name,
                 $groups_table.code AS vendor_group_code,
+                $grades_table.name AS vendor_grade_name,
+                $grades_table.code AS vendor_grade_code,
                 $country_table.name AS country_name,
                 $regions_table.name AS region_name,
                 $cities_table.name  AS city_name
             FROM $vendors_table
             LEFT JOIN $groups_table  ON $groups_table.id  = $vendors_table.vendor_group_id
+            LEFT JOIN $grades_table  ON $grades_table.id  = $vendors_table.vendor_grade_id
+                                     AND $grades_table.deleted=0
             LEFT JOIN $country_table ON $country_table.id = $vendors_table.country_id
             LEFT JOIN $regions_table ON $regions_table.id = $vendors_table.region_id
             LEFT JOIN $cities_table  ON $cities_table.id  = $vendors_table.city_id

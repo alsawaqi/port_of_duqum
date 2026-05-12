@@ -24,11 +24,16 @@
 
  <script>
      $(document).ready(function() {
+         var vendorBlockModalUrl = "<?php echo get_uri('vendors/block_modal_form'); ?>";
 
          var $table = $("#vendors-table").appTable({
              source: '<?php echo_uri("vendors/list_data") ?>',
              columns: [{
                      title: '<?php echo app_lang("vendor_groups"); ?>',
+                     "class": "w15p"
+                 },
+                 {
+                     title: '<?php echo app_lang("vendor_grade"); ?>',
                      "class": "w15p"
                  },
                  {
@@ -57,7 +62,6 @@
              // important: re-bind events after redraw
              onDrawCallback: function() {
                  feather.replace();
-                 bindStatusChange();
              }
          });
 
@@ -83,6 +87,76 @@
                          $("#vendors-table").appTable({
                              reload: true
                          }); // ✅ refresh to reflect
+                     } else {
+                         appAlert.error(res.message || "Error", {
+                             duration: 3000
+                         });
+                     }
+                 },
+                 error: function(xhr) {
+                     console.log(xhr.responseText);
+                     appAlert.error("Request failed", {
+                         duration: 3000
+                     });
+                 }
+             });
+         });
+
+         $(document).on("change", ".js-vendor-grade", function() {
+             var id = $(this).data("id");
+             var gradeId = $(this).val();
+
+             $.ajax({
+                 url: "<?php echo get_uri('vendors/update_grade'); ?>",
+                 type: "POST",
+                 dataType: "json",
+                 data: {
+                     id: id,
+                     vendor_grade_id: gradeId,
+                     "<?php echo csrf_token(); ?>": "<?php echo csrf_hash(); ?>"
+                 },
+                 success: function(res) {
+                     if (res && res.success) {
+                         appAlert.success(res.message || "Saved", {
+                             duration: 2000
+                         });
+                         $("#vendors-table").appTable({
+                             reload: true
+                         });
+                     } else {
+                         appAlert.error(res.message || "Error", {
+                             duration: 3000
+                         });
+                     }
+                 },
+                 error: function(xhr) {
+                     console.log(xhr.responseText);
+                     appAlert.error("Request failed", {
+                         duration: 3000
+                     });
+                 }
+             });
+         });
+
+         $(document).on("click", ".js-vendor-unblock", function() {
+             var id = $(this).data("id");
+
+             $.ajax({
+                 url: "<?php echo get_uri('vendors/unblock'); ?>",
+                 type: "POST",
+                 dataType: "json",
+                 data: {
+                     id: id,
+                     "<?php echo csrf_token(); ?>": "<?php echo csrf_hash(); ?>"
+                 },
+                 success: function(res) {
+                     if (res && res.success) {
+                         appAlert.success(res.message || "Saved", {
+                             duration: 2000
+                         });
+                         $("#vendors-table").appTable({
+                             reload: true
+                         });
                      } else {
                          appAlert.error(res.message || "Error", {
                              duration: 3000

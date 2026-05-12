@@ -130,10 +130,7 @@ class Ptw_request_list extends Security_Controller
         $responses_rows = $this->Ptw_requirement_responses_model->get_by_application($app->id)->getResult();
         $attachments_rows = $this->Ptw_attachments_model->get_by_application($app->id)->getResult();
 
-        $responses_by_definition = [];
-        foreach ($responses_rows as $r) {
-            $responses_by_definition[(int)($r->ptw_requirement_definition_id ?? 0)] = $r;
-        }
+        $responses_by_definition = ptw_index_requirement_responses_with_default_others($responses_rows, $defs);
 
         $attachments_by_response = [];
         foreach ($attachments_rows as $att) {
@@ -159,6 +156,11 @@ class Ptw_request_list extends Security_Controller
             "hsse_reviews" => $hsse_reviews,
             "hmo_reviews" => $hmo_reviews,
             "terminal_reviews" => $terminal_reviews,
+            "review_groups" => [
+                "hsse" => $hsse_reviews,
+                "hmo" => $hmo_reviews,
+                "terminal" => $terminal_reviews,
+            ],
             "audit_logs" => $audit_logs,
         ]);
     }
@@ -179,7 +181,7 @@ class Ptw_request_list extends Security_Controller
             !empty($row->work_from) ? format_to_datetime($row->work_from) : "-",
             !empty($row->work_to) ? format_to_datetime($row->work_to) : "-",
             $this->_format_ptw_status($row->status ?? ""),
-            $row->stage ?? "-",
+            ptw_stage_display_label($row->stage ?? ""),
             $view_btn,
         ];
     }
@@ -196,26 +198,11 @@ class Ptw_request_list extends Security_Controller
         if ($status === "revise") $class = "badge bg-warning text-dark";
         if ($status === "draft") $class = "badge bg-light text-dark border";
 
-        return "<span class='{$class}'>" . ucwords(str_replace("_", " ", $status)) . "</span>";
+        return "<span class='{$class}'>" . ptw_status_display_label($status) . "</span>";
     }
 
     private function _group_definitions(array $defs): array
     {
-        $grouped = [
-            "hazard_document" => [],
-            "ppe" => [],
-            "preparation" => [],
-            "other" => [],
-        ];
-
-        foreach ($defs as $d) {
-            $cat = (string)($d->category ?? "other");
-            if (!isset($grouped[$cat])) {
-                $grouped[$cat] = [];
-            }
-            $grouped[$cat][] = $d;
-        }
-
-        return $grouped;
+        return ptw_group_definitions_with_default_others($defs);
     }
 }

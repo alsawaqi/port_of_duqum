@@ -6,6 +6,12 @@
         </a>
     </div>
 
+    <?php
+    $attachments = $attachments ?? [];
+    $reply_threads = $reply_threads ?? [];
+    $clarification_scope_options = $clarification_scope_options ?? ["general" => "General", "tender" => "Tender / Procurement", "technical" => "Technical Team", "commercial" => "Commercial Team", "vendor" => "Vendor Specific"];
+    ?>
+
     <div class="card gp-pro-card mb15">
         <div class="card-header">
             <h3 class="mb5"><?php echo esc($vendor->vendor_name ?? '-'); ?></h3>
@@ -37,12 +43,19 @@
                     <div class="text-center text-off p20">No clarification messages found for this vendor yet.</div>
                 <?php } else { ?>
                     <?php foreach ($messages as $message) {
-                        $is_vendor_message = strtolower((string) ($message->type ?? '')) === 'clarification'
+                        $message_type = strtolower((string) ($message->type ?? ''));
+                        $is_vendor_message = $message_type === 'clarification'
+                            && (int) ($message->is_vendor_visible ?? 0) === 1
                             && (empty($message->parent_id) || (int) $message->parent_id === 0);
                         $message_time = $message->published_at ?: $message->created_at;
-                        $sender_name = $is_vendor_message
-                            ? ($vendor->vendor_name ?? 'Vendor')
-                            : (trim((string) ($message->created_by_name ?? '')) ?: 'Procurement');
+                        $sender_name = $is_vendor_message ? ($vendor->vendor_name ?? 'Vendor') : (trim((string) ($message->created_by_name ?? '')) ?: 'Procurement');
+                        if ($message_type === 'technical_clarification_request') {
+                            $sender_name = trim((string) ($message->created_by_name ?? '')) ?: 'Technical Team';
+                        } elseif ($message_type === 'commercial_clarification_request') {
+                            $sender_name = trim((string) ($message->created_by_name ?? '')) ?: 'Commercial Team';
+                        }
+                        $scope_label = \App\Models\Tender_communications_model::clarification_scope_label($message->clarification_scope ?? "general");
+                        $message_attachments = $attachments[(int) $message->id] ?? [];
                     ?>
                         <div class="d-flex mb15 <?php echo $is_vendor_message ? 'justify-content-start' : 'justify-content-end'; ?>">
                             <div class="clarification-bubble <?php echo $is_vendor_message ? 'vendor-bubble' : 'procurement-bubble'; ?>">
@@ -50,7 +63,32 @@
                                     <strong><?php echo esc($sender_name); ?></strong>
                                     <span><?php echo !empty($message_time) ? format_to_datetime($message_time) : '-'; ?></span>
                                 </div>
+                                <div class="mb10">
+                                    <span class="badge bg-light text-dark"><?php echo esc($scope_label); ?></span>
+                                    <?php if ($message_type === 'technical_clarification_request') { ?>
+                                        <span class="badge bg-warning text-dark">Technical request</span>
+                                    <?php } elseif ($message_type === 'commercial_clarification_request') { ?>
+                                        <span class="badge bg-warning text-dark">Commercial request</span>
+                                    <?php } elseif ($message_type === 'technical_clarification_response') { ?>
+                                        <span class="badge bg-info text-dark">Forwarded to technical</span>
+                                    <?php } elseif ($message_type === 'commercial_clarification_response') { ?>
+                                        <span class="badge bg-info text-dark">Forwarded to commercial</span>
+                                    <?php } ?>
+                                </div>
+                                <?php if (!empty($message->subject)) { ?>
+                                    <div class="fw-semibold mb5"><?php echo esc($message->subject); ?></div>
+                                <?php } ?>
                                 <div class="clarification-text"><?php echo nl2br(esc($message->message ?? '')); ?></div>
+                                <?php if (!empty($message_attachments)) { ?>
+                                    <div class="clarification-attachments mt10">
+                                        <?php foreach ($message_attachments as $attachment) { ?>
+                                            <a href="<?php echo get_uri("tender_clarifications/download_attachment/" . (int) $attachment->id); ?>" class="clarification-attachment-link">
+                                                <i data-feather="paperclip" class="icon-14"></i>
+                                                <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                                            </a>
+                                        <?php } ?>
+                                    </div>
+                                <?php } ?>
                             </div>
                         </div>
                     <?php } ?>
@@ -64,7 +102,7 @@
             <h4 class="mb0">Send Reply</h4>
         </div>
         <div class="card-body">
-            <?php echo form_open(get_uri("tender_clarifications/save_reply"), [
+            <?php echo form_open_multipart(get_uri("tender_clarifications/save_reply"), [
                 "id" => "tender-clarification-chat-form",
                 "class" => "general-form",
                 "role" => "form"
@@ -72,10 +110,46 @@
                 <input type="hidden" name="tender_id" value="<?php echo (int) ($tender->id ?? 0); ?>" />
                 <input type="hidden" name="vendor_id" value="<?php echo (int) ($vendor->id ?? 0); ?>" />
 
+                <?php if (!empty($reply_threads)) { ?>
+                    <div class="form-group mb15">
+                        <label>Related Thread</label>
+                        <select name="communication_id" class="form-control">
+                            <?php foreach ($reply_threads as $thread) {
+                                $thread_type = strtolower((string) ($thread->type ?? ''));
+                                $thread_label = $thread_type === 'technical_clarification_request'
+                                    ? "Technical request"
+                                    : ($thread_type === 'commercial_clarification_request'
+                                        ? "Commercial request"
+                                        : "Vendor clarification");
+                                $thread_time = $thread->published_at ?: $thread->created_at;
+                            ?>
+                                <option value="<?php echo (int) $thread->id; ?>">
+                                    <?php echo esc($thread_label . " - " . ($thread->subject ?: short_text($thread->message ?? "", 60)) . " - " . (!empty($thread_time) ? format_to_datetime($thread_time) : "-")); ?>
+                                </option>
+                            <?php } ?>
+                        </select>
+                    </div>
+                <?php } ?>
+
+                <div class="form-group mb15">
+                    <label>Clarification Type</label>
+                    <?php echo form_dropdown("clarification_scope", $clarification_scope_options, "general", "class='form-control'"); ?>
+                </div>
+
+                <div class="form-group mb15">
+                    <label>Visibility</label>
+                    <?php echo form_dropdown("visibility", ["vendor" => "Reply to this vendor", "technical" => "Forward internally to technical team", "commercial" => "Forward internally to commercial team", "all" => "Publish to all vendors"], "vendor", "class='form-control'"); ?>
+                </div>
+
                 <div class="form-group mb15">
                     <label>Message</label>
                     <textarea name="message" class="form-control" rows="4" required placeholder="Write your reply to this vendor"></textarea>
                     <div class="mt5 text-off">This message will appear in the clarification chat for this vendor.</div>
+                </div>
+
+                <div class="form-group mb15">
+                    <label>Attach Files</label>
+                    <input type="file" name="clarification_files[]" class="form-control" multiple>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Send Reply</button>
@@ -151,6 +225,31 @@ $(document).ready(function () {
     white-space: normal;
     word-break: break-word;
     line-height: 1.6;
+}
+
+.clarification-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.clarification-attachment-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    color: inherit;
+    padding: 5px 9px;
+    font-size: 12px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.vendor-bubble .clarification-attachment-link {
+    border-color: #d9e2ef;
+    background: #f5f8fc;
 }
 </style>
 
