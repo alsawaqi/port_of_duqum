@@ -166,6 +166,7 @@ class Tender_reports extends Security_Controller
         }
 
         $vendors = $this->_get_vendor_participation($tender_id);
+        $can_update_procurement = $this->can_tender("procurement", "update");
 
         return $this->template->rander("tender_reports/details", [
             "tender" => $tender,
@@ -187,7 +188,8 @@ class Tender_reports extends Security_Controller
             "proposal_review" => $this->_get_latest_proposal_review($tender_id),
             "tender_documents" => $this->_get_tender_documents($tender_id),
             "document_access" => $this->_get_document_access_map($tender),
-            "can_override_workflow" => $this->can_tender("procurement", "update"),
+            "can_override_workflow" => $can_update_procurement,
+            "can_reply_clarifications" => $can_update_procurement,
             "rfq_detail" => $this->Tender_rfq_details_model->get_by_tender($tender_id),
             "rfq_items" => $this->Tender_rfq_items_model->get_by_tender($tender_id),
         ]);

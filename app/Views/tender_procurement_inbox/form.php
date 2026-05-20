@@ -57,6 +57,13 @@ $can_publish_after_manager_approval = $procurement_manager_status === "approved"
     <input type="hidden" name="tender_id" value="<?php echo (int) ($tender->id ?? 0); ?>" />
     <input type="hidden" name="tender_request_id" value="<?php echo (int) ($request->id ?? 0); ?>" />
 
+    <?php if ($procurement_manager_status === "revision_requested" && !empty($tender->procurement_manager_comment)) { ?>
+        <div class="alert alert-warning">
+            <strong>Procurement manager requested updates.</strong>
+            <div class="mt5"><?php echo nl2br(esc($tender->procurement_manager_comment)); ?></div>
+        </div>
+    <?php } ?>
+
     <div class="tender-wizard-layout">
         <nav class="tender-wizard-steps" aria-label="Tender setup steps">
             <button type="button" class="tender-step is-active" data-step="0">

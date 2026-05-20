@@ -1,7 +1,8 @@
 ALTER TABLE `pod_vendors`
     ADD COLUMN IF NOT EXISTS `cr_number` VARCHAR(100) DEFAULT NULL AFTER `email`,
     ADD COLUMN IF NOT EXISTS `phone` VARCHAR(50) DEFAULT NULL AFTER `cr_number`,
-    ADD COLUMN IF NOT EXISTS `contact_person` VARCHAR(255) DEFAULT NULL AFTER `phone`,
+    ADD COLUMN IF NOT EXISTS `phone_country_code` VARCHAR(12) DEFAULT NULL AFTER `phone`,
+    ADD COLUMN IF NOT EXISTS `contact_person` VARCHAR(255) DEFAULT NULL AFTER `phone_country_code`,
     ADD COLUMN IF NOT EXISTS `contact_designation` VARCHAR(255) DEFAULT NULL AFTER `contact_person`;
 
 ALTER TABLE `pod_vendors`

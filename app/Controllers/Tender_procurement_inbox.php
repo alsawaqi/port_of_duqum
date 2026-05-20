@@ -99,6 +99,7 @@ class Tender_procurement_inbox extends Security_Controller
                     t.id AS tender_id,
                     t.tender_request_id,
                     t.reference,
+                    COALESCE(t.created_at, req.created_at) AS created_at,
                     COALESCE(t.title, req.subject) AS subject,
                     COALESCE(t.company_id, req.company_id) AS company_id,
                     company.name AS company_name,
@@ -130,6 +131,7 @@ class Tender_procurement_inbox extends Security_Controller
                     NULL AS tender_id,
                     req.id AS tender_request_id,
                     req.reference,
+                    req.created_at,
                     req.subject,
                     req.company_id,
                     company.name AS company_name,
@@ -1414,8 +1416,8 @@ class Tender_procurement_inbox extends Security_Controller
         return [
             "technical" => (array) $this->request->getPost("technical_user_ids"),
             "commercial" => (array) $this->request->getPost("commercial_user_ids"),
-            "chairman" => (array) $this->request->getPost("chairman_user_id"),
-            "secretary" => (array) $this->request->getPost("secretary_user_id"),
+            "chairman" => (int) $this->request->getPost("chairman_user_id"),
+            "secretary" => (int) $this->request->getPost("secretary_user_id"),
             "itc_member" => (array) $this->request->getPost("itc_member_user_ids"),
         ];
     }
@@ -1724,6 +1726,8 @@ class Tender_procurement_inbox extends Security_Controller
         array $posted_team_ids,
         ?string $testing_workflow_stage = null
     ): array {
+        $tender_fields = $this->_prepare_tender_fields_for_manager_payload($tender_fields);
+
         return [
             "tender_fields" => $tender_fields,
             "target" => [
@@ -1740,6 +1744,22 @@ class Tender_procurement_inbox extends Security_Controller
             "testing_workflow_stage" => $testing_workflow_stage,
             "requested_at" => $this->_get_tender_business_now(),
         ];
+    }
+
+    private function _prepare_tender_fields_for_manager_payload(array $tender_fields): array
+    {
+        if (!array_key_exists("tender_request_id", $tender_fields)) {
+            return $tender_fields;
+        }
+
+        $request_id = (int) ($tender_fields["tender_request_id"] ?? 0);
+        if ($request_id > 0) {
+            $tender_fields["tender_request_id"] = $request_id;
+        } else {
+            unset($tender_fields["tender_request_id"]);
+        }
+
+        return $tender_fields;
     }
 
     private function _capture_rfq_payload(): array
@@ -1952,10 +1972,7 @@ class Tender_procurement_inbox extends Security_Controller
     private function _sync_invites_from_request(int $tender_id, int $tender_request_id): int
     {
         $trv = $this->db->prefixTable("tender_request_vendors");
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
-
-        $this->_clear_invites($tender_id);
 
         $rows = $this->db->query(
             "SELECT DISTINCT $trv.vendor_id
@@ -1968,29 +1985,11 @@ class Tender_procurement_inbox extends Security_Controller
             [$tender_request_id]
         )->getResult();
 
-        $count = 0;
-        $now = date("Y-m-d H:i:s");
-        foreach ($rows as $row) {
-            $vendor_id = (int) ($row->vendor_id ?? 0);
-            if (!$vendor_id) {
-                continue;
-            }
-
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, $vendor_id, $this->login_user->id, $now]
-            );
-            $count++;
-        }
-
-        return $count;
+        return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_by_specialty(int $tender_id, int $vendor_category_id, int $vendor_sub_category_id): int
     {
-        $this->_clear_invites($tender_id);
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
         $spec = $this->db->prefixTable("vendor_specialties");
 
@@ -2010,29 +2009,11 @@ class Tender_procurement_inbox extends Security_Controller
         }
 
         $rows = $this->db->query($sql, $params)->getResult();
-        $count = 0;
-        $now = date("Y-m-d H:i:s");
-        foreach ($rows as $row) {
-            $vendor_id = (int) ($row->vendor_id ?? 0);
-            if (!$vendor_id) {
-                continue;
-            }
-
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, $vendor_id, $this->login_user->id, $now]
-            );
-            $count++;
-        }
-
-        return $count;
+        return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_by_vendor_group(int $tender_id, int $vendor_group_id): int
     {
-        $this->_clear_invites($tender_id);
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
         $rows = $this->db->query(
             "SELECT DISTINCT id AS vendor_id
@@ -2043,34 +2024,17 @@ class Tender_procurement_inbox extends Security_Controller
             [$vendor_group_id]
         )->getResult();
 
-        $count = 0;
-        $now = date("Y-m-d H:i:s");
-        foreach ($rows as $row) {
-            $vendor_id = (int) ($row->vendor_id ?? 0);
-            if (!$vendor_id) {
-                continue;
-            }
-
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, $vendor_id, $this->login_user->id, $now]
-            );
-            $count++;
-        }
-
-        return $count;
+        return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_from_specific_vendors(int $tender_id, array $vendor_ids): int
     {
-        $this->_clear_invites($tender_id);
         $vendor_ids = $this->_clean_vendor_ids($vendor_ids);
         if (!$vendor_ids) {
+            $this->_clear_invites($tender_id);
             return 0;
         }
 
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
         $placeholders = implode(",", array_fill(0, count($vendor_ids), "?"));
         $rows = $this->db->query(
@@ -2082,29 +2046,11 @@ class Tender_procurement_inbox extends Security_Controller
             $vendor_ids
         )->getResult();
 
-        $count = 0;
-        $now = date("Y-m-d H:i:s");
-        foreach ($rows as $row) {
-            $vendor_id = (int) ($row->vendor_id ?? 0);
-            if (!$vendor_id) {
-                continue;
-            }
-
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, $vendor_id, $this->login_user->id, $now]
-            );
-            $count++;
-        }
-
-        return $count;
+        return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_by_vendor_grade(int $tender_id, int $vendor_grade_id): int
     {
-        $this->_clear_invites($tender_id);
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
         $rows = $this->db->query(
             "SELECT DISTINCT id AS vendor_id
@@ -2115,29 +2061,121 @@ class Tender_procurement_inbox extends Security_Controller
             [$vendor_grade_id]
         )->getResult();
 
-        $count = 0;
+        return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
+    }
+
+    private function _clear_invites(int $tender_id): void
+    {
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $this->db->query(
+            "DELETE stale
+             FROM $tiv stale
+             INNER JOIN $tiv active
+                ON active.tender_id=stale.tender_id
+               AND active.vendor_id=stale.vendor_id
+               AND active.deleted=0
+             WHERE stale.tender_id=?
+               AND stale.deleted=1",
+            [$tender_id]
+        );
+        $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=? AND deleted=0", [$tender_id]);
+    }
+
+    private function _replace_invites(int $tender_id, array $vendor_ids): int
+    {
+        $vendor_ids = $this->_clean_vendor_ids($vendor_ids);
+        if (!$vendor_ids) {
+            $this->_clear_invites($tender_id);
+            return 0;
+        }
+
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $placeholders = implode(",", array_fill(0, count($vendor_ids), "?"));
+        $params = array_merge([$tender_id], $vendor_ids);
+
+        $this->db->query(
+            "DELETE stale
+             FROM $tiv stale
+             INNER JOIN $tiv active
+                ON active.tender_id=stale.tender_id
+               AND active.vendor_id=stale.vendor_id
+               AND active.deleted=0
+             WHERE stale.tender_id=?
+               AND stale.deleted=1
+               AND active.vendor_id NOT IN ($placeholders)",
+            $params
+        );
+
+        $this->db->query(
+            "UPDATE $tiv
+             SET deleted=1
+             WHERE tender_id=?
+               AND deleted=0
+               AND vendor_id NOT IN ($placeholders)",
+            $params
+        );
+
         $now = date("Y-m-d H:i:s");
-        foreach ($rows as $row) {
-            $vendor_id = (int) ($row->vendor_id ?? 0);
-            if (!$vendor_id) {
+        foreach ($vendor_ids as $vendor_id) {
+            $active = $this->db->query(
+                "SELECT id
+                 FROM $tiv
+                 WHERE tender_id=?
+                   AND vendor_id=?
+                   AND deleted=0
+                 LIMIT 1",
+                [$tender_id, $vendor_id]
+            )->getRow();
+
+            if ($active) {
+                continue;
+            }
+
+            $inactive = $this->db->query(
+                "SELECT id
+                 FROM $tiv
+                 WHERE tender_id=?
+                   AND vendor_id=?
+                   AND deleted=1
+                 ORDER BY id DESC
+                 LIMIT 1",
+                [$tender_id, $vendor_id]
+            )->getRow();
+
+            if ($inactive) {
+                $this->db->query(
+                    "UPDATE $tiv
+                     SET invite_status='sent',
+                         invited_by=?,
+                         invited_at=?,
+                         deleted=0
+                     WHERE id=?",
+                    [(int) $this->login_user->id, $now, (int) $inactive->id]
+                );
                 continue;
             }
 
             $this->db->query(
                 "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
                  VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, $vendor_id, $this->login_user->id, $now]
+                [$tender_id, $vendor_id, (int) $this->login_user->id, $now]
             );
-            $count++;
         }
 
-        return $count;
+        return count($vendor_ids);
     }
 
-    private function _clear_invites(int $tender_id): void
+    private function _vendor_ids_from_rows(array $rows): array
     {
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
-        $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
+        $vendor_ids = [];
+        foreach ($rows as $row) {
+            $vendor_id = (int) ($row->vendor_id ?? 0);
+            if ($vendor_id > 0) {
+                $vendor_ids[$vendor_id] = $vendor_id;
+            }
+        }
+
+        return array_values($vendor_ids);
     }
 
     private function _count_active_invites(int $tender_id): int
@@ -2500,6 +2538,7 @@ class Tender_procurement_inbox extends Security_Controller
 
         return [
             esc($row->reference ?? "-"),
+            !empty($row->created_at) ? esc(format_to_datetime($row->created_at)) : "-",
             esc($row->subject ?? "-"),
             esc($row->company_name ?? "-"),
             esc($row->department_name ?? "-"),

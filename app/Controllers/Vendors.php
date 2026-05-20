@@ -42,10 +42,10 @@ class Vendors extends Security_Controller
 
     function index()
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
 
         $view_data = [
-            "can_view_vendors" => $this->can_view_vendors(),
+            "can_view_vendors" => $this->_can_view_vendors_for_review(),
             "can_create_vendors" => $this->can_create_vendors(),
             "can_update_vendors" => $this->can_update_vendors(),
             "can_delete_vendors" => $this->can_delete_vendors()
@@ -369,7 +369,7 @@ class Vendors extends Security_Controller
 
     function list_data()
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
 
         $list_data = $this->Vendors_model->get_details()->getResult();
         $result = array();
@@ -388,7 +388,7 @@ class Vendors extends Security_Controller
 
     public function update_status()
     {
-        $this->access_only_vendors_update();
+        $this->_access_only_vendor_status_update();
 
         $this->validate_submitted_data([
             "id" => "required|numeric",
@@ -411,12 +411,17 @@ class Vendors extends Security_Controller
         }
 
         // ✅ MUST be a variable because ci_save expects reference
+        $from_status = (string)($vendor->status ?? "");
+        if (!$this->can_update_vendors() && !$this->_is_procurement_vendor_reviewer_status_allowed($status, $from_status)) {
+            echo json_encode(["success" => false, "message" => app_lang("forbidden")]);
+            return;
+        }
+
         $data = [
             "status" => $status,
             "updated_by" => $this->login_user->id
         ];
 
-        $from_status = (string)($vendor->status ?? "");
         if ($status === "approved") {
             $data["registration_valid_from"] = date("Y-m-d");
             $valid_to = $this->_calculate_vendor_valid_to($vendor);
@@ -674,6 +679,67 @@ class Vendors extends Security_Controller
         $this->db->table($this->db->prefixTable("vendor_status_histories"))->insert(clean_data($history));
     }
 
+    private function _is_procurement_vendor_reviewer(): bool
+    {
+        return $this->has_active_tender_assignment("tender_procurement_users");
+    }
+
+    private function _can_view_vendors_for_review(): bool
+    {
+        return $this->can_view_vendors() || $this->_is_procurement_vendor_reviewer();
+    }
+
+    private function _can_update_vendor_review_status(): bool
+    {
+        return $this->can_update_vendors() || $this->_is_procurement_vendor_reviewer();
+    }
+
+    private function _access_only_vendors_review_view(): void
+    {
+        if (!$this->_can_view_vendors_for_review()) {
+            app_redirect("forbidden");
+            exit;
+        }
+    }
+
+    private function _access_only_vendor_status_update(): void
+    {
+        if (!$this->_can_update_vendor_review_status()) {
+            app_redirect("forbidden");
+            exit;
+        }
+    }
+
+    private function _access_only_vendor_specialties_review_view(): void
+    {
+        if ($this->_is_procurement_vendor_reviewer()) {
+            return;
+        }
+
+        $this->access_only_vendor_specialties_view();
+    }
+
+    private function _is_procurement_vendor_reviewer_status_allowed(string $status, string $from_status): bool
+    {
+        if ($status === $from_status) {
+            return true;
+        }
+
+        return in_array($status, ["approved", "rejected", "revise"], true);
+    }
+
+    private function _vendor_status_dropdown_options(string $current_status, bool $can_full_update): array
+    {
+        $statuses = $can_full_update ? vendor_status_options() : ["approved", "rejected", "revise"];
+        $current_status = strtolower(trim($current_status));
+
+        if ($current_status && !in_array($current_status, $statuses, true)) {
+            array_unshift($statuses, $current_status);
+        }
+
+        return array_values(array_unique($statuses));
+    }
+
 
 
 
@@ -739,7 +805,7 @@ class Vendors extends Security_Controller
 
     public function details($vendor_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
 
         $vendor_id = (int)$vendor_id;
         $vendor = $this->Vendors_model->get_details(["id" => $vendor_id])->getRow();
@@ -758,7 +824,7 @@ class Vendors extends Security_Controller
 
     public function vendor_documents_list_data($vendor_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
         $vendor_id = (int)$vendor_id;
 
         // change table name if your prefix differs
@@ -806,7 +872,7 @@ class Vendors extends Security_Controller
 
     public function vendor_document_preview($doc_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
         $doc_id = (int)$doc_id;
 
         $table = $this->db->prefixTable("vendor_documents");
@@ -843,7 +909,7 @@ class Vendors extends Security_Controller
 
     public function vendor_contacts_list_data($vendor_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
         $vendor_id = (int)$vendor_id;
 
         $table = $this->db->prefixTable("vendor_contacts"); // -> pod_vendor_contacts
@@ -874,7 +940,7 @@ class Vendors extends Security_Controller
 
     public function vendor_bank_list_data($vendor_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
         $vendor_id = (int)$vendor_id;
 
         $table = $this->db->prefixTable("vendor_bank_accounts"); // -> pod_vendor_bank_accounts
@@ -901,7 +967,7 @@ class Vendors extends Security_Controller
 
     public function vendor_branches_list_data($vendor_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
         $vendor_id = (int)$vendor_id;
 
         $table = $this->db->prefixTable("vendor_branches"); // -> pod_vendor_branches
@@ -927,7 +993,7 @@ class Vendors extends Security_Controller
 
     public function vendor_credentials_list_data($vendor_id)
     {
-        $this->access_only_vendors_view();
+        $this->_access_only_vendors_review_view();
         $vendor_id = (int)$vendor_id;
 
         $table = $this->db->prefixTable("vendor_credentials"); // -> pod_vendor_credentials
@@ -954,8 +1020,8 @@ class Vendors extends Security_Controller
 
     public function vendor_specialties_list_data($vendor_id)
     {
-        $this->access_only_vendors_view();
-        $this->access_only_vendor_specialties_view();
+        $this->_access_only_vendors_review_view();
+        $this->_access_only_vendor_specialties_review_view();
         $vendor_id = (int)$vendor_id;
 
         // base tables (with prefix -> pod_vendor_* )
@@ -1150,8 +1216,9 @@ class Vendors extends Security_Controller
             ? "<div class='mt5'>" . implode("", $chips) . "</div>"
             : "<span class='text-off'>-</span>";
 
-        $can_view = $this->can_view_vendors();
+        $can_view = $this->_can_view_vendors_for_review();
         $can_update = $this->can_update_vendors();
+        $can_update_status = $this->_can_update_vendor_review_status();
         $can_delete = $this->can_delete_vendors();
 
         if ($can_update) {
@@ -1166,8 +1233,8 @@ class Vendors extends Security_Controller
         }
 
         // status dropdown (same as yours)
-        $allowedStatuses = vendor_status_options();
-        if ($can_update) {
+        $allowedStatuses = $this->_vendor_status_dropdown_options((string)($data->status ?? ""), $can_update);
+        if ($can_update_status) {
             $statusSelect = "<select class='form-select form-select-sm js-vendor-status' data-id='{$data->id}'>";
             foreach ($allowedStatuses as $st) {
                 $selected = ($data->status === $st) ? "selected" : "";

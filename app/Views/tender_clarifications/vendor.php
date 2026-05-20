@@ -10,6 +10,14 @@
     $attachments = $attachments ?? [];
     $reply_threads = $reply_threads ?? [];
     $clarification_scope_options = $clarification_scope_options ?? ["general" => "General", "tender" => "Tender / Procurement", "technical" => "Technical Team", "commercial" => "Commercial Team", "vendor" => "Vendor Specific"];
+    $thread_preview = function ($text, int $limit = 60): string {
+        $text = trim(preg_replace("/\s+/", " ", (string) $text));
+        if ($text === "") {
+            return "-";
+        }
+
+        return mb_strlen($text) > $limit ? mb_substr($text, 0, max(0, $limit - 3)) . "..." : $text;
+    };
     ?>
 
     <div class="card gp-pro-card mb15">
@@ -124,7 +132,7 @@
                                 $thread_time = $thread->published_at ?: $thread->created_at;
                             ?>
                                 <option value="<?php echo (int) $thread->id; ?>">
-                                    <?php echo esc($thread_label . " - " . ($thread->subject ?: short_text($thread->message ?? "", 60)) . " - " . (!empty($thread_time) ? format_to_datetime($thread_time) : "-")); ?>
+                                    <?php echo esc($thread_label . " - " . ($thread->subject ?: $thread_preview($thread->message ?? "", 60)) . " - " . (!empty($thread_time) ? format_to_datetime($thread_time) : "-")); ?>
                                 </option>
                             <?php } ?>
                         </select>

@@ -18,6 +18,7 @@ $document_access = $document_access ?? [];
 $rfq_detail = $rfq_detail ?? null;
 $rfq_items = $rfq_items ?? [];
 $can_override_workflow = $can_override_workflow ?? false;
+$can_reply_clarifications = $can_reply_clarifications ?? false;
 
 $date_value = function ($value) {
     return !empty($value) ? format_to_datetime($value) : "-";
@@ -789,13 +790,29 @@ foreach ($opening_signatures as $signature) {
                                     <th>Visible</th>
                                     <th>By</th>
                                     <th>When</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (!$communications) { ?>
-                                    <tr><td colspan="6" class="text-center text-off p20">No clarifications, circulars, addenda, or site visit notices yet.</td></tr>
+                                    <tr><td colspan="7" class="text-center text-off p20">No clarifications, circulars, addenda, or site visit notices yet.</td></tr>
                                 <?php } ?>
-                                <?php foreach ($communications as $item) { ?>
+                                <?php foreach ($communications as $item) {
+                                    $communication_type = strtolower((string) ($item->type ?? ""));
+                                    $is_team_request = in_array($communication_type, ["technical_clarification_request", "commercial_clarification_request"], true) && !(int) ($item->parent_id ?? 0);
+                                    $reply_visibility = $communication_type === "commercial_clarification_request" ? "commercial" : "technical";
+                                    $reply_team_label = $reply_visibility === "commercial" ? "Commercial Team" : "Technical Team";
+                                    $reply_target_id = "internal-clarification-reply-" . (int) ($item->id ?? 0);
+                                    $can_show_team_reply = $can_reply_clarifications && $is_team_request;
+
+                                    if (in_array($communication_type, ["technical_clarification_request", "technical_clarification_response"], true)) {
+                                        $visible_badge = "<span class='badge bg-info text-dark'>Technical team</span>";
+                                    } elseif (in_array($communication_type, ["commercial_clarification_request", "commercial_clarification_response"], true)) {
+                                        $visible_badge = "<span class='badge bg-primary'>Commercial team</span>";
+                                    } else {
+                                        $visible_badge = (int) ($item->is_vendor_visible ?? 0) ? "<span class='badge bg-success'>Vendor visible</span>" : "<span class='badge bg-secondary'>Internal</span>";
+                                    }
+                                ?>
                                     <tr>
                                         <td><?php echo esc(ucwords(str_replace("_", " ", $item->type ?? "-"))); ?></td>
                                         <td><?php echo esc($item->vendor_name ?? "All participants"); ?></td>
@@ -803,10 +820,70 @@ foreach ($opening_signatures as $signature) {
                                             <strong><?php echo esc($item->subject ?? "-"); ?></strong>
                                             <div class="text-off mt5"><?php echo nl2br(esc($item->message ?? "")); ?></div>
                                         </td>
-                                        <td><?php echo (int) ($item->is_vendor_visible ?? 0) ? "<span class='badge bg-success'>Vendor visible</span>" : "<span class='badge bg-secondary'>Internal</span>"; ?></td>
+                                        <td><?php echo $visible_badge; ?></td>
                                         <td><?php echo esc($item->created_by_name ?: "-"); ?></td>
                                         <td><?php echo $date_value($item->published_at ?? $item->created_at ?? null); ?></td>
+                                        <td>
+                                            <?php if ($can_show_team_reply) { ?>
+                                                <button type="button"
+                                                    class="btn btn-default btn-sm"
+                                                    data-bs-toggle="collapse"
+                                                    data-bs-target="#<?php echo $reply_target_id; ?>"
+                                                    aria-expanded="false"
+                                                    aria-controls="<?php echo $reply_target_id; ?>">
+                                                    <i data-feather="message-square" class="icon-14"></i>
+                                                    Reply
+                                                </button>
+                                            <?php } else { ?>
+                                                <span class="text-off">-</span>
+                                            <?php } ?>
+                                        </td>
                                     </tr>
+                                    <?php if ($can_show_team_reply) { ?>
+                                        <tr class="internal-clarification-reply-row">
+                                            <td colspan="7" class="p0 border-top-0">
+                                                <div class="collapse" id="<?php echo $reply_target_id; ?>">
+                                                    <div class="internal-clarification-reply-box">
+                                                        <?php echo form_open_multipart(get_uri("tender_clarifications/save_reply"), [
+                                                            "class" => "general-form internal-clarification-reply-form",
+                                                            "role" => "form"
+                                                        ]); ?>
+                                                            <input type="hidden" name="communication_id" value="<?php echo (int) ($item->id ?? 0); ?>" />
+                                                            <input type="hidden" name="visibility" value="<?php echo esc($reply_visibility); ?>" />
+
+                                                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb10">
+                                                                <div>
+                                                                    <strong>Reply to <?php echo esc($reply_team_label); ?></strong>
+                                                                    <span class="badge bg-secondary ms-2">Internal</span>
+                                                                </div>
+                                                                <span class="badge bg-light text-dark"><?php echo esc($item->vendor_name ?? "General tender question"); ?></span>
+                                                            </div>
+
+                                                            <div class="row">
+                                                                <div class="col-md-8">
+                                                                    <div class="form-group mb10">
+                                                                        <label>Reply Message</label>
+                                                                        <textarea name="message" class="form-control" rows="4" required></textarea>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-4">
+                                                                    <div class="form-group mb10">
+                                                                        <label>Attach Files</label>
+                                                                        <input type="file" name="clarification_files[]" class="form-control" multiple>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <button type="submit" class="btn btn-primary">
+                                                                <i data-feather="send" class="icon-16"></i>
+                                                                Send Reply
+                                                            </button>
+                                                        <?php echo form_close(); ?>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php } ?>
                                 <?php } ?>
                             </tbody>
                         </table>
@@ -955,6 +1032,23 @@ $(document).ready(function () {
         }
     });
 
+    if ($(".internal-clarification-reply-form").length) {
+        $(".internal-clarification-reply-form").appForm({
+            isModal: false,
+            onSuccess: function (response) {
+                var communicationsUrl = <?php echo json_encode(get_uri("tender_reports/details/" . (int) $tender->id) . "#tender-report-communications"); ?>;
+                appAlert.success(response.message || "Clarification reply sent.", {duration: 2000});
+                setTimeout(function () {
+                    if (window.location.href === communicationsUrl) {
+                        window.location.reload();
+                    } else {
+                        window.location.href = communicationsUrl;
+                    }
+                }, 450);
+            }
+        });
+    }
+
     if ($("#tender-stage-override-form").length) {
         $("#tender-stage-override-form").appForm({
             isModal: false,
@@ -1075,6 +1169,15 @@ $(document).ready(function () {
     background: #fbfdff;
     border-radius: 12px;
     padding: 16px;
+}
+.internal-clarification-reply-box {
+    border-top: 1px solid #dbe8f7;
+    background: #f7fbff;
+    padding: 16px;
+}
+.internal-clarification-reply-box textarea {
+    min-height: 96px;
+    resize: vertical;
 }
 .tender-workflow-control {
     border-left: 4px solid #2f66f2;

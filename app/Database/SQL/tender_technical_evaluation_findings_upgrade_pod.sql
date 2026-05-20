@@ -25,6 +25,29 @@ ALTER TABLE `pod_tender_communications`
 ALTER TABLE `pod_tender_communications`
     ADD COLUMN IF NOT EXISTS `internal_audience` VARCHAR(50) DEFAULT NULL AFTER `clarification_scope`;
 
+ALTER TABLE `pod_tender_communications`
+    MODIFY COLUMN `type` VARCHAR(50) NOT NULL DEFAULT 'clarification';
+
+UPDATE `pod_tender_communications`
+SET `type` = CONCAT(COALESCE(NULLIF(`internal_audience`, ''), `clarification_scope`), '_clarification_request')
+WHERE deleted = 0
+  AND (`type` IS NULL OR `type` = '')
+  AND COALESCE(NULLIF(`internal_audience`, ''), `clarification_scope`) IN ('technical', 'commercial')
+  AND (parent_id IS NULL OR parent_id = 0);
+
+UPDATE `pod_tender_communications` child
+INNER JOIN `pod_tender_communications` root
+   ON root.id = child.parent_id
+  AND root.deleted = 0
+SET child.`type` = CONCAT(COALESCE(NULLIF(root.`internal_audience`, ''), root.`clarification_scope`), '_clarification_response')
+WHERE child.deleted = 0
+  AND (child.`type` IS NULL OR child.`type` = '')
+  AND COALESCE(NULLIF(root.`internal_audience`, ''), root.`clarification_scope`) IN ('technical', 'commercial');
+
+UPDATE `pod_tender_communications`
+SET `type` = 'clarification'
+WHERE `type` IS NULL OR `type` = '';
+
 CREATE INDEX IF NOT EXISTS `idx_tender_communications_bid_audience`
     ON `pod_tender_communications` (`tender_bid_id`, `internal_audience`, `deleted`);
 

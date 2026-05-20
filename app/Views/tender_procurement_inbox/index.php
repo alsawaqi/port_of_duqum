@@ -57,6 +57,7 @@ $(document).ready(function () {
         source: '<?php echo_uri("tender_procurement_inbox/list_data"); ?>',
         columns: [
             {title: "Reference"},
+            {title: "<?php echo app_lang('created_date'); ?>"},
             {title: "Subject"},
             {title: "Company"},
             {title: "Department"},

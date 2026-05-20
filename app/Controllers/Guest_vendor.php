@@ -57,6 +57,7 @@ class Guest_vendor extends App_Controller
         // Empty dropdowns initially
         $view_data["regions_dropdown"] = ["" => "- " . app_lang("select_region") . " -"];
         $view_data["cities_dropdown"] = ["" => "- " . app_lang("select_city") . " -"];
+        $view_data["intl_dial_codes"] = require APPPATH . "Config/intl_phone_dial_codes.php";
 
 
         $doc_types_table = $this->db->prefixTable('vendor_document_types');
@@ -91,7 +92,8 @@ class Guest_vendor extends App_Controller
                 "vendor_name"     => "required",
                 "email"           => "required|valid_email",
                 "cr_number"       => "required",
-                "phone"           => "required",
+                "phone_country_code" => "required|max_length[12]",
+                "phone_local"     => "required|regex_match[/^\d{4,15}$/]",
                 "contact_person"  => "required",
                 "contact_designation" => "permit_empty",
 
@@ -103,8 +105,8 @@ class Guest_vendor extends App_Controller
                 // login user fields
                 "user_name"       => "required",
                 "user_email"      => "required|valid_email",
-                "password"        => "required",
-                "password_confirm" => "required",
+                "password"        => "permit_empty",
+                "password_confirm" => "permit_empty",
                 // optional vendor address fields
 
 
@@ -121,13 +123,25 @@ class Guest_vendor extends App_Controller
             $cr_number = trim((string) $this->request->getPost("cr_number"));
             $password = (string) $this->request->getPost("password");
             $password_confirm = (string) $this->request->getPost("password_confirm");
+            $phone_country_code = $this->_normalize_dial_code($this->request->getPost("phone_country_code"));
+            $phone = $this->_merge_e164($phone_country_code, (string) $this->request->getPost("phone_local"));
 
-            if ($password !== $password_confirm) {
+            if (!$this->_is_allowed_dial($phone_country_code)) {
                 echo json_encode([
                     "success" => false,
-                    "message" => app_lang("passwords_do_not_match"),
-                    "field"   => "password_confirm",
-                    "errors"  => ["password_confirm" => app_lang("passwords_do_not_match")]
+                    "message" => app_lang("vendor_invalid_country_code"),
+                    "field"   => "phone_country_code",
+                    "errors"  => ["phone_country_code" => app_lang("vendor_invalid_country_code")]
+                ]);
+                return;
+            }
+
+            if ($phone === "") {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("vendor_invalid_phone_number"),
+                    "field"   => "phone_local",
+                    "errors"  => ["phone_local" => app_lang("vendor_invalid_phone_number")]
                 ]);
                 return;
             }
@@ -176,13 +190,62 @@ class Guest_vendor extends App_Controller
                 ->getRow();
 
             if ($existing_user) {
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("email_already_exists"),
-                    "field"   => "user_email",
-                    "errors"  => ["user_email" => app_lang("email_already_exists")]
-                ]);
-                return;
+                if (($existing_user->user_type ?? "") !== "staff") {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("vendor_email_belongs_to_non_staff_user"),
+                        "field"   => "user_email",
+                        "errors"  => ["user_email" => app_lang("vendor_email_belongs_to_non_staff_user")]
+                    ]);
+                    return;
+                }
+
+                $existing_vendor_user = $db->table("vendor_users")
+                    ->select("id, vendor_id")
+                    ->where("user_id", (int)$existing_user->id)
+                    ->where("deleted", 0)
+                    ->get()
+                    ->getRow();
+
+                if ($existing_vendor_user) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("user_already_registered_as_vendor"),
+                        "field"   => "user_email",
+                        "errors"  => ["user_email" => app_lang("user_already_registered_as_vendor")]
+                    ]);
+                    return;
+                }
+            } else {
+                if ($password === "") {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("field_required"),
+                        "field"   => "password",
+                        "errors"  => ["password" => app_lang("field_required")]
+                    ]);
+                    return;
+                }
+
+                if ($password_confirm === "") {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("password_confirm_required"),
+                        "field"   => "password_confirm",
+                        "errors"  => ["password_confirm" => app_lang("password_confirm_required")]
+                    ]);
+                    return;
+                }
+
+                if ($password !== $password_confirm) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("passwords_do_not_match"),
+                        "field"   => "password_confirm",
+                        "errors"  => ["password_confirm" => app_lang("passwords_do_not_match")]
+                    ]);
+                    return;
+                }
             }
 
             // ✅ optional ids: store NULL instead of 0
@@ -195,7 +258,8 @@ class Guest_vendor extends App_Controller
                 "vendor_name"     => $this->request->getPost("vendor_name"),
                 "email"           => $vendor_email,
                 "cr_number"       => $cr_number,
-                "phone"           => $this->request->getPost("phone"),
+                "phone"           => $phone,
+                "phone_country_code" => $phone_country_code,
                 "contact_person"  => $this->request->getPost("contact_person"),
                 "contact_designation" => $this->request->getPost("contact_designation"),
 
@@ -502,7 +566,8 @@ class Guest_vendor extends App_Controller
         $columns = [
             "cr_number" => "ALTER TABLE `$table` ADD COLUMN `cr_number` VARCHAR(100) DEFAULT NULL AFTER `email`",
             "phone" => "ALTER TABLE `$table` ADD COLUMN `phone` VARCHAR(50) DEFAULT NULL AFTER `cr_number`",
-            "contact_person" => "ALTER TABLE `$table` ADD COLUMN `contact_person` VARCHAR(255) DEFAULT NULL AFTER `phone`",
+            "phone_country_code" => "ALTER TABLE `$table` ADD COLUMN `phone_country_code` VARCHAR(12) DEFAULT NULL AFTER `phone`",
+            "contact_person" => "ALTER TABLE `$table` ADD COLUMN `contact_person` VARCHAR(255) DEFAULT NULL AFTER `phone_country_code`",
             "contact_designation" => "ALTER TABLE `$table` ADD COLUMN `contact_designation` VARCHAR(255) DEFAULT NULL AFTER `contact_person`",
         ];
 
@@ -522,6 +587,48 @@ class Guest_vendor extends App_Controller
         )->getRow();
 
         return (bool) $row;
+    }
+
+    /** @var list<string>|null */
+    private static $allowedDialCache = null;
+
+    private function _dial_code_whitelist(): array
+    {
+        if (self::$allowedDialCache === null) {
+            $list = require APPPATH . "Config/intl_phone_dial_codes.php";
+            self::$allowedDialCache = array_values(array_unique(array_column($list, "code")));
+        }
+
+        return self::$allowedDialCache;
+    }
+
+    private function _normalize_dial_code(?string $dial): string
+    {
+        $dial = trim((string) $dial);
+        if ($dial === "") {
+            return "";
+        }
+
+        if ($dial[0] !== "+") {
+            $dial = "+" . ltrim($dial, "+");
+        }
+
+        return $dial;
+    }
+
+    private function _is_allowed_dial(string $dial): bool
+    {
+        return in_array($dial, $this->_dial_code_whitelist(), true);
+    }
+
+    private function _merge_e164(string $dial, string $localDigits): string
+    {
+        $localDigits = preg_replace('/\D+/', "", $localDigits) ?? "";
+        if ($dial === "" || $localDigits === "") {
+            return "";
+        }
+
+        return $dial . $localDigits;
     }
 
     // AJAX: regions by country (public)

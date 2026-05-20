@@ -33,6 +33,8 @@ class Tender_communications_model extends Crud_model
             $this->db->query("ALTER TABLE `$communications` ADD COLUMN `internal_audience` VARCHAR(50) DEFAULT NULL AFTER `clarification_scope`");
         }
 
+        $this->_ensure_type_column_accepts_internal_values($communications);
+
         $this->db->query(
             "CREATE TABLE IF NOT EXISTS `$attachments` (
                 `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -54,6 +56,44 @@ class Tender_communications_model extends Crud_model
         );
 
         self::$clarification_scope_attachment_schema_checked = true;
+    }
+
+    private function _ensure_type_column_accepts_internal_values(string $communications): void
+    {
+        $column = $this->db->query(
+            "SHOW COLUMNS FROM `$communications` LIKE " . $this->db->escape("type")
+        )->getRow();
+
+        $type = strtolower((string) ($column->Type ?? ""));
+        if ($type !== "" && strpos($type, "varchar") !== 0) {
+            $this->db->query("ALTER TABLE `$communications` MODIFY COLUMN `type` VARCHAR(50) NOT NULL DEFAULT 'clarification'");
+        }
+
+        $this->db->query(
+            "UPDATE `$communications`
+             SET `type` = CONCAT(COALESCE(NULLIF(`internal_audience`, ''), `clarification_scope`), '_clarification_request')
+             WHERE deleted = 0
+               AND (`type` IS NULL OR `type` = '')
+               AND COALESCE(NULLIF(`internal_audience`, ''), `clarification_scope`) IN ('technical', 'commercial')
+               AND (parent_id IS NULL OR parent_id = 0)"
+        );
+
+        $this->db->query(
+            "UPDATE `$communications` child
+             INNER JOIN `$communications` root
+                ON root.id = child.parent_id
+               AND root.deleted = 0
+             SET child.`type` = CONCAT(COALESCE(NULLIF(root.`internal_audience`, ''), root.`clarification_scope`), '_clarification_response')
+             WHERE child.deleted = 0
+               AND (child.`type` IS NULL OR child.`type` = '')
+               AND COALESCE(NULLIF(root.`internal_audience`, ''), root.`clarification_scope`) IN ('technical', 'commercial')"
+        );
+
+        $this->db->query(
+            "UPDATE `$communications`
+             SET `type` = 'clarification'
+             WHERE `type` IS NULL OR `type` = ''"
+        );
     }
 
     private function _column_exists(string $table, string $column): bool

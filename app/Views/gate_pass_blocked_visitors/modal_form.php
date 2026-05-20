@@ -2,6 +2,18 @@
 $model_info = $model_info ?? null;
 $is_existing = !empty($model_info) && !empty($model_info->id);
 $is_unblocked = $is_existing && strtolower((string) ($model_info->status ?? "")) === "unblocked";
+$id_type_options = $id_type_options ?? [];
+$nationality_options = $nationality_options ?? [];
+$current_id_type = trim((string) ($model_info->id_type ?? ""));
+$current_nationality = trim((string) ($model_info->nationality ?? ""));
+
+if ($current_id_type !== "" && !isset($id_type_options[$current_id_type])) {
+    $id_type_options[$current_id_type] = $current_id_type;
+}
+
+if ($current_nationality !== "" && !isset($nationality_options[$current_nationality])) {
+    $nationality_options[$current_nationality] = $current_nationality;
+}
 ?>
 
 <?php echo form_open(get_uri("gate_pass_blocked_visitors/save"), ["id" => "gp-blocked-visitor-form", "class" => "general-form", "role" => "form"]); ?>
@@ -27,9 +39,13 @@ $is_unblocked = $is_existing && strtolower((string) ($model_info->status ?? ""))
         <div class="col-md-6">
             <div class="form-group">
                 <label><?php echo app_lang("id_type"); ?></label>
-                <input type="text" name="id_type" class="form-control"
-                       value="<?php echo esc($model_info->id_type ?? ""); ?>"
-                       placeholder="Passport, National ID, Residence Permit">
+                <select name="id_type" id="gp-blocked-id-type" class="form-control">
+                    <?php foreach ($id_type_options as $value => $label): ?>
+                        <option value="<?php echo esc($value); ?>" <?php echo $current_id_type === (string) $value ? "selected" : ""; ?>>
+                            <?php echo esc($label); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
         </div>
     </div>
@@ -45,8 +61,13 @@ $is_unblocked = $is_existing && strtolower((string) ($model_info->status ?? ""))
         <div class="col-md-6">
             <div class="form-group">
                 <label><?php echo app_lang("nationality"); ?></label>
-                <input type="text" name="nationality" class="form-control"
-                       value="<?php echo esc($model_info->nationality ?? ""); ?>">
+                <select name="nationality" id="gp-blocked-nationality" class="form-control">
+                    <?php foreach ($nationality_options as $value => $label): ?>
+                        <option value="<?php echo esc($value); ?>" <?php echo $current_nationality === (string) $value ? "selected" : ""; ?>>
+                            <?php echo esc($label); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
         </div>
     </div>
@@ -73,6 +94,12 @@ $is_unblocked = $is_existing && strtolower((string) ($model_info->status ?? ""))
 
 <script>
 $(document).ready(function () {
+    var $modal = $("#gp-blocked-visitor-form").closest(".modal");
+    $("#gp-blocked-id-type, #gp-blocked-nationality").select2({
+        width: "100%",
+        dropdownParent: $modal.length ? $modal : $(document.body)
+    });
+
     $("#gp-blocked-visitor-form").appForm({
         onSuccess: function (result) {
             $("#gate-pass-blocked-visitors-table").appTable({ newData: result.data, dataId: result.id });

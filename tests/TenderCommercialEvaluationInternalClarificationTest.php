@@ -37,8 +37,10 @@ $vendorController = $read("app/Controllers/Vendor_portal.php");
 
 $assertContains("tender_bid_id", $sql, "SQL should add tender bid linkage for evaluator clarification requests");
 $assertContains("internal_audience", $sql, "SQL should add internal audience for evaluator-procurement messages");
+$assertContains("MODIFY COLUMN `type` VARCHAR(50)", $sql, "SQL should allow internal clarification request and response type values");
 
 $assertContains("commercial_clarification_request", $communicationsModel, "communication roots should include commercial evaluator requests");
+$assertContains("_ensure_type_column_accepts_internal_values", $communicationsModel, "communication model should repair old enum-limited internal type values");
 $assertContains("get_internal_conversation", $communicationsModel, "model should load evaluator-procurement internal conversation only");
 $assertContains("has_vendor_visible_evaluator_clarification_request", $communicationsModel, "vendor late replies should be allowed for any evaluator request");
 $assertContains("get_latest_vendor_visible_evaluator_request", $communicationsModel, "vendor replies should attach to the evaluator request thread after procurement asks");
@@ -67,7 +69,12 @@ $assertContains("commercial-general-clarification-form", $commercialDetails, "co
 $assertContains("technical-general-clarification-form", $technicalDetails, "technical details should allow broad procurement messages");
 
 $assertContains("commercial_evaluation_attachments", $reportsController, "procurement reports should pass commercial findings attachments");
+$assertContains("can_reply_clarifications", $reportsController, "procurement reports should expose clarification reply permission");
 $assertContains("Commercial Findings", $reportsView, "procurement report should label commercial findings");
+$assertContains("internal-clarification-reply-form", $reportsView, "procurement report should allow inline replies to evaluator requests");
+$assertContains("tender_clarifications/save_reply", $reportsView, "procurement report replies should use the existing clarification reply endpoint");
+$assertContains("commercial_clarification_request", $reportsView, "procurement report should detect commercial evaluator requests");
+$assertContains("technical_clarification_request", $reportsView, "procurement report should detect technical evaluator requests");
 
 $assertContains("\"commercial\" => \"Forward internally to commercial team\"", $clarificationController, "procurement should forward vendor answers internally to commercial");
 $assertContains("commercial_clarification_request", $clarificationController, "procurement chat should include commercial evaluator requests");

@@ -4,9 +4,11 @@ namespace App\Controllers;
 
 use App\Models\Tender_bid_requirements_model;
 use App\Models\Tender_communications_model;
+use App\Models\Tender_documents_model;
 use App\Models\Tender_procurement_manager_users_model;
 use App\Models\Tender_rfq_details_model;
 use App\Models\Tender_rfq_items_model;
+use App\Models\Tender_team_members_model;
 use App\Models\Tenders_model;
 use App\Libraries\Tender_testing_stage;
 
@@ -16,9 +18,11 @@ class Tender_procurement_manager_inbox extends Security_Controller
     protected $Tenders_model;
     protected $Tender_bid_requirements_model;
     protected $Tender_communications_model;
+    protected $Tender_documents_model;
     protected $Tender_procurement_manager_users_model;
     protected $Tender_rfq_details_model;
     protected $Tender_rfq_items_model;
+    protected $Tender_team_members_model;
     protected $Tender_testing_stage;
 
     public function __construct()
@@ -30,9 +34,11 @@ class Tender_procurement_manager_inbox extends Security_Controller
         $this->Tenders_model = new Tenders_model();
         $this->Tender_bid_requirements_model = new Tender_bid_requirements_model();
         $this->Tender_communications_model = new Tender_communications_model();
+        $this->Tender_documents_model = new Tender_documents_model();
         $this->Tender_procurement_manager_users_model = new Tender_procurement_manager_users_model();
         $this->Tender_rfq_details_model = new Tender_rfq_details_model();
         $this->Tender_rfq_items_model = new Tender_rfq_items_model();
+        $this->Tender_team_members_model = new Tender_team_members_model();
         $this->Tender_testing_stage = new Tender_testing_stage();
     }
 
@@ -97,6 +103,39 @@ class Tender_procurement_manager_inbox extends Security_Controller
         return $this->response->setJSON(["data" => $result]);
     }
 
+    public function details($id = 0)
+    {
+        $this->access_only_tender("procurement_manager_inbox", "view");
+
+        $tender_id = (int) $id;
+        if (!$tender_id) {
+            show_404();
+        }
+
+        $tender = $this->_get_tender_review_record($tender_id);
+        if (!$tender) {
+            show_404();
+        }
+
+        $payload = $this->_decode_manager_payload($tender);
+
+        return $this->template->rander("tender_procurement_manager_inbox/details", [
+            "tender" => $tender,
+            "payload" => $payload,
+            "pending_action_summary" => $this->_pending_action_summary($tender),
+            "schedule" => $this->_get_tender_schedule_rows($tender),
+            "teams" => $this->_get_tender_team_rows($tender_id),
+            "target_rules" => $this->_get_tender_target_rules($tender_id),
+            "target_vendors" => $this->_get_tender_target_vendors($tender_id),
+            "required_sections" => $this->Tender_bid_requirements_model->get_details(["tender_id" => $tender_id])->getResult(),
+            "tender_documents" => $this->_get_tender_documents($tender_id),
+            "rfq_detail" => $this->Tender_rfq_details_model->get_by_tender($tender_id),
+            "rfq_items" => $this->Tender_rfq_items_model->get_by_tender($tender_id),
+            "can_review" => (string) ($tender->procurement_manager_status ?? "") === "pending"
+                && $this->can_tender("procurement_manager_inbox", "update"),
+        ]);
+    }
+
     public function approve()
     {
         $this->validate_submitted_data([
@@ -137,6 +176,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
                 return $this->response->setJSON([
                     "success" => true,
                     "message" => "Tender cancellation approved.",
+                    "redirect_url" => get_uri("tender_procurement_manager_inbox/details/" . $tender_id),
                 ]);
 
             case "update":
@@ -146,6 +186,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
                 return $this->response->setJSON([
                     "success" => true,
                     "message" => "Tender update approved and applied.",
+                    "redirect_url" => get_uri("tender_procurement_manager_inbox/details/" . $tender_id),
                 ]);
 
             case "stage_override":
@@ -155,6 +196,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
                 return $this->response->setJSON([
                     "success" => true,
                     "message" => "Workflow stage change approved and applied.",
+                    "redirect_url" => get_uri("tender_procurement_manager_inbox/details/" . $tender_id),
                 ]);
 
             default:
@@ -165,7 +207,69 @@ class Tender_procurement_manager_inbox extends Security_Controller
         return $this->response->setJSON([
             "success" => true,
             "message" => "Tender approved. Procurement can publish it now.",
+            "redirect_url" => get_uri("tender_procurement_manager_inbox/details/" . $tender_id),
         ]);
+    }
+
+    public function request_revision()
+    {
+        $this->validate_submitted_data([
+            "tender_id" => "required|numeric",
+            "comment" => "required",
+        ]);
+        $this->access_only_tender("procurement_manager_inbox", "update");
+
+        $tender_id = (int) $this->request->getPost("tender_id");
+        $tender = $this->_get_tender_for_manager($tender_id);
+        if (!$tender) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
+        }
+
+        if ((string) ($tender->procurement_manager_status ?? "") !== "pending") {
+            return $this->response->setJSON(["success" => false, "message" => "Only pending tenders can be returned for update."]);
+        }
+
+        $comment = trim((string) $this->request->getPost("comment"));
+        if ($comment === "") {
+            return $this->response->setJSON(["success" => false, "message" => "Comment is required."]);
+        }
+
+        $now = date("Y-m-d H:i:s");
+        $this->Tenders_model->ci_save([
+            "procurement_manager_status" => "revision_requested",
+            "procurement_manager_reviewed_by" => (int) $this->login_user->id,
+            "procurement_manager_reviewed_at" => $now,
+            "procurement_manager_comment" => $comment,
+            "updated_at" => $now,
+        ], $tender_id);
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Tender returned to procurement for update.",
+            "redirect_url" => get_uri("tender_procurement_manager_inbox/details/" . $tender_id),
+        ]);
+    }
+
+    public function preview_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+
+        return $this->template->view(
+            "tender_procurement_manager_inbox/file_preview",
+            $this->_make_file_preview_data($context["doc"], get_uri("tender_procurement_manager_inbox/view_tender_document/" . (int) $id))
+        );
+    }
+
+    public function view_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_document_file($context["doc"], $context["full_path"], false);
+    }
+
+    public function download_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_document_file($context["doc"], $context["full_path"], true);
     }
 
     private function _decode_manager_payload($tender): array
@@ -183,10 +287,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
 
         $fields = $payload["tender_fields"] ?? [];
         if (is_array($fields) && $fields) {
-            if (empty($fields["tender_request_id"]) && !empty($tender->tender_request_id)) {
-                $fields["tender_request_id"] = (int) $tender->tender_request_id;
-            }
-
+            $fields = $this->_prepare_tender_fields_for_save($fields, $tender);
             $fields["updated_at"] = date("Y-m-d H:i:s");
             $this->Tenders_model->ci_save(clean_data($fields), $tender_id);
             $this->_record_manager_update_history($tender, $fields, $payload, $fields["updated_at"]);
@@ -259,8 +360,58 @@ class Tender_procurement_manager_inbox extends Security_Controller
                 break;
         }
 
+        $fields = $this->_prepare_tender_fields_for_save($fields, $tender);
         $this->Tenders_model->ci_save(clean_data($fields), $tender_id);
         $this->_record_manager_stage_override($tender, $payload, $now);
+    }
+
+    private function _prepare_tender_fields_for_save(array $fields, $tender): array
+    {
+        if (!array_key_exists("tender_request_id", $fields)) {
+            return $fields;
+        }
+
+        $candidate = $fields["tender_request_id"];
+        $existing_request_id = (int) ($tender->tender_request_id ?? 0);
+
+        if ($candidate === null || $candidate === "" || ((is_numeric($candidate) && (int) $candidate < 1))) {
+            if ($existing_request_id > 0) {
+                $fields["tender_request_id"] = $existing_request_id;
+            } else {
+                unset($fields["tender_request_id"]);
+            }
+
+            return $fields;
+        }
+
+        $request_id = (int) $candidate;
+        if ($this->_tender_request_exists($request_id)) {
+            $fields["tender_request_id"] = $request_id;
+            return $fields;
+        }
+
+        if ($existing_request_id > 0) {
+            $fields["tender_request_id"] = $existing_request_id;
+        } else {
+            unset($fields["tender_request_id"]);
+        }
+
+        return $fields;
+    }
+
+    private function _tender_request_exists(int $tender_request_id): bool
+    {
+        if ($tender_request_id < 1) {
+            return false;
+        }
+
+        $requests = $this->db->prefixTable("tender_requests");
+        $row = $this->db->query(
+            "SELECT id FROM $requests WHERE id=? AND deleted=0 LIMIT 1",
+            [$tender_request_id]
+        )->getRow();
+
+        return (bool) $row;
     }
 
     private function _apply_pending_testing_stage_override($tender, string $testing_stage): void
@@ -623,45 +774,42 @@ class Tender_procurement_manager_inbox extends Security_Controller
 
     private function _has_any_team_selection(array $team_ids): bool
     {
-        return !empty($team_ids["technical"])
-            || !empty($team_ids["commercial"])
-            || (int) ($team_ids["chairman"] ?? 0) > 0
-            || (int) ($team_ids["secretary"] ?? 0) > 0
-            || !empty($team_ids["itc_member"]);
+        return !empty($this->_team_user_ids($team_ids["technical"] ?? []))
+            || !empty($this->_team_user_ids($team_ids["commercial"] ?? []))
+            || $this->_single_team_user_id($team_ids["chairman"] ?? 0) > 0
+            || $this->_single_team_user_id($team_ids["secretary"] ?? 0) > 0
+            || !empty($this->_team_user_ids($team_ids["itc_member"] ?? []));
     }
 
     private function _sync_tender_teams_from_payload(int $tender_id, array $team_ids): void
     {
-        $team = $this->db->prefixTable("tender_team_members");
-        $now = date("Y-m-d H:i:s");
-        $this->db->query("UPDATE $team SET deleted=1, is_active=0, updated_at=? WHERE tender_id=?", [$now, $tender_id]);
+        $chairman_id = $this->_single_team_user_id($team_ids["chairman"] ?? 0);
+        $secretary_id = $this->_single_team_user_id($team_ids["secretary"] ?? 0);
 
-        $insert = function (int $user_id, string $role) use ($team, $tender_id, $now): void {
-            if (!$user_id) {
-                return;
+        $this->Tender_team_members_model->sync_members($tender_id, "technical_evaluator", $this->_team_user_ids($team_ids["technical"] ?? []));
+        $this->Tender_team_members_model->sync_members($tender_id, "commercial_evaluator", $this->_team_user_ids($team_ids["commercial"] ?? []));
+        $this->Tender_team_members_model->sync_members($tender_id, "chairman", $chairman_id ? [$chairman_id] : []);
+        $this->Tender_team_members_model->sync_members($tender_id, "secretary", $secretary_id ? [$secretary_id] : []);
+        $this->Tender_team_members_model->sync_members($tender_id, "itc_member", $this->_team_user_ids($team_ids["itc_member"] ?? []));
+    }
+
+    private function _team_user_ids($ids): array
+    {
+        $clean = [];
+        foreach ((array) $ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $clean[$id] = $id;
             }
-
-            $this->db->query(
-                "INSERT INTO $team (tender_id, user_id, team_role, is_active, created_at, updated_at, deleted)
-                 VALUES (?, ?, ?, 1, ?, ?, 0)",
-                [$tender_id, $user_id, $role, $now, $now]
-            );
-        };
-
-        foreach ((array) ($team_ids["technical"] ?? []) as $user_id) {
-            $insert((int) $user_id, "technical_evaluator");
         }
 
-        foreach ((array) ($team_ids["commercial"] ?? []) as $user_id) {
-            $insert((int) $user_id, "commercial_evaluator");
-        }
+        return array_values($clean);
+    }
 
-        $insert((int) ($team_ids["chairman"] ?? 0), "chairman");
-        $insert((int) ($team_ids["secretary"] ?? 0), "secretary");
-
-        foreach ((array) ($team_ids["itc_member"] ?? []) as $user_id) {
-            $insert((int) $user_id, "itc_member");
-        }
+    private function _single_team_user_id($id): int
+    {
+        $ids = $this->_team_user_ids($id);
+        return (int) ($ids[0] ?? 0);
     }
 
     private function _sync_invites_from_payload($tender, array $target): void
@@ -696,7 +844,115 @@ class Tender_procurement_manager_inbox extends Security_Controller
     private function _clear_invites(int $tender_id): void
     {
         $tiv = $this->db->prefixTable("tender_invited_vendors");
-        $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=?", [$tender_id]);
+        $this->db->query(
+            "DELETE stale
+             FROM $tiv stale
+             INNER JOIN $tiv active
+                ON active.tender_id=stale.tender_id
+               AND active.vendor_id=stale.vendor_id
+               AND active.deleted=0
+             WHERE stale.tender_id=?
+               AND stale.deleted=1",
+            [$tender_id]
+        );
+        $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=? AND deleted=0", [$tender_id]);
+    }
+
+    private function _replace_invites(int $tender_id, array $vendor_ids): int
+    {
+        $vendor_ids = $this->_clean_vendor_ids($vendor_ids);
+        if (!$vendor_ids) {
+            $this->_clear_invites($tender_id);
+            return 0;
+        }
+
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $placeholders = implode(",", array_fill(0, count($vendor_ids), "?"));
+        $params = array_merge([$tender_id], $vendor_ids);
+
+        $this->db->query(
+            "DELETE stale
+             FROM $tiv stale
+             INNER JOIN $tiv active
+                ON active.tender_id=stale.tender_id
+               AND active.vendor_id=stale.vendor_id
+               AND active.deleted=0
+             WHERE stale.tender_id=?
+               AND stale.deleted=1
+               AND active.vendor_id NOT IN ($placeholders)",
+            $params
+        );
+
+        $this->db->query(
+            "UPDATE $tiv
+             SET deleted=1
+             WHERE tender_id=?
+               AND deleted=0
+               AND vendor_id NOT IN ($placeholders)",
+            $params
+        );
+
+        $now = date("Y-m-d H:i:s");
+        foreach ($vendor_ids as $vendor_id) {
+            $active = $this->db->query(
+                "SELECT id
+                 FROM $tiv
+                 WHERE tender_id=?
+                   AND vendor_id=?
+                   AND deleted=0
+                 LIMIT 1",
+                [$tender_id, $vendor_id]
+            )->getRow();
+
+            if ($active) {
+                continue;
+            }
+
+            $inactive = $this->db->query(
+                "SELECT id
+                 FROM $tiv
+                 WHERE tender_id=?
+                   AND vendor_id=?
+                   AND deleted=1
+                 ORDER BY id DESC
+                 LIMIT 1",
+                [$tender_id, $vendor_id]
+            )->getRow();
+
+            if ($inactive) {
+                $this->db->query(
+                    "UPDATE $tiv
+                     SET invite_status='sent',
+                         invited_by=?,
+                         invited_at=?,
+                         deleted=0
+                     WHERE id=?",
+                    [(int) $this->login_user->id, $now, (int) $inactive->id]
+                );
+                continue;
+            }
+
+            $this->db->query(
+                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
+                 VALUES (?, ?, 'sent', ?, ?, 0)",
+                [$tender_id, $vendor_id, (int) $this->login_user->id, $now]
+            );
+        }
+
+        return count($vendor_ids);
+    }
+
+    private function _vendor_ids_from_rows(array $rows): array
+    {
+        $vendor_ids = [];
+        foreach ($rows as $row) {
+            $vendor_id = (int) ($row->vendor_id ?? 0);
+            if ($vendor_id > 0) {
+                $vendor_ids[$vendor_id] = $vendor_id;
+            }
+        }
+
+        return array_values($vendor_ids);
     }
 
     private function _count_request_selected_vendors(int $tender_request_id): int
@@ -716,11 +972,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
     private function _sync_invites_from_request(int $tender_id, int $tender_request_id): void
     {
         $trv = $this->db->prefixTable("tender_request_vendors");
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
-        $now = date("Y-m-d H:i:s");
-
-        $this->_clear_invites($tender_id);
 
         $rows = $this->db->query(
             "SELECT DISTINCT $trv.vendor_id
@@ -733,22 +985,13 @@ class Tender_procurement_manager_inbox extends Security_Controller
             [$tender_request_id]
         )->getResult();
 
-        foreach ($rows as $row) {
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, (int) $row->vendor_id, (int) $this->login_user->id, $now]
-            );
-        }
+        $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_by_specialty(int $tender_id, int $vendor_category_id, int $vendor_sub_category_id): void
     {
-        $this->_clear_invites($tender_id);
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
         $spec = $this->db->prefixTable("vendor_specialties");
-        $now = date("Y-m-d H:i:s");
 
         $sql = "SELECT DISTINCT $vendors.id AS vendor_id
                 FROM $spec
@@ -765,21 +1008,12 @@ class Tender_procurement_manager_inbox extends Security_Controller
             $params[] = $vendor_sub_category_id;
         }
 
-        foreach ($this->db->query($sql, $params)->getResult() as $row) {
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, (int) $row->vendor_id, (int) $this->login_user->id, $now]
-            );
-        }
+        $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($this->db->query($sql, $params)->getResult()));
     }
 
     private function _sync_invites_by_vendor_group(int $tender_id, int $vendor_group_id): void
     {
-        $this->_clear_invites($tender_id);
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
-        $now = date("Y-m-d H:i:s");
 
         $rows = $this->db->query(
             "SELECT DISTINCT id AS vendor_id
@@ -790,26 +1024,18 @@ class Tender_procurement_manager_inbox extends Security_Controller
             [$vendor_group_id]
         )->getResult();
 
-        foreach ($rows as $row) {
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, (int) $row->vendor_id, (int) $this->login_user->id, $now]
-            );
-        }
+        $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_from_specific_vendors(int $tender_id, array $vendor_ids): void
     {
-        $this->_clear_invites($tender_id);
         $vendor_ids = $this->_clean_vendor_ids($vendor_ids);
         if (!$vendor_ids) {
+            $this->_clear_invites($tender_id);
             return;
         }
 
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
-        $now = date("Y-m-d H:i:s");
         $placeholders = implode(",", array_fill(0, count($vendor_ids), "?"));
 
         $rows = $this->db->query(
@@ -821,21 +1047,12 @@ class Tender_procurement_manager_inbox extends Security_Controller
             $vendor_ids
         )->getResult();
 
-        foreach ($rows as $row) {
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, (int) $row->vendor_id, (int) $this->login_user->id, $now]
-            );
-        }
+        $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
     private function _sync_invites_by_vendor_grade(int $tender_id, int $vendor_grade_id): void
     {
-        $this->_clear_invites($tender_id);
-        $tiv = $this->db->prefixTable("tender_invited_vendors");
         $vendors = $this->db->prefixTable("vendors");
-        $now = date("Y-m-d H:i:s");
 
         $rows = $this->db->query(
             "SELECT DISTINCT id AS vendor_id
@@ -846,13 +1063,201 @@ class Tender_procurement_manager_inbox extends Security_Controller
             [$vendor_grade_id]
         )->getResult();
 
-        foreach ($rows as $row) {
-            $this->db->query(
-                "INSERT INTO $tiv (tender_id, vendor_id, invite_status, invited_by, invited_at, deleted)
-                 VALUES (?, ?, 'sent', ?, ?, 0)",
-                [$tender_id, (int) $row->vendor_id, (int) $this->login_user->id, $now]
-            );
+        $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
+    }
+
+    private function _get_tender_review_record(int $tender_id)
+    {
+        $tender = $this->_get_tender_for_manager($tender_id);
+        if (!$tender) {
+            return null;
         }
+
+        $t = $this->db->prefixTable("tenders");
+        $companies = $this->db->prefixTable("companies");
+        $departments = $this->db->prefixTable("departments");
+        $submitter = $this->db->prefixTable("users");
+        $reviewer = $this->db->prefixTable("users");
+
+        return $this->db->query(
+            "SELECT $t.*,
+                    company.name AS company_name,
+                    department.name AS department_name,
+                    TRIM(CONCAT(COALESCE(submitter.first_name, ''), ' ', COALESCE(submitter.last_name, ''))) AS submitted_by_name,
+                    submitter.email AS submitted_by_email,
+                    TRIM(CONCAT(COALESCE(reviewer.first_name, ''), ' ', COALESCE(reviewer.last_name, ''))) AS reviewed_by_name,
+                    reviewer.email AS reviewed_by_email
+             FROM $t
+             LEFT JOIN $companies company ON company.id=$t.company_id AND company.deleted=0
+             LEFT JOIN $departments department ON department.id=$t.department_id AND department.deleted=0
+             LEFT JOIN $submitter submitter ON submitter.id=$t.procurement_manager_submitted_by AND submitter.deleted=0
+             LEFT JOIN $reviewer reviewer ON reviewer.id=$t.procurement_manager_reviewed_by AND reviewer.deleted=0
+             WHERE $t.deleted=0 AND $t.id=?
+             LIMIT 1",
+            [$tender_id]
+        )->getRow();
+    }
+
+    private function _get_tender_schedule_rows($tender): array
+    {
+        $fields = [
+            "release_at" => "Tender Release",
+            "document_purchase_deadline" => "Document Purchase Deadline",
+            "site_visit_at" => "Site Visit",
+            "clarification_deadline" => "Clarification Deadline",
+            "closing_at" => "Submission Deadline",
+            "bid_opening_at" => "Bid Opening",
+            "technical_eval_deadline" => "Technical Evaluation Deadline",
+            "commercial_eval_deadline" => "Commercial Evaluation Deadline",
+        ];
+
+        $rows = [];
+        foreach ($fields as $field => $label) {
+            $rows[] = ["label" => $label, "value" => $tender->{$field} ?? null];
+        }
+
+        return $rows;
+    }
+
+    private function _get_tender_team_rows(int $tender_id): array
+    {
+        $team = $this->db->prefixTable("tender_team_members");
+        $users = $this->db->prefixTable("users");
+
+        return $this->db->query(
+            "SELECT $team.team_role,
+                    TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS full_name,
+                    $users.email
+             FROM $team
+             LEFT JOIN $users ON $users.id=$team.user_id AND $users.deleted=0
+             WHERE $team.deleted=0
+               AND $team.is_active=1
+               AND $team.tender_id=?
+             ORDER BY $team.team_role ASC, full_name ASC",
+            [$tender_id]
+        )->getResult();
+    }
+
+    private function _get_tender_target_rules(int $tender_id): array
+    {
+        $target = $this->db->prefixTable("tender_target_specialties");
+        $categories = $this->db->prefixTable("vendor_categories");
+        $subcategories = $this->db->prefixTable("vendor_sub_categories");
+        $groups = $this->db->prefixTable("vendor_groups");
+        $grades = $this->db->prefixTable("vendor_grades");
+
+        return $this->db->query(
+            "SELECT $target.*,
+                    category.name AS category_name,
+                    subcategory.name AS sub_category_name,
+                    vendor_group.name AS vendor_group_name,
+                    vendor_group.code AS vendor_group_code,
+                    grade.name AS vendor_grade_name,
+                    grade.code AS vendor_grade_code
+             FROM $target
+             LEFT JOIN $categories category ON category.id=$target.vendor_category_id AND category.deleted=0
+             LEFT JOIN $subcategories subcategory ON subcategory.id=$target.vendor_sub_category_id AND subcategory.deleted=0
+             LEFT JOIN $groups vendor_group ON vendor_group.id=$target.vendor_group_id AND vendor_group.deleted=0
+             LEFT JOIN $grades grade ON grade.id=$target.vendor_grade_id AND grade.deleted=0
+             WHERE $target.deleted=0
+               AND $target.tender_id=?
+             ORDER BY $target.id ASC",
+            [$tender_id]
+        )->getResult();
+    }
+
+    private function _get_tender_target_vendors(int $tender_id): array
+    {
+        $target = $this->db->prefixTable("tender_target_vendors");
+        $vendors = $this->db->prefixTable("vendors");
+
+        return $this->db->query(
+            "SELECT $target.*,
+                    $vendors.vendor_name,
+                    $vendors.email
+             FROM $target
+             LEFT JOIN $vendors ON $vendors.id=$target.vendor_id AND $vendors.deleted=0
+             WHERE $target.deleted=0
+               AND $target.tender_id=?
+             ORDER BY $vendors.vendor_name ASC",
+            [$tender_id]
+        )->getResult();
+    }
+
+    private function _get_tender_documents(int $tender_id): array
+    {
+        $docs = $this->db->prefixTable("tender_documents");
+        $users = $this->db->prefixTable("users");
+
+        return $this->db->query(
+            "SELECT $docs.*,
+                    TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS uploaded_by_name
+             FROM $docs
+             LEFT JOIN $users ON $users.id=$docs.uploaded_by AND $users.deleted=0
+             WHERE $docs.deleted=0
+               AND $docs.tender_id=?
+             ORDER BY $docs.created_at DESC, $docs.id DESC",
+            [$tender_id]
+        )->getResult();
+    }
+
+    private function _get_accessible_tender_document_context(int $id): array
+    {
+        $this->access_only_tender("procurement_manager_inbox", "view");
+
+        if (!$id) {
+            show_404();
+        }
+
+        $doc = $this->Tender_documents_model->get_one($id);
+        if (!$doc || (int) ($doc->deleted ?? 0) === 1) {
+            show_404();
+        }
+
+        if (!$this->_get_tender_for_manager((int) ($doc->tender_id ?? 0))) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = getcwd() . "/" . ltrim((string) ($doc->path ?? ""), "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _make_file_preview_data($doc, string $file_url): array
+    {
+        $file_name = (string) ($doc->original_name ?? basename((string) ($doc->path ?? "")));
+
+        return [
+            "file_url" => $file_url,
+            "is_image_file" => is_image_file($file_name),
+            "is_iframe_preview_available" => is_iframe_preview_available($file_name),
+            "is_google_preview_available" => is_google_preview_available($file_name),
+            "is_viewable_video_file" => is_viewable_video_file($file_name),
+            "is_google_drive_file" => false,
+        ];
+    }
+
+    private function _serve_document_file($doc, string $full_path, bool $download)
+    {
+        $mime = !empty($doc->mime_type ?? "")
+            ? (string) $doc->mime_type
+            : (function_exists("mime_content_type") ? mime_content_type($full_path) : "application/octet-stream");
+        $name = $doc->original_name ?: basename($full_path);
+        $inline = !$download && (
+            strpos($mime, "image/") === 0
+            || strpos($mime, "video/") === 0
+            || strpos($mime, "audio/") === 0
+            || $mime === "application/pdf"
+            || strpos($mime, "text/") === 0
+        );
+
+        return $this->response
+            ->setHeader("Content-Type", $mime)
+            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
+            ->setBody(file_get_contents($full_path));
     }
 
     private function _get_tender_for_manager(int $tender_id)
@@ -1025,23 +1430,10 @@ class Tender_procurement_manager_inbox extends Security_Controller
         $reviewed_by = trim((string)($row->reviewed_by_name ?? ""));
 
         $details = anchor(
-            get_uri("tender_reports/details/" . (int)$row->id),
-            "<i data-feather='eye' class='icon-16'></i>",
-            ["class" => "btn btn-default btn-sm", "title" => "View tender"]
+            get_uri("tender_procurement_manager_inbox/details/" . (int)$row->id),
+            "<i data-feather='eye' class='icon-16'></i> Review",
+            ["class" => "btn btn-primary btn-sm", "title" => "Review tender"]
         );
-
-        $approve = "";
-        if ($status === "pending" && $this->can_tender("procurement_manager_inbox", "update")) {
-            $approve = js_anchor(
-                "<i data-feather='check-circle' class='icon-16'></i> Approve",
-                [
-                    "class" => "btn btn-success btn-sm approve-tender",
-                    "title" => "Approve tender",
-                    "data-tender-id" => (int)$row->id,
-                    "data-action-url" => get_uri("tender_procurement_manager_inbox/approve"),
-                ]
-            );
-        }
 
         return [
             esc($row->reference ?? "-"),
@@ -1055,7 +1447,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
             esc($submitted_by ?: "-"),
             $row->procurement_manager_reviewed_at ? format_to_datetime($row->procurement_manager_reviewed_at) : "-",
             esc($reviewed_by ?: "-"),
-            trim($details . " " . $approve),
+            $details,
         ];
     }
 }

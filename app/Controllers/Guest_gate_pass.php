@@ -37,20 +37,23 @@ class Guest_gate_pass extends App_Controller
             "emergency_country_code" => "required|max_length[12]",
             "emergency_local" => "required|regex_match[/^\d{4,15}$/]",
             "otp_channel" => "required|in_list[email,phone]",
-            "password" => "permit_empty"
+            "password" => "permit_empty",
+            "password_confirm" => "permit_empty"
         ]);
 
         $users_table = $this->db->prefixTable("users");
         $gp_users_table = $this->db->prefixTable("gate_pass_users");
 
         $email = strtolower(trim($this->request->getPost("email")));
+        $password = (string) $this->request->getPost("password");
+        $password_confirm = (string) $this->request->getPost("password_confirm");
 
         $phoneDial = $this->_normalize_dial_code($this->request->getPost("phone_country_code"));
         $emergencyDial = $this->_normalize_dial_code($this->request->getPost("emergency_country_code"));
         if (!$this->_is_allowed_dial($phoneDial) || !$this->_is_allowed_dial($emergencyDial)) {
             echo json_encode([
                 "success" => false,
-                "message" => "Invalid country code selected.",
+                "message" => app_lang("gate_pass_invalid_country_code"),
             ]);
             return;
         }
@@ -60,7 +63,7 @@ class Guest_gate_pass extends App_Controller
         if ($phone === "" || $emergencyNumber === "") {
             echo json_encode([
                 "success" => false,
-                "message" => "Please enter a valid phone number and emergency number.",
+                "message" => app_lang("gate_pass_invalid_phone_numbers"),
             ]);
             return;
         }
@@ -84,7 +87,7 @@ class Guest_gate_pass extends App_Controller
             }
             $suffix++;
             if ($suffix > 9999) {
-                echo json_encode(["success" => false, "message" => "Could not allocate a login username from your email. Please contact support."]);
+                echo json_encode(["success" => false, "message" => app_lang("gate_pass_username_allocate_failed")]);
                 return;
             }
         }
@@ -104,16 +107,39 @@ class Guest_gate_pass extends App_Controller
         if ($existing_user && strtolower((string)($existing_user->user_type ?? "")) !== "staff") {
             echo json_encode([
                 "success" => false,
-                "message" => "This email is linked to a non-staff account and cannot be used for gate pass portal access.",
-                "errors" => ["email" => "This email is linked to a non-staff account."]
+                "message" => app_lang("gate_pass_email_non_staff"),
+                "errors" => ["email" => app_lang("gate_pass_email_non_staff")]
             ]);
             return;
         }
 
         if (!$existing_user) {
-            $this->validate_submitted_data([
-                "password" => "required",
-            ]);
+            if ($password === "") {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("password_is_required"),
+                    "errors" => ["password" => app_lang("password_is_required")]
+                ]);
+                return;
+            }
+
+            if ($password_confirm === "") {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("password_confirm_required"),
+                    "errors" => ["password_confirm" => app_lang("password_confirm_required")]
+                ]);
+                return;
+            }
+
+            if ($password !== $password_confirm) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("passwords_do_not_match"),
+                    "errors" => ["password_confirm" => app_lang("passwords_do_not_match")]
+                ]);
+                return;
+            }
         }
 
         if (get_setting("re_captcha_secret_key")) {
@@ -144,8 +170,6 @@ class Guest_gate_pass extends App_Controller
                 }
             } else {
                 // Insert user
-                $password = $this->request->getPost("password");
-
                 $user_data = [
                     "first_name" => $this->request->getPost("first_name"),
                     "last_name"  => $this->request->getPost("last_name"),
@@ -188,8 +212,8 @@ class Guest_gate_pass extends App_Controller
                 $this->db->transRollback();
                 echo json_encode([
                     "success" => false,
-                    "message" => "Username already exists.",
-                    "errors" => ["username" => "Username already exists."]
+                    "message" => app_lang("gate_pass_username_exists"),
+                    "errors" => ["username" => app_lang("gate_pass_username_exists")]
                 ]);
                 return;
             }
@@ -234,7 +258,7 @@ class Guest_gate_pass extends App_Controller
 
             echo json_encode([
                 "success" => true,
-                "message" => "Account linked successfully. You can now sign in and submit Gate Pass requests."
+                "message" => app_lang("gate_pass_account_linked_successfully")
             ]);
         } catch (\Throwable $e) {
             $this->db->transRollback();

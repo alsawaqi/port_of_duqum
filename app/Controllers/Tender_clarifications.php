@@ -272,6 +272,7 @@ class Tender_clarifications extends Security_Controller
         $now = date("Y-m-d H:i:s");
         $is_technical_request = strtolower((string) ($clarification->type ?? "")) === "technical_clarification_request";
         $is_commercial_request = strtolower((string) ($clarification->type ?? "")) === "commercial_clarification_request";
+        $is_internal_team_reply = ($visibility === "technical" && $is_technical_request) || ($visibility === "commercial" && $is_commercial_request);
         $reply_type = $visibility === "all"
             ? "circular"
             : (in_array($visibility, ["technical", "commercial"], true) ? $visibility . "_clarification_response" : "response");
@@ -318,7 +319,7 @@ class Tender_clarifications extends Security_Controller
         $root_type_placeholders = implode(",", array_fill(0, count($root_types), "?"));
         $root_status = $visibility === "all"
             ? "public_answered"
-            : (in_array($visibility, ["technical", "commercial"], true) ? "forwarded_to_" . $visibility : "answered");
+            : ($is_internal_team_reply ? "answered" : (in_array($visibility, ["technical", "commercial"], true) ? "forwarded_to_" . $visibility : "answered"));
         if ($communication_id > 0) {
             $this->db->query(
                 "UPDATE $tbl
@@ -348,13 +349,18 @@ class Tender_clarifications extends Security_Controller
             );
         }
 
+        $response_message = "Clarification reply sent successfully.";
+        if ($is_internal_team_reply) {
+            $response_message = "Clarification reply sent to the " . $visibility . " team.";
+        } elseif (in_array($visibility, ["technical", "commercial"], true)) {
+            $response_message = "Clarification forwarded internally to the " . $visibility . " team.";
+        } elseif ($visibility === "all") {
+            $response_message = "Clarification message published successfully.";
+        }
+
         return $this->response->setJSON([
             "success" => true,
-            "message" => in_array($visibility, ["technical", "commercial"], true)
-                ? "Clarification forwarded internally to the " . $visibility . " team."
-                : ($visibility === "all"
-                    ? "Clarification message published successfully."
-                    : "Clarification reply sent successfully."),
+            "message" => $response_message,
             "redirect_url" => (int) ($clarification->vendor_id ?? 0) > 0
                 ? get_uri("tender_clarifications/vendor/" . (int) $clarification->tender_id . "/" . (int) $clarification->vendor_id)
                 : get_uri("tender_clarifications/thread/" . (int) $clarification->id),

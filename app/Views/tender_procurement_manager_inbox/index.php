@@ -13,26 +13,6 @@
 
 <script>
 $(document).ready(function () {
-    function reloadTable() {
-        $("#tender-procurement-manager-inbox-table").appTable({reload: true});
-    }
-
-    function postAction($el, payload) {
-        appLoader.show();
-        $.post($el.attr("data-action-url"), payload, function (res) {
-            appLoader.hide();
-            if (res && res.success) {
-                reloadTable();
-                appAlert.success(res.message || "Done", {duration: 3000});
-            } else {
-                appAlert.error((res && res.message) || "Request failed.", {duration: 3000});
-            }
-        }, "json").fail(function () {
-            appLoader.hide();
-            appAlert.error("Request failed. Please try again.", {duration: 3000});
-        });
-    }
-
     $("#tender-procurement-manager-inbox-table").appTable({
         source: '<?php echo_uri("tender_procurement_manager_inbox/list_data"); ?>',
         columns: [
@@ -49,12 +29,6 @@ $(document).ready(function () {
             {title: "Reviewed By"},
             {title: '<i data-feather="menu" class="icon-16"></i>', class: "text-center option w150"}
         ]
-    });
-
-    $(document).on("click", ".approve-tender", function () {
-        if (confirm("Approve this procurement manager request?")) {
-            postAction($(this), {tender_id: $(this).attr("data-tender-id")});
-        }
     });
 });
 </script>
