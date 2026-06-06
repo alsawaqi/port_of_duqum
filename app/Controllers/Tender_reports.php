@@ -138,7 +138,7 @@ class Tender_reports extends Security_Controller
                 ) commercial
                     ON commercial.tender_id = t.id
                 WHERE " . implode(" AND ", $where) . "
-                ORDER BY t.id DESC";
+                ORDER BY COALESCE(t.created_at, t.published_at) DESC, t.id DESC";
 
         $rows = $this->db->query($sql, $params)->getResult();
         $result = [];
@@ -166,6 +166,7 @@ class Tender_reports extends Security_Controller
         }
 
         $vendors = $this->_get_vendor_participation($tender_id);
+        $communications = $this->_get_communications($tender_id);
         $can_update_procurement = $this->can_tender("procurement", "update");
 
         return $this->template->rander("tender_reports/details", [
@@ -179,7 +180,8 @@ class Tender_reports extends Security_Controller
             "technical_evaluation_attachments" => $this->Tender_evaluation_attachments_model->get_by_tender_grouped_by_evaluation_id($tender_id, "technical"),
             "commercial_evaluations" => $this->_get_evaluations($tender_id, "commercial"),
             "commercial_evaluation_attachments" => $this->Tender_evaluation_attachments_model->get_by_tender_grouped_by_evaluation_id($tender_id, "commercial"),
-            "communications" => $this->_get_communications($tender_id),
+            "communications" => $communications,
+            "communication_attachments" => $this->Tender_communications_model->get_attachments_map(array_map(fn($item) => (int) $item->id, $communications)),
             "extensions" => $this->_get_extensions($tender_id),
             "workflow_history" => $this->_get_workflow_history($tender_id),
             "opening_audit" => $this->_get_opening_audit($tender_id),
@@ -246,11 +248,86 @@ class Tender_reports extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
         }
 
+        $this->_save_update_files((int) $saved, $tender_id);
+
         return $this->response->setJSON([
             "success" => true,
             "message" => ucwords($type) . " published to vendor portal.",
             "redirect_url" => get_uri("tender_reports/details/" . $tender_id . "#tender-report-communications"),
         ]);
+    }
+
+    public function download_update_attachment($id = 0)
+    {
+        $this->_access_reports();
+
+        $id = (int) $id;
+        if (!$id) {
+            show_404();
+        }
+
+        $attachment = $this->Tender_communications_model->get_attachment($id);
+        if (!$attachment) {
+            show_404();
+        }
+
+        if (!$this->_get_tender_report((int) $attachment->tender_id)) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
+        if (!is_file($full_path)) {
+            show_404();
+        }
+
+        return $this->response->download($full_path, null)->setFileName($attachment->original_name ?: basename($full_path));
+    }
+
+    private function _save_update_files(int $communication_id, int $tender_id): void
+    {
+        $files = method_exists($this->request, "getFileMultiple")
+            ? ($this->request->getFileMultiple("update_files") ?: [])
+            : (($this->request->getFiles()["update_files"] ?? []) ?: []);
+
+        if (!$files) {
+            return;
+        }
+
+        if (!is_array($files)) {
+            $files = [$files];
+        }
+
+        $relative_dir = "tender_updates/tender_" . $tender_id . "/communication_" . $communication_id . "/";
+        $upload_dir = WRITEPATH . "uploads/" . $relative_dir;
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0775, true);
+        }
+
+        $saved_files = [];
+        foreach ($files as $file) {
+            if (!$file || !$file->isValid() || $file->hasMoved()) {
+                continue;
+            }
+
+            $original_name = $file->getClientName();
+            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
+                continue;
+            }
+
+            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
+            $new_name = uniqid("tu_", true) . ($extension ? "." . $extension : "");
+            $file->move($upload_dir, $new_name);
+
+            $saved_files[] = [
+                "disk" => "local",
+                "path" => $relative_dir . $new_name,
+                "original_name" => $original_name,
+                "mime_type" => $file->getClientMimeType(),
+                "size_bytes" => $file->getSize(),
+            ];
+        }
+
+        $this->Tender_communications_model->save_attachments((int) $communication_id, $tender_id, null, $saved_files, (int) $this->login_user->id);
     }
 
     public function approve_vendor_participation()
@@ -569,8 +646,17 @@ class Tender_reports extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "Complete committee signatures or upload a manual signed opening form first."]);
         }
 
-        $technical_proposals_reviewed = (int) $this->request->getPost("technical_proposals_reviewed") === 1;
-        $commercial_proposals_reviewed = (int) $this->request->getPost("commercial_proposals_reviewed") === 1;
+        $generated_form_confirmed = (int) $this->request->getPost("generated_bid_opening_form_confirmed") === 1;
+        $manual_opening_form = (string) ($session->status ?? "") === "manual_accepted";
+        $technical_proposals_reviewed = (int) $this->request->getPost("technical_proposals_reviewed") === 1 || $generated_form_confirmed || $manual_opening_form;
+        $commercial_proposals_reviewed = (int) $this->request->getPost("commercial_proposals_reviewed") === 1 || $generated_form_confirmed || $manual_opening_form;
+
+        if (!$generated_form_confirmed && !$manual_opening_form) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Procurement must confirm the generated bid opening form before sending the tender for technical evaluation."
+            ]);
+        }
 
         if (!$technical_proposals_reviewed || !$commercial_proposals_reviewed) {
             return $this->response->setJSON([
@@ -584,7 +670,7 @@ class Tender_reports extends Security_Controller
         $now = date("Y-m-d H:i:s");
 
         $this->db->transBegin();
-        $this->_record_procurement_proposal_review($tender, $session, $review_note, $now);
+        $this->_record_procurement_proposal_review($tender, $session, $review_note, $now, $generated_form_confirmed);
         $started = $this->Tenders_model->start_technical_review_after_opening($tender_id, (int) $this->login_user->id, $technical_end_at);
 
         if (!$started) {
@@ -1032,13 +1118,17 @@ class Tender_reports extends Security_Controller
         ]));
     }
 
-    private function _record_procurement_proposal_review($tender, $opening_session, string $review_note, string $now): void
+    private function _record_procurement_proposal_review($tender, $opening_session, string $review_note, string $now, bool $generated_form_confirmed = false): void
     {
         $table = $this->db->prefixTable("tender_workflow_history");
         $details = [
             "Procurement reviewed the opened technical and commercial proposal documents before releasing bids to the concerned evaluation department.",
             "Bid opening status: " . ucwords(str_replace("_", " ", (string) ($opening_session->status ?? "completed"))),
         ];
+
+        if ($generated_form_confirmed) {
+            $details[] = "Generated bid opening form confirmed by procurement.";
+        }
 
         if (!empty($opening_session->signed_at)) {
             $details[] = "Committee signed at: " . date("Y-m-d H:i", strtotime((string) $opening_session->signed_at));
@@ -1104,9 +1194,9 @@ class Tender_reports extends Security_Controller
                 req.budget_omr,
                 COALESCE(t.tender_fee, req.tender_fee) AS tender_fee,
                 req.announcement,
-                req.evaluation_method,
-                req.technical_weight,
-                req.commercial_weight,
+                COALESCE(t.evaluation_method, req.evaluation_method) AS evaluation_method,
+                COALESCE(t.technical_weight, req.technical_weight) AS technical_weight,
+                COALESCE(t.commercial_weight, req.commercial_weight) AS commercial_weight,
                 req.estimated_previous_amount,
                 req.estimated_previous_notes,
                 company.name AS company_name,

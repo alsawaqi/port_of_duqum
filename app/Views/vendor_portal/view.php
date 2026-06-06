@@ -1,88 +1,109 @@
-<ul class="nav nav-tabs" id="vendor-portal-tabs" role="tablist">
+<div id="page-content" class="page-wrapper clearfix pod-page-shell pod-vendor-page pod-vendor-portal-page">
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => "Vendor Portal",
+        "subtitle" => "Maintain company registration details, documents, contacts, bank accounts, specialties, and tender activity.",
+        "icon" => "briefcase",
+        "breadcrumbs" => [
+            ["label" => "Vendor Portal"]
+        ]
+    ]);
+    ?>
 
-    <li class="nav-item">
-        <a class="nav-link active"
-            data-bs-toggle="tab"
-            href="#vp-overview"
-            data-load-url="<?= get_uri('vendor_portal/overview'); ?>">
-            Overview
-        </a>
-    </li>
+    <div class="card pod-vendor-card">
+        <div class="pod-vendor-card-header">
+            <div>
+                <h2 class="pod-vendor-card-title">Vendor Workspace</h2>
+                <p class="pod-vendor-card-subtitle">Switch between profile sections and keep vendor information ready for review.</p>
+            </div>
+        </div>
 
-    <li class="nav-item">
-        <a class="nav-link"
-            data-bs-toggle="tab"
-            href="#vp-contacts"
-            data-load-url="<?= get_uri('vendor_portal/contacts'); ?>">
-            Contacts
-        </a>
-    </li>
+        <ul class="nav nav-tabs pod-vendor-tabs" id="vendor-portal-tabs" role="tablist">
 
-    <li class="nav-item">
-        <a class="nav-link"
-            data-bs-toggle="tab"
-            href="#vp-bank"
-            data-load-url="<?= get_uri('vendor_portal/bank'); ?>">
-            Bank Accounts
-        </a>
-    </li>
+            <li class="nav-item">
+                <a class="nav-link active"
+                    data-bs-toggle="tab"
+                    href="#vp-overview"
+                    data-load-url="<?= get_uri('vendor_portal/overview'); ?>">
+                    <i data-feather="activity" class="icon-16"></i> Overview
+                </a>
+            </li>
 
-    <li class="nav-item">
-        <a class="nav-link"
-            data-bs-toggle="tab"
-            href="#vp-branches"
-            data-load-url="<?= get_uri('vendor_portal/branches'); ?>">
-            Branches
-        </a>
-    </li>
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-contacts"
+                    data-load-url="<?= get_uri('vendor_portal/contacts'); ?>">
+                    <i data-feather="users" class="icon-16"></i> Contacts
+                </a>
+            </li>
 
-    <li class="nav-item">
-        <a class="nav-link"
-            data-bs-toggle="tab"
-            href="#vp-credentials"
-            data-load-url="<?= get_uri('vendor_portal/credentials'); ?>">
-            Credentials
-        </a>
-    </li>
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-bank"
+                    data-load-url="<?= get_uri('vendor_portal/bank'); ?>">
+                    <i data-feather="credit-card" class="icon-16"></i> Bank Accounts
+                </a>
+            </li>
 
-    <li class="nav-item">
-        <a class="nav-link"
-            data-bs-toggle="tab"
-            href="#vp-specialties"
-            data-load-url="<?= get_uri('vendor_portal/specialties'); ?>">
-            Specialties
-        </a>
-    </li>
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-branches"
+                    data-load-url="<?= get_uri('vendor_portal/branches'); ?>">
+                    <i data-feather="map-pin" class="icon-16"></i> Branches
+                </a>
+            </li>
 
-    <li class="nav-item">
-        <a class="nav-link"
-            data-bs-toggle="tab"
-            href="#vp-documents"
-            data-load-url="<?= get_uri('vendor_portal/documents'); ?>">
-            Documents
-        </a>
-    </li>
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-credentials"
+                    data-load-url="<?= get_uri('vendor_portal/credentials'); ?>">
+                    <i data-feather="award" class="icon-16"></i> Credentials
+                </a>
+            </li>
 
-    <li class="nav-item">
-    <a class="nav-link"
-        data-bs-toggle="tab"
-        href="#vp-tenders"
-        data-load-url="<?= get_uri('vendor_portal/tenders'); ?>">
-        Tenders
-    </a>
-</li>
-</ul>
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-specialties"
+                    data-load-url="<?= get_uri('vendor_portal/specialties'); ?>">
+                    <i data-feather="layers" class="icon-16"></i> Specialties
+                </a>
+            </li>
 
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-documents"
+                    data-load-url="<?= get_uri('vendor_portal/documents'); ?>">
+                    <i data-feather="file-text" class="icon-16"></i> Documents
+                </a>
+            </li>
 
-<div class="tab-content pt15" id="vendor-portal-tabs-content">
-    <div class="tab-pane fade show active" id="vp-overview" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-contacts" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-bank" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-branches" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-credentials" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-specialties" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-documents" role="tabpanel"></div>
-    <div class="tab-pane fade" id="vp-tenders" role="tabpanel"></div>
+            <li class="nav-item">
+                <a class="nav-link"
+                    data-bs-toggle="tab"
+                    href="#vp-tenders"
+                    data-load-url="<?= get_uri('vendor_portal/tenders'); ?>">
+                    <i data-feather="send" class="icon-16"></i> Tenders
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content pod-vendor-card-body" id="vendor-portal-tabs-content">
+            <div class="tab-pane fade show active" id="vp-overview" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-contacts" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-bank" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-branches" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-credentials" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-specialties" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-documents" role="tabpanel"></div>
+            <div class="tab-pane fade" id="vp-tenders" role="tabpanel"></div>
+        </div>
+    </div>
 </div>
 
 

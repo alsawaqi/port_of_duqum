@@ -934,6 +934,7 @@ class Left_menu
         $method_name = $router->methodName();
 
         $found_url_active_key = null;
+        $found_submenu_active_key = null;
 
         foreach ($sidebar_menu as $key => $menu) {
             if (isset($menu["name"])) {
@@ -959,25 +960,30 @@ class Left_menu
                 //check in submenu values
                 $submenu = get_array_value($menu, "submenu");
                 if ($submenu && count($submenu)) {
-                    foreach ($submenu as $sub_menu) {
+                    foreach ($submenu as $sub_key => $sub_menu) {
                         if (isset($sub_menu['name'])) {
 
                             $sub_menu_url = get_array_value($sub_menu, "url");
 
                             if ($controller_name == $sub_menu_url) {
                                 $found_url_active_key = $key;
+                                $found_submenu_active_key = $sub_key;
                             }
 
                             //compare with current url
                             if ($sub_menu_url === $current_url || get_uri($sub_menu_url) === $current_url) {
-                                $found_url_active_key = $key;
+                                $sidebar_menu[$key]["is_active_menu"] = 1;
+                                $sidebar_menu[$key]["submenu"][$sub_key]["is_active_menu"] = 1;
+                                return $sidebar_menu;
                             }
 
                             //compare with controller name
                             if (get_array_value($sub_menu, "name") === $controller_name) {
                                 $found_url_active_key = $key;
+                                $found_submenu_active_key = $sub_key;
                             } else if (get_array_value($sub_menu, "category") === $controller_name) {
                                 $found_url_active_key = $key;
+                                $found_submenu_active_key = $sub_key;
                             }
                         }
                     }
@@ -997,6 +1003,9 @@ class Left_menu
 
         if (!is_null($found_url_active_key)) {
             $sidebar_menu[$found_url_active_key]["is_active_menu"] = 1;
+            if (!is_null($found_submenu_active_key) && isset($sidebar_menu[$found_url_active_key]["submenu"][$found_submenu_active_key])) {
+                $sidebar_menu[$found_url_active_key]["submenu"][$found_submenu_active_key]["is_active_menu"] = 1;
+            }
         }
 
 

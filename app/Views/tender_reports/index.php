@@ -1,4 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page tender-report-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page tender-report-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => app_lang("tender_register"),
+        "subtitle" => "Monitor tender timelines, stages, vendors, bids, evaluations, and audit history.",
+        "icon" => "bar-chart"
+    ]);
+    ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("tender_register"); ?></h1>
@@ -25,6 +32,8 @@
 $(document).ready(function () {
     $("#tender-register-table").appTable({
         source: '<?php echo_uri("tender_reports/list_data"); ?>',
+        order: [],
+        stateSave: false,
         filterDropdown: [
             {name: "status", class: "w160", options: [
                 {id: "", text: "- Status -"},

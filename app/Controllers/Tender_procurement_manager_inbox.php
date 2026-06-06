@@ -89,10 +89,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
                   )
                   AND $t.procurement_manager_status IN ('pending', 'approved', 'rejected', 'revision_requested')
                   $scope
-                ORDER BY
-                  FIELD($t.procurement_manager_status, 'pending', 'revision_requested', 'rejected', 'approved'),
-                  $t.procurement_manager_submitted_at DESC,
-                  $t.id DESC";
+                ORDER BY COALESCE($t.created_at, $t.procurement_manager_submitted_at) DESC, $t.id DESC";
 
         $rows = $this->db->query($sql, $params)->getResult();
         $result = [];
@@ -539,6 +536,9 @@ class Tender_procurement_manager_inbox extends Security_Controller
             "reference" => "Reference",
             "title" => "Title",
             "tender_type" => "Tender Type",
+            "evaluation_method" => "Evaluation Method",
+            "technical_weight" => "Technical Weight",
+            "commercial_weight" => "Commercial Weight",
             "tender_fee" => "Tender Fees",
             "release_at" => "Tender Release",
             "document_purchase_deadline" => "Document Purchase Deadline",
@@ -1336,6 +1336,9 @@ class Tender_procurement_manager_inbox extends Security_Controller
             "reference" => "Reference",
             "title" => "Title",
             "tender_type" => "Tender Type",
+            "evaluation_method" => "Evaluation Method",
+            "technical_weight" => "Technical Weight",
+            "commercial_weight" => "Commercial Weight",
             "tender_fee" => "Tender Fees",
             "release_at" => "Release",
             "document_purchase_deadline" => "Document Purchase Deadline",

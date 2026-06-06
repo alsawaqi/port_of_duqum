@@ -1,4 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => app_lang("tender_procurement_manager_users"),
+        "subtitle" => "Maintain procurement manager users for tender governance.",
+        "icon" => "user-check"
+    ]);
+    ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("tender_procurement_manager_users"); ?></h1>

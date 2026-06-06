@@ -41,10 +41,13 @@ $assertContains("target.vendor_grade_id = vendor_profile.vendor_grade_id", $tend
 $assertContains("\$t.status = 'published'", $tendersModel, "vendor tender list should only expose active published tenders for application");
 $assertContains("\$t.workflow_stage = 'bidding'", $tendersModel, "vendor tender list should only expose bidding-stage tenders for application");
 $assertContains("\$t.closing_at > ?", $tendersModel, "expired tenders should not be available for vendor application");
+$assertContains("participated_bid.id IS NOT NULL", $tendersModel, "participating vendors should still see tenders after submission closes");
+$assertContains("status <> 'draft'", $tendersModel . $vendorPortal, "post-closing visibility should require a real vendor bid participation");
 $assertContains("specific_target_id", $tendersModel, "query should expose whether access came from a specific target");
 $assertContains("eligibility_source", $tendersModel, "query should explain why the tender is visible");
+$assertContains("_vendor_participated_in_tender", $vendorPortal, "vendor clarifications should remain available for participated closed tenders");
 
 $assertContains("Eligibility", $tendersIndex, "vendor tender table should show why the tender is available");
-$assertContains("Only active tenders matching your vendor profile are shown.", $tendersIndex, "vendor tender tab should explain active eligibility");
+$assertContains("Active tenders matching your vendor profile and tenders you participated in are shown.", $tendersIndex, "vendor tender tab should explain active and participated visibility");
 
 echo "OK" . PHP_EOL;

@@ -359,14 +359,24 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
 }
 </style>
 
+<div id="page-content" class="page-wrapper clearfix pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => $app ? "Edit PTW Application" : "New PTW Application",
+        "subtitle" => "Complete the permit details, safety requirements, declarations, and final review before submission.",
+        "icon" => "edit-3",
+        "breadcrumbs" => [
+            ["label" => "PTW", "url" => get_uri("ptw_portal")],
+            ["label" => $app ? "Edit Application" : "New Application"]
+        ],
+        "actions" => anchor(get_uri("ptw_portal"), "<i data-feather='arrow-left' class='icon-14'></i> Back", ["class" => "btn btn-default btn-sm"])
+    ]); ?>
+
 <div class="ptw-wizard-wrap">
 
-    <!-- Page header -->
-    <div class="page-title clearfix mb-3">
-        <h1 class="mb-0"><?php echo $app ? "Edit PTW Application" : "New PTW Application"; ?></h1>
-        <div class="title-button-group">
-            <?php echo anchor(get_uri("ptw_portal"), "<i data-feather='arrow-left' class='icon-14'></i> Back", ["class" => "btn btn-default btn-sm"]); ?>
-        </div>
+    <div class="ptw-wizard-hero">
+        <span>Seven-step workflow</span>
+        <h2><?php echo $app ? "Update permit application" : "Create permit application"; ?></h2>
+        <p>Move through applicant details, scope, hazards, PPE, preparations, declaration, and final review.</p>
     </div>
 
     <?php if (!empty($errors)): ?>
@@ -884,6 +894,7 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
 
     <?php echo form_close(); ?>
 </div><!-- /.ptw-wizard-wrap -->
+</div><!-- /.pod-ptw-page -->
 
 <script>
 (function () {

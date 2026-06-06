@@ -11,6 +11,7 @@ class Tenders_model extends Crud_model
     private static bool $specific_vendor_target_schema_checked = false;
     private static bool $vendor_participation_approval_schema_checked = false;
     private static bool $tender_fee_schema_checked = false;
+    private static bool $tender_evaluation_weight_schema_checked = false;
     private static bool $tender_fee_payments_schema_checked = false;
 
     public function __construct()
@@ -22,6 +23,7 @@ class Tenders_model extends Crud_model
         $this->ensure_specific_vendor_target_schema();
         $this->ensure_vendor_participation_approval_schema();
         $this->ensure_tender_fee_column();
+        $this->ensure_tender_evaluation_weight_columns();
         $this->ensure_tender_fee_payments_table();
     }
 
@@ -128,6 +130,44 @@ class Tenders_model extends Crud_model
         }
 
         self::$tender_fee_schema_checked = true;
+    }
+
+    public function ensure_tender_evaluation_weight_columns(): void
+    {
+        if (self::$tender_evaluation_weight_schema_checked) {
+            return;
+        }
+
+        $table = $this->db->prefixTable("tenders");
+        $created_columns = false;
+        $columns = [
+            "evaluation_method" => "ALTER TABLE `$table` ADD COLUMN `evaluation_method` ENUM('separate','combined') NOT NULL DEFAULT 'separate' AFTER `tender_type`",
+            "technical_weight" => "ALTER TABLE `$table` ADD COLUMN `technical_weight` TINYINT(3) UNSIGNED NOT NULL DEFAULT 70 AFTER `evaluation_method`",
+            "commercial_weight" => "ALTER TABLE `$table` ADD COLUMN `commercial_weight` TINYINT(3) UNSIGNED NOT NULL DEFAULT 30 AFTER `technical_weight`",
+        ];
+
+        foreach ($columns as $column => $sql) {
+            if (!$this->_column_exists($table, $column)) {
+                $this->db->query($sql);
+                $created_columns = true;
+            }
+        }
+
+        if ($created_columns) {
+            $requests = $this->db->prefixTable("tender_requests");
+            $this->db->query(
+                "UPDATE `$table` t
+                 INNER JOIN `$requests` req
+                    ON req.id = t.tender_request_id
+                   AND req.deleted = 0
+                 SET t.evaluation_method = COALESCE(req.evaluation_method, t.evaluation_method),
+                     t.technical_weight = COALESCE(req.technical_weight, t.technical_weight),
+                     t.commercial_weight = COALESCE(req.commercial_weight, t.commercial_weight)
+                 WHERE t.deleted = 0"
+            );
+        }
+
+        self::$tender_evaluation_weight_schema_checked = true;
     }
 
     public function ensure_tender_fee_payments_table(): void
@@ -493,6 +533,7 @@ class Tenders_model extends Crud_model
         $now = $this->get_tender_business_now();
         $t = $this->db->prefixTable("tenders");
         $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $tb = $this->db->prefixTable("tender_bids");
         $tfp = $this->db->prefixTable("tender_fee_payments");
         $tts = $this->db->prefixTable("tender_target_specialties");
         $ttv = $this->db->prefixTable("tender_target_vendors");
@@ -507,6 +548,9 @@ class Tenders_model extends Crud_model
                     $t.*,
                     $tiv.invite_status,
                     $tiv.invited_at,
+                    participated_bid.id AS participated_bid_id,
+                    participated_bid.status AS participated_bid_status,
+                    participated_bid.submitted_at AS participated_bid_submitted_at,
                     fee_payment.id AS fee_payment_id,
                     fee_payment.status AS fee_payment_status,
                     fee_payment.paid_at AS fee_paid_at,
@@ -522,11 +566,28 @@ class Tenders_model extends Crud_model
                     $vgr.name AS vendor_grade_name,
                     $vgr.code AS vendor_grade_code,
                     CASE
+                        WHEN participated_bid.id IS NOT NULL THEN 1
                         WHEN target_vendor.id IS NOT NULL THEN 1
                         WHEN $tiv.invite_status IN ('sent', 'delivered', 'opened', 'approved') THEN 1
+                        WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 1
+                        WHEN target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 1
+                        WHEN target.vendor_category_id IS NOT NULL
+                             AND EXISTS (
+                                SELECT 1
+                                FROM $vs approval_check
+                                WHERE approval_check.deleted = 0
+                                  AND approval_check.status IN ('approved', 'pending')
+                                  AND approval_check.vendor_id = vendor_profile.id
+                                  AND approval_check.vendor_category_id = target.vendor_category_id
+                                  AND (
+                                        target.vendor_sub_category_id IS NULL
+                                        OR approval_check.vendor_sub_category_id = target.vendor_sub_category_id
+                                  )
+                             ) THEN 1
                         ELSE 0
                     END AS procurement_approved_for_submission,
                     CASE
+                        WHEN participated_bid.id IS NOT NULL THEN 'participated'
                         WHEN target_vendor.id IS NOT NULL THEN 'specific_vendor'
                         WHEN $tiv.id IS NOT NULL THEN 'invited'
                         WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 'vendor_group'
@@ -561,6 +622,17 @@ class Tenders_model extends Crud_model
                    AND target_vendor.deleted = 0
                 LEFT JOIN (
                     SELECT tender_id, vendor_id, MAX(id) AS max_id
+                    FROM $tb
+                    WHERE deleted = 0
+                      AND status <> 'draft'
+                    GROUP BY tender_id, vendor_id
+                ) participated_bid_latest
+                    ON participated_bid_latest.tender_id = $t.id
+                   AND participated_bid_latest.vendor_id = vendor_profile.id
+                LEFT JOIN $tb participated_bid
+                    ON participated_bid.id = participated_bid_latest.max_id
+                LEFT JOIN (
+                    SELECT tender_id, vendor_id, MAX(id) AS max_id
                     FROM $tfp
                     WHERE deleted = 0
                       AND status = 'paid'
@@ -582,54 +654,58 @@ class Tenders_model extends Crud_model
                 LEFT JOIN $vg ON $vg.id = target.vendor_group_id AND $vg.deleted = 0
                 LEFT JOIN $vgr ON $vgr.id = target.vendor_grade_id AND $vgr.deleted = 0
                 WHERE $t.deleted = 0
-                  AND $t.status = 'published'
-                  AND $t.workflow_stage = 'bidding'
-                  AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
-                  AND ($t.closing_at IS NULL OR $t.closing_at > ?)
                   AND (
-                        target_vendor.id IS NOT NULL
-                        OR $tiv.id IS NOT NULL
-                        OR
                         (
-                            (
-                                target.id IS NULL
-                                AND $t.tender_type = 'open'
-                            )
-                            OR (
-                                target.id IS NOT NULL
-                                AND (
+                            $t.status = 'published'
+                            AND $t.workflow_stage = 'bidding'
+                            AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
+                            AND ($t.closing_at IS NULL OR $t.closing_at > ?)
+                            AND (
+                                target_vendor.id IS NOT NULL
+                                OR $tiv.id IS NOT NULL
+                                OR
+                                (
                                     (
-                                    target.vendor_group_id IS NOT NULL
-                                    AND target.vendor_group_id = vendor_profile.vendor_group_id
+                                        target.id IS NULL
+                                        AND $t.tender_type = 'open'
                                     )
                                     OR (
-                                    target.vendor_grade_id IS NOT NULL
-                                    AND target.vendor_grade_id = vendor_profile.vendor_grade_id
-                                    )
-                                    OR EXISTS (
-                                        SELECT 1
-                                        FROM $vs
-                                        WHERE $vs.deleted = 0
-                                          AND $vs.status IN ('approved', 'pending')
-                                          AND $vs.vendor_id = vendor_profile.id
-                                          AND target.vendor_category_id IS NOT NULL
-                                          AND (
-                                                $vs.vendor_category_id = target.vendor_category_id
-                                                AND (
-                                                    target.vendor_sub_category_id IS NULL
-                                                    OR $vs.vendor_sub_category_id = target.vendor_sub_category_id
-                                                )
+                                        target.id IS NOT NULL
+                                        AND (
+                                            (
+                                            target.vendor_group_id IS NOT NULL
+                                            AND target.vendor_group_id = vendor_profile.vendor_group_id
                                             )
+                                            OR (
+                                            target.vendor_grade_id IS NOT NULL
+                                            AND target.vendor_grade_id = vendor_profile.vendor_grade_id
+                                            )
+                                            OR EXISTS (
+                                                SELECT 1
+                                                FROM $vs
+                                                WHERE $vs.deleted = 0
+                                                  AND $vs.status IN ('approved', 'pending')
+                                                  AND $vs.vendor_id = vendor_profile.id
+                                                  AND target.vendor_category_id IS NOT NULL
+                                                  AND (
+                                                        $vs.vendor_category_id = target.vendor_category_id
+                                                        AND (
+                                                            target.vendor_sub_category_id IS NULL
+                                                            OR $vs.vendor_sub_category_id = target.vendor_sub_category_id
+                                                        )
+                                                    )
+                                            )
+                                        )
                                     )
                                 )
                             )
                         )
+                        OR (
+                            participated_bid.id IS NOT NULL
+                            AND $t.status IN ('published', 'closed', 'awarded')
+                        )
                   )
-                ORDER BY
-                    CASE WHEN $t.status = 'published' THEN 0 ELSE 1 END ASC,
-                    CASE WHEN $t.closing_at IS NULL THEN 1 ELSE 0 END ASC,
-                    $t.closing_at ASC,
-                    $t.id DESC";
+                ORDER BY COALESCE($t.created_at, $t.published_at, $t.closing_at) DESC, $t.id DESC";
 
         return $this->db->query($sql, [$vendor_id, $vendor_id, $vendor_id, $now, $now]);
     }
@@ -640,6 +716,7 @@ class Tenders_model extends Crud_model
         $now = $this->get_tender_business_now();
         $t = $this->db->prefixTable("tenders");
         $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $tb = $this->db->prefixTable("tender_bids");
         $tfp = $this->db->prefixTable("tender_fee_payments");
         $tts = $this->db->prefixTable("tender_target_specialties");
         $ttv = $this->db->prefixTable("tender_target_vendors");
@@ -654,6 +731,9 @@ class Tenders_model extends Crud_model
                     $t.*,
                     $tiv.invite_status,
                     $tiv.invited_at,
+                    participated_bid.id AS participated_bid_id,
+                    participated_bid.status AS participated_bid_status,
+                    participated_bid.submitted_at AS participated_bid_submitted_at,
                     fee_payment.id AS fee_payment_id,
                     fee_payment.status AS fee_payment_status,
                     fee_payment.paid_at AS fee_paid_at,
@@ -669,11 +749,28 @@ class Tenders_model extends Crud_model
                     $vgr.name AS vendor_grade_name,
                     $vgr.code AS vendor_grade_code,
                     CASE
+                        WHEN participated_bid.id IS NOT NULL THEN 1
                         WHEN target_vendor.id IS NOT NULL THEN 1
                         WHEN $tiv.invite_status IN ('sent', 'delivered', 'opened', 'approved') THEN 1
+                        WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 1
+                        WHEN target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 1
+                        WHEN target.vendor_category_id IS NOT NULL
+                             AND EXISTS (
+                                SELECT 1
+                                FROM $vs approval_check
+                                WHERE approval_check.deleted = 0
+                                  AND approval_check.status IN ('approved', 'pending')
+                                  AND approval_check.vendor_id = vendor_profile.id
+                                  AND approval_check.vendor_category_id = target.vendor_category_id
+                                  AND (
+                                        target.vendor_sub_category_id IS NULL
+                                        OR approval_check.vendor_sub_category_id = target.vendor_sub_category_id
+                                  )
+                             ) THEN 1
                         ELSE 0
                     END AS procurement_approved_for_submission,
                     CASE
+                        WHEN participated_bid.id IS NOT NULL THEN 'participated'
                         WHEN target_vendor.id IS NOT NULL THEN 'specific_vendor'
                         WHEN $tiv.id IS NOT NULL THEN 'invited'
                         WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 'vendor_group'
@@ -708,6 +805,17 @@ class Tenders_model extends Crud_model
                    AND target_vendor.deleted = 0
                 LEFT JOIN (
                     SELECT tender_id, vendor_id, MAX(id) AS max_id
+                    FROM $tb
+                    WHERE deleted = 0
+                      AND status <> 'draft'
+                    GROUP BY tender_id, vendor_id
+                ) participated_bid_latest
+                    ON participated_bid_latest.tender_id = $t.id
+                   AND participated_bid_latest.vendor_id = vendor_profile.id
+                LEFT JOIN $tb participated_bid
+                    ON participated_bid.id = participated_bid_latest.max_id
+                LEFT JOIN (
+                    SELECT tender_id, vendor_id, MAX(id) AS max_id
                     FROM $tfp
                     WHERE deleted = 0
                       AND status = 'paid'
@@ -729,53 +837,61 @@ class Tenders_model extends Crud_model
                 LEFT JOIN $vg ON $vg.id = target.vendor_group_id AND $vg.deleted = 0
                 LEFT JOIN $vgr ON $vgr.id = target.vendor_grade_id AND $vgr.deleted = 0
                 WHERE $t.deleted = 0
-                  AND $t.status = 'published'
-                  AND $t.workflow_stage = 'bidding'
-                  AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
-                  AND ($t.closing_at IS NULL OR $t.closing_at > ?)
                   AND $t.id = ?
                   AND (
-                        target_vendor.id IS NOT NULL
-                        OR $tiv.id IS NOT NULL
-                        OR
                         (
-                            (
-                                target.id IS NULL
-                                AND $t.tender_type = 'open'
-                            )
-                            OR (
-                                target.id IS NOT NULL
-                                AND (
+                            $t.status = 'published'
+                            AND $t.workflow_stage = 'bidding'
+                            AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
+                            AND ($t.closing_at IS NULL OR $t.closing_at > ?)
+                            AND (
+                                target_vendor.id IS NOT NULL
+                                OR $tiv.id IS NOT NULL
+                                OR
+                                (
                                     (
-                                    target.vendor_group_id IS NOT NULL
-                                    AND target.vendor_group_id = vendor_profile.vendor_group_id
+                                        target.id IS NULL
+                                        AND $t.tender_type = 'open'
                                     )
                                     OR (
-                                    target.vendor_grade_id IS NOT NULL
-                                    AND target.vendor_grade_id = vendor_profile.vendor_grade_id
-                                    )
-                                    OR EXISTS (
-                                        SELECT 1
-                                        FROM $vs
-                                        WHERE $vs.deleted = 0
-                                          AND $vs.status IN ('approved', 'pending')
-                                          AND $vs.vendor_id = vendor_profile.id
-                                          AND target.vendor_category_id IS NOT NULL
-                                          AND (
-                                                $vs.vendor_category_id = target.vendor_category_id
-                                                AND (
-                                                    target.vendor_sub_category_id IS NULL
-                                                    OR $vs.vendor_sub_category_id = target.vendor_sub_category_id
-                                                )
+                                        target.id IS NOT NULL
+                                        AND (
+                                            (
+                                            target.vendor_group_id IS NOT NULL
+                                            AND target.vendor_group_id = vendor_profile.vendor_group_id
                                             )
+                                            OR (
+                                            target.vendor_grade_id IS NOT NULL
+                                            AND target.vendor_grade_id = vendor_profile.vendor_grade_id
+                                            )
+                                            OR EXISTS (
+                                                SELECT 1
+                                                FROM $vs
+                                                WHERE $vs.deleted = 0
+                                                  AND $vs.status IN ('approved', 'pending')
+                                                  AND $vs.vendor_id = vendor_profile.id
+                                                  AND target.vendor_category_id IS NOT NULL
+                                                  AND (
+                                                        $vs.vendor_category_id = target.vendor_category_id
+                                                        AND (
+                                                            target.vendor_sub_category_id IS NULL
+                                                            OR $vs.vendor_sub_category_id = target.vendor_sub_category_id
+                                                        )
+                                                    )
+                                            )
+                                        )
                                     )
                                 )
                             )
                         )
+                        OR (
+                            participated_bid.id IS NOT NULL
+                            AND $t.status IN ('published', 'closed', 'awarded')
+                        )
                   )
                 LIMIT 1";
 
-        return $this->db->query($sql, [$vendor_id, $vendor_id, $vendor_id, $now, $now, $tender_id])->getRow();
+        return $this->db->query($sql, [$vendor_id, $vendor_id, $vendor_id, $tender_id, $now, $now])->getRow();
     }
 
 

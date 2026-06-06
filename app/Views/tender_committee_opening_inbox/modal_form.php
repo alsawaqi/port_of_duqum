@@ -182,12 +182,20 @@ $(document).ready(function () {
 
     $("#tender-3key-confirm-form").appForm({
         onSuccess: function (response) {
+            if (response.redirect_url) {
+                window.location.href = response.redirect_url;
+                return;
+            }
             $("#tender-committee-opening-table").appTable({reload: true});
         }
     });
 
     $("#tender-3key-sign-form").appForm({
         onSuccess: function (response) {
+            if (response.redirect_url) {
+                window.location.href = response.redirect_url;
+                return;
+            }
             $("#tender-committee-opening-table").appTable({reload: true});
             if (response.reload) {
                 $(".modal").modal("hide");

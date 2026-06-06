@@ -1,24 +1,145 @@
- <div id="page-content" class="page-wrapper clearfix gp-pro-page">
-     <div class="card gp-pro-card">
-         <div class="page-title clearfix">
-             <h1><?php echo app_lang('vendors'); ?></h1>
+<?php
+$vendor_page_actions = "";
+if (!empty($can_create_vendors)) {
+    $vendor_page_actions = modal_anchor(
+        get_uri("vendors/modal_form"),
+        "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_vendor'),
+        array("class" => "btn btn-primary pod-action-btn", "title" => app_lang('add_vendor'))
+    );
+}
+?>
 
-             <div class="title-button-group">
-                <?php if (!empty($can_create_vendors)) { ?>
-                    <?php
-                    echo modal_anchor(
-                        get_uri("vendors/modal_form"),
-                        "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_vendor'),
-                        array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_vendor'))
-                    );
-                    ?>
-                <?php } ?>
-             </div>
-         </div>
+ <div id="page-content" class="page-wrapper clearfix pod-page-shell pod-vendor-page pod-vendor-directory-page">
+    <style>
+        .pod-vendor-directory-page .pod-vendor-table-shell {
+            overflow-x: auto;
+        }
 
-         <div class="table-responsive gp-pro-table-shell">
+        .pod-vendor-directory-page #vendors-table {
+            min-width: 1120px;
+            table-layout: auto;
+        }
+
+        .pod-vendor-directory-page #vendors-table th,
+        .pod-vendor-directory-page #vendors-table td {
+            vertical-align: middle;
+        }
+
+        .pod-vendor-directory-page #vendors-table .pod-vendor-grade-col {
+            min-width: 190px;
+        }
+
+        .pod-vendor-directory-page #vendors-table .pod-vendor-status-col {
+            min-width: 150px;
+            width: 150px;
+        }
+
+        .pod-vendor-directory-page #vendors-table .pod-vendor-actions-col {
+            min-width: 82px;
+            width: 82px;
+        }
+
+        .pod-vendor-directory-page .js-vendor-grade,
+        .pod-vendor-directory-page .js-vendor-status {
+            width: 100%;
+            height: 40px;
+            border-radius: 10px;
+            border-color: rgba(102, 112, 133, .24);
+            color: #344054;
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 18px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+        }
+
+        .pod-vendor-directory-page .js-vendor-grade {
+            min-width: 190px;
+        }
+
+        .pod-vendor-directory-page .js-vendor-status {
+            min-width: 142px;
+            text-transform: none;
+        }
+
+        .pod-vendor-directory-page .js-vendor-grade:focus,
+        .pod-vendor-directory-page .js-vendor-status:focus {
+            border-color: #465fff;
+            box-shadow: 0 0 0 4px rgba(70, 95, 255, .12);
+        }
+
+        .pod-vendor-directory-page .pod-vendor-status-badge {
+            display: inline-flex;
+            min-width: 108px;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+
+        body.color-1E202D:not(.pod-auth-page) .pod-vendor-directory-page .js-vendor-grade,
+        body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-vendor-directory-page .js-vendor-grade,
+        body.color-1E202D:not(.pod-auth-page) .pod-vendor-directory-page .js-vendor-status,
+        body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-vendor-directory-page .js-vendor-status {
+            border-color: var(--pod-topbar-border);
+            background-color: rgba(255, 255, 255, .04);
+            color: #d0d5dd;
+        }
+
+        @media (max-width: 1199px) {
+            .pod-vendor-directory-page #vendors-table {
+                min-width: 1040px;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .pod-vendor-directory-page .pod-vendor-table-shell {
+                margin: 0 -4px;
+                padding-bottom: 4px;
+            }
+
+            .pod-vendor-directory-page #vendors-table {
+                min-width: 980px;
+            }
+
+            .pod-vendor-directory-page #vendors-table .pod-vendor-status-col {
+                min-width: 138px;
+                width: 138px;
+            }
+
+            .pod-vendor-directory-page .js-vendor-status {
+                min-width: 130px;
+                height: 38px;
+                font-size: 11.5px;
+            }
+        }
+    </style>
+
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => app_lang("vendors"),
+        "subtitle" => "Manage supplier profiles, grades, locations, and operational status from one place.",
+        "icon" => "briefcase",
+        "breadcrumbs" => [
+            ["label" => app_lang("vendors")]
+        ],
+        "actions" => $vendor_page_actions
+    ]);
+    ?>
+
+     <div class="card pod-vendor-card">
+        <div class="pod-vendor-card-header">
+            <div>
+                <h2 class="pod-vendor-card-title"><?php echo app_lang('vendors'); ?></h2>
+                <p class="pod-vendor-card-subtitle">Review vendor records, update status, and keep registration data current.</p>
+            </div>
+        </div>
+
+        <div class="pod-vendor-card-body">
+         <div class="table-responsive pod-vendor-table-shell">
              <table id="vendors-table" class="display" cellspacing="0" width="100%"></table>
          </div>
+        </div>
      </div>
  </div>
 
@@ -30,32 +151,32 @@
              source: '<?php echo_uri("vendors/list_data") ?>',
              columns: [{
                      title: '<?php echo app_lang("vendor_groups"); ?>',
-                     "class": "w15p"
+                     "class": "pod-vendor-group-col"
                  },
                  {
                      title: '<?php echo app_lang("vendor_grade"); ?>',
-                     "class": "w15p"
+                     "class": "pod-vendor-grade-col"
                  },
                  {
                      title: '<?php echo app_lang("vendor_name"); ?>',
-                     "class": "w20p"
+                     "class": "pod-vendor-name-col"
                  },
                  {
                      title: '<?php echo app_lang("email"); ?>',
-                     "class": "w20p"
+                     "class": "pod-vendor-email-col"
                  },
                  {
                      title: '<?php echo app_lang("location"); ?>',
-                     "class": "w25p"
+                     "class": "pod-vendor-location-col"
                  },
                  {
                      title: '<?php echo app_lang("status"); ?>',
-                     "class": "w15p"
+                     "class": "pod-vendor-status-col"
                  }
                 <?php if (!empty($can_view_vendors) || !empty($can_update_vendors) || !empty($can_delete_vendors)) { ?>,
                 {
                     title: '<i data-feather="menu" class="icon-16"></i>',
-                    "class": "text-center option w100"
+                    "class": "text-center option pod-vendor-actions-col"
                 }
                 <?php } ?>
              ],

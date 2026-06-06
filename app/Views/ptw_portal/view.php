@@ -1,16 +1,35 @@
-<ul class="nav nav-tabs" id="ptw-tabs" role="tablist">
-    <li class="nav-item">
-        <a class="nav-link active"
-           data-bs-toggle="tab"
-           href="#ptw-applications"
-           data-load-url="<?= get_uri('ptw_portal/applications'); ?>">
-            My PTW Applications
-        </a>
-    </li>
-</ul>
+<div id="page-content" class="page-wrapper clearfix pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => "PTW Portal",
+        "subtitle" => "Submit, track, revise, and download your Permit to Work applications from one workspace.",
+        "icon" => "clipboard",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => "PTW Portal"]
+        ]
+    ]); ?>
 
-<div class="tab-content pt15" id="ptw-tabs-content">
-    <div class="tab-pane fade show active" id="ptw-applications" role="tabpanel"></div>
+    <div class="card gp-pro-card">
+        <div class="page-title clearfix">
+            <h1>PTW Applications</h1>
+        </div>
+
+        <ul class="nav nav-tabs pod-ptw-tabs" id="ptw-tabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active"
+                   data-bs-toggle="tab"
+                   href="#ptw-applications"
+                   data-load-url="<?= get_uri('ptw_portal/applications'); ?>">
+                    <i data-feather="clipboard" class="icon-14"></i>
+                    My PTW Applications
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content pt15" id="ptw-tabs-content">
+            <div class="tab-pane fade show active" id="ptw-applications" role="tabpanel"></div>
+        </div>
+    </div>
 </div>
 
 <script>

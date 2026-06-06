@@ -1222,7 +1222,7 @@ class Vendors extends Security_Controller
         $can_delete = $this->can_delete_vendors();
 
         if ($can_update) {
-            $gradeSelect = "<select class='form-select form-select-sm js-vendor-grade' data-id='{$data->id}'>";
+            $gradeSelect = "<select class='form-select form-select-sm js-vendor-grade' data-id='{$data->id}' aria-label='" . esc(app_lang("vendor_grade")) . "'>";
             foreach ($this->_get_vendor_grades_dropdown() as $grade_id => $label) {
                 $selected = ((string)($data->vendor_grade_id ?? "") === (string)$grade_id) ? "selected" : "";
                 $gradeSelect .= "<option value='" . esc($grade_id) . "' {$selected}>" . esc($label) . "</option>";
@@ -1235,14 +1235,16 @@ class Vendors extends Security_Controller
         // status dropdown (same as yours)
         $allowedStatuses = $this->_vendor_status_dropdown_options((string)($data->status ?? ""), $can_update);
         if ($can_update_status) {
-            $statusSelect = "<select class='form-select form-select-sm js-vendor-status' data-id='{$data->id}'>";
+            $statusSelect = "<select class='form-select form-select-sm js-vendor-status' data-id='{$data->id}' aria-label='" . esc(app_lang("status")) . "'>";
             foreach ($allowedStatuses as $st) {
                 $selected = ($data->status === $st) ? "selected" : "";
-                $statusSelect .= "<option value='{$st}' {$selected}>{$st}</option>";
+                $statusLabel = ucwords(str_replace("_", " ", (string)$st));
+                $statusSelect .= "<option value='" . esc($st) . "' {$selected}>" . esc($statusLabel) . "</option>";
             }
             $statusSelect .= "</select>";
         } else {
-            $statusSelect = "<span class='badge bg-secondary'>" . esc($data->status ?? "-") . "</span>";
+            $statusLabel = ucwords(str_replace("_", " ", (string)($data->status ?? "-")));
+            $statusSelect = "<span class='badge bg-secondary pod-vendor-status-badge'>" . esc($statusLabel) . "</span>";
         }
 
         // ✅ FIX: your details route should match your controller: vendors/details/{id}

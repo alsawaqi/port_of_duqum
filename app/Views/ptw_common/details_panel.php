@@ -199,17 +199,28 @@ $requirement_labels = [
 }
 </style>
 
-<div id="page-content" class="page-wrapper clearfix ptw-detail-shell">
+<div id="page-content" class="page-wrapper clearfix pod-page-shell pod-ptw-page ptw-detail-shell">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => $page_title,
+        "subtitle" => "Reference " . (string)($app->reference ?? "-") . " with current stage, review history, and submitted safety details.",
+        "icon" => "file-text",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => "Details"]
+        ],
+        "actions" => trim($back_html . " " . $actions_html)
+    ]); ?>
+
     <div class="ptw-detail-hero">
         <div class="row align-items-center">
             <div class="col-md-7">
-                <h1><?php echo esc($page_title); ?></h1>
+                <h1>Permit snapshot</h1>
                 <div class="ptw-detail-ref"><?php echo esc((string)($app->reference ?? "-")); ?></div>
             </div>
             <div class="col-md-5">
                 <div class="ptw-detail-actions">
-                    <?php echo $back_html; ?>
-                    <?php echo $actions_html; ?>
+                    <span class="ptw-pill <?php echo $statusClass($app->status ?? ""); ?>"><?php echo esc(ptw_status_display_label($app->status ?? "")); ?></span>
+                    <span class="ptw-pill is-submitted"><?php echo esc(ptw_stage_display_label($app->stage ?? "")); ?></span>
                 </div>
             </div>
         </div>

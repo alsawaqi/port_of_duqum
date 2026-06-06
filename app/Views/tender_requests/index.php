@@ -1,4 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => app_lang("tender_requests"),
+        "subtitle" => "Create, submit, and track tender requests before procurement conversion.",
+        "icon" => "file-plus"
+    ]);
+    ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("tender_requests"); ?></h1>
@@ -39,6 +46,8 @@ $(document).ready(function () {
 
     $("#tender-requests-table").appTable({
         source: '<?php echo_uri("tender_requests/list_data"); ?>',
+        order: [],
+        stateSave: false,
         columns: [
             {title: "Reference"},
             {title: "Subject"},

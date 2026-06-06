@@ -120,12 +120,17 @@ $document_actions = function ($doc) {
 };
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page tender-manager-review-page">
-    <div class="mb15">
-        <a href="<?php echo get_uri("tender_procurement_manager_inbox"); ?>" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i> Back to Manager Inbox
-        </a>
-    </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page tender-manager-review-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Procurement Manager Review",
+        "subtitle" => "Review tender setup, target vendors, documents, schedule, and pending manager action.",
+        "icon" => "shield",
+        "actions" => '<a href="' . esc(get_uri("tender_procurement_manager_inbox"), "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+            . '<i data-feather="arrow-left" class="icon-16"></i> Back to Manager Inbox'
+            . '</a>'
+    ]);
+    ?>
 
     <div class="card gp-pro-card mb15 tender-report-hero">
         <div class="card-body">
@@ -186,6 +191,14 @@ $document_actions = function ($doc) {
                         <div class="col-md-6 mb15">
                             <div class="text-off">Tender Type</div>
                             <strong><?php echo esc(ucwords((string) ($tender->tender_type ?? "open"))); ?></strong>
+                        </div>
+                        <div class="col-md-6 mb15">
+                            <div class="text-off">Evaluation Method</div>
+                            <strong><?php echo esc(ucwords(str_replace("_", " ", (string) ($tender->evaluation_method ?? "separate")))); ?></strong>
+                        </div>
+                        <div class="col-md-6 mb15">
+                            <div class="text-off">Evaluation Weights</div>
+                            <strong>Technical <?php echo (int) ($tender->technical_weight ?? 70); ?>% / Commercial <?php echo (int) ($tender->commercial_weight ?? 30); ?>%</strong>
                         </div>
                         <div class="col-md-6 mb15">
                             <div class="text-off">Company</div>

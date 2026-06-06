@@ -1,10 +1,14 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="mb15 d-flex flex-wrap gap-2">
-        <a href="<?php echo get_uri('tender_clarifications'); ?>" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i>
-            Back to Tenders
-        </a>
-    </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Tender Clarifications",
+        "subtitle" => "Review evaluator messages and vendor clarification chats for one tender.",
+        "icon" => "message-square",
+        "actions" => '<a href="' . esc(get_uri('tender_clarifications'), "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+            . '<i data-feather="arrow-left" class="icon-16"></i> Back to Tenders'
+            . '</a>'
+    ]);
+    ?>
 
     <div class="card gp-pro-card mb15">
         <div class="card-header">

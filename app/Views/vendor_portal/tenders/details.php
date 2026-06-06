@@ -107,9 +107,14 @@ foreach ($bid_item_price_rows as $price_row) {
         $saved_item_total += (float) $price_row->line_total;
     }
 }
+
+$vendor_tender_back_url = get_uri("vendor_portal") . "#vp-tenders";
+$vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+    . '<i data-feather="arrow-left" class="icon-16"></i> Back to Vendor Portal'
+    . '</a>';
 ?>
 
-<div id="page-content" class="page-wrapper clearfix vendor-tender-detail-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page vendor-tender-detail-page">
     <style>
         .vendor-tender-detail-page {
             --vtd-border: rgba(15, 23, 42, .08);
@@ -464,11 +469,18 @@ foreach ($bid_item_price_rows as $price_row) {
         }
     </style>
 
-    <div class="vtd-back-row">
-        <a href="<?php echo get_uri("vendor_portal"); ?>#vp-tenders" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i> Back to Vendor Portal
-        </a>
-    </div>
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => $tender->title ?: "Tender Details",
+        "subtitle" => ($tender->reference ?: "Tender") . " - Review documents, submit bids, and manage clarifications.",
+        "icon" => "briefcase",
+        "breadcrumbs" => [
+            ["label" => "Vendor Portal", "url" => get_uri("vendor_portal")],
+            ["label" => "Tender Details"]
+        ],
+        "actions" => $vendor_tender_header_actions
+    ]);
+    ?>
 
     <div class="vtd-hero">
         <div class="vtd-hero-inner">

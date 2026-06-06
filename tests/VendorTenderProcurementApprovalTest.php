@@ -26,6 +26,9 @@ $tenderReportDetails = $read("app/Views/tender_reports/details.php");
 $approvalSql = $read("app/Database/SQL/tender_vendor_participation_approval_upgrade_pod.sql");
 
 $assertContains("procurement_approved_for_submission", $tendersModel, "vendor tender query should expose whether procurement already approved bid submission");
+$assertContains("target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 1", $tendersModel, "group-targeted tenders should allow matching vendors to submit without individual invites");
+$assertContains("target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 1", $tendersModel, "grade-targeted tenders should allow matching vendors to submit without individual invites");
+$assertContains("approval_check.vendor_category_id = target.vendor_category_id", $tendersModel, "specialty-targeted tenders should allow matching vendors to submit without individual invites");
 $assertContains("'pending_approval'", $vendorPortal, "vendor portal should create a pending procurement approval request");
 $assertContains("request_tender_approval", $vendorPortal, "vendor portal should let eligible vendors request procurement approval");
 $assertContains("Procurement approval is required before submitting a bid.", $vendorPortal, "pending vendors should be blocked from bid submission");

@@ -2,7 +2,7 @@
 // index.php (Vendor Update Requests) — Pro UI + animation
 ?>
 
-<div id="page-content" class="page-wrapper clearfix vur-page">
+<div id="page-content" class="page-wrapper clearfix vur-page pod-page-shell pod-vendor-page pod-vendor-updates-page">
 
     <style>
         /* =========================
@@ -88,6 +88,31 @@
         .vur-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 10px 20px rgba(2, 6, 23, .08);
+        }
+
+        .vur-action-select {
+            min-width: 154px;
+            height: 38px;
+            border: 1px solid rgba(15, 23, 42, .12);
+            border-radius: 10px;
+            background-color: #ffffff;
+            color: #344054;
+            font-size: 12px;
+            font-weight: 800;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+            cursor: pointer;
+        }
+
+        .vur-action-select:focus {
+            border-color: #465fff;
+            box-shadow: 0 0 0 4px rgba(70, 95, 255, .12);
+        }
+
+        body.color-1E202D .vur-action-select,
+        body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61) .vur-action-select {
+            border-color: var(--pod-topbar-border);
+            background-color: rgba(255, 255, 255, .04);
+            color: #d0d5dd;
         }
 
         .vur-badges {
@@ -186,12 +211,23 @@
         }
     </style>
 
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => app_lang("vendor_update_requests"),
+        "subtitle" => "Review submitted vendor changes, compare requested updates, and keep approval actions traceable.",
+        "icon" => "refresh-cw",
+        "breadcrumbs" => [
+            ["label" => app_lang("vendor_update_requests")]
+        ]
+    ]);
+    ?>
+
     <div class="vur-shell">
         <div class="card vur-card">
 
             <div class="vur-hero">
                 <div class="vur-title">
-                    <h4><?php echo app_lang("vendor_update_requests"); ?></h4>
+                    <h4>Request Queue</h4>
                     <p>Review submitted change requests, filter by vendor/module, and take action quickly.</p>
 
                     <div class="vur-badges">
@@ -266,7 +302,7 @@
                 },
                 {
                     title: '<i data-feather="menu" class="icon-16"></i>',
-                    class: "text-center option w100"
+                    class: "text-center option w150"
                 }
             ]
         });
@@ -290,6 +326,80 @@
             } catch (e) {
                 // If DataTables instance isn't available for any reason, just re-init icons.
                 if (window.feather) feather.replace();
+            }
+        });
+
+        function openVurModal(url, id, title) {
+            var $modalLink = $("<a />", {
+                href: "#",
+                "data-act": "ajax-modal",
+                "data-action-url": url,
+                "data-title": title || "",
+                "data-post-id": id
+            }).appendTo("body");
+
+            $modalLink.trigger("click");
+            $modalLink.remove();
+        }
+
+        function reloadVurTable() {
+            try {
+                $("#vendor-update-requests-table").DataTable().ajax.reload(null, false);
+            } catch (e) {
+                $("#vendor-update-requests-table").appTable({
+                    reload: true
+                });
+            }
+        }
+
+        window.vurActionApproved = function(response) {
+            if (response && response.success) {
+                reloadVurTable();
+            }
+        };
+
+        function runVurAjaxAction(url, id) {
+            var $actionLink = $("<a />", {
+                href: "#",
+                "data-act": "ajax-request",
+                "data-action-url": url,
+                "data-post-id": id,
+                "data-show-response": "1",
+                "data-success-callback": "vurActionApproved"
+            }).appendTo("body");
+
+            $actionLink.trigger("click");
+            $actionLink.remove();
+        }
+
+        $(document).on("change", ".vur-action-select", function() {
+            var $select = $(this);
+            var action = $select.val();
+            var id = $select.data("id");
+
+            if (!action || !id) {
+                return;
+            }
+
+            $select.val("");
+
+            if (action === "view") {
+                openVurModal("<?php echo get_uri('vendor_update_requests/view'); ?>", id, "<?php echo app_lang('view_details'); ?>");
+                return;
+            }
+
+            if (action === "review") {
+                openVurModal("<?php echo get_uri('vendor_update_requests/review_modal'); ?>", id, "<?php echo app_lang('review'); ?>");
+                return;
+            }
+
+            if (action === "reject") {
+                openVurModal("<?php echo get_uri('vendor_update_requests/reject_modal'); ?>", id, "<?php echo app_lang('reject'); ?>");
+                return;
+            }
+
+            if (action === "approve") {
+                runVurAjaxAction("<?php echo get_uri('vendor_update_requests/approve'); ?>", id);
             }
         });
 

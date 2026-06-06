@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix vur-page">
+<div id="page-content" class="page-wrapper clearfix vur-page pod-page-shell pod-vendor-page pod-vendor-updates-page">
     <style>
         /* =========================
            Vendor Update Requests – Pro UI (Grouped)
@@ -146,12 +146,24 @@
         }
     </style>
 
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => "Vendor Update Requests",
+        "subtitle" => "Group pending profile changes by vendor and prioritize the reviews that need attention first.",
+        "icon" => "layers",
+        "breadcrumbs" => [
+            ["label" => "Vendor Update Requests", "url" => get_uri("vendor_update_requests")],
+            ["label" => "Grouped by Vendor"]
+        ]
+    ]);
+    ?>
+
     <div class="vur-shell">
         <div class="card vur-card">
             <div class="vur-hero">
                 <div class="vur-hero-top">
                     <div>
-                        <h1>Vendor Update Requests (Grouped)</h1>
+                        <h1>Grouped Review Queue</h1>
                         <p>View totals per vendor to prioritize reviews faster.</p>
                     </div>
 

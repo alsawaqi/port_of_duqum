@@ -1,33 +1,48 @@
-<div id="page-content" class="page-wrapper clearfix">
-    <div class="card">
-        <div class="page-title clearfix">
-            <h1>
-                <?php echo app_lang("vendor"); ?>:
-                <?php echo esc($vendor->vendor_name ?? ""); ?>
-                <span class="text-muted">(#<?php echo (int)$vendor->id; ?>)</span>
-            </h1>
+<div id="page-content" class="page-wrapper clearfix pod-page-shell pod-vendor-page pod-vendor-detail-page">
+    <?php
+    $vendor_name = $vendor->vendor_name ?? "";
+    echo view("includes/pod_page_header", [
+        "title" => app_lang("vendor") . ": " . $vendor_name,
+        "subtitle" => "Inspect documents, contacts, bank accounts, branches, credentials, and specialties for this vendor.",
+        "icon" => "briefcase",
+        "breadcrumbs" => [
+            ["label" => app_lang("vendors"), "url" => get_uri("vendors")],
+            ["label" => $vendor_name]
+        ]
+    ]);
+    ?>
+
+    <div class="card pod-vendor-card">
+        <div class="pod-vendor-card-header">
+            <div>
+                <h2 class="pod-vendor-card-title">
+                    <?php echo esc($vendor_name); ?>
+                    <span class="text-muted">#<?php echo (int)$vendor->id; ?></span>
+                </h2>
+                <p class="pod-vendor-card-subtitle">Vendor compliance and master-data profile.</p>
+            </div>
         </div>
 
-        <div class="p15 pt0">
-            <div class="row">
-                <div class="col-md-3 mb10">
-                    <div class="text-off"><?php echo app_lang("vendor_grade"); ?></div>
+        <div class="pod-vendor-card-body">
+            <div class="pod-vendor-summary-grid">
+                <div class="pod-vendor-summary-item">
+                    <span><?php echo app_lang("vendor_grade"); ?></span>
                     <strong><?php echo esc(vendor_grade_label($vendor->vendor_grade_name ?? "", $vendor->vendor_grade_code ?? "")); ?></strong>
                 </div>
-                <div class="col-md-3 mb10">
-                    <div class="text-off"><?php echo app_lang("status"); ?></div>
+                <div class="pod-vendor-summary-item">
+                    <span><?php echo app_lang("status"); ?></span>
                     <strong><?php echo esc($vendor->status ?? "-"); ?></strong>
                 </div>
                 <?php if (($vendor->status ?? "") === vendor_blocked_status()) { ?>
-                    <div class="col-md-6 mb10">
-                        <div class="text-off"><?php echo app_lang("reason"); ?></div>
+                    <div class="pod-vendor-summary-item">
+                        <span><?php echo app_lang("reason"); ?></span>
                         <strong><?php echo esc($vendor->blocked_reason ?? "-"); ?></strong>
                     </div>
                 <?php } ?>
             </div>
         </div>
 
-        <ul class="nav nav-tabs" role="tablist">
+        <ul class="nav nav-tabs pod-vendor-tabs" role="tablist">
             <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-docs"><?php echo app_lang("documents"); ?></a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-contacts"><?php echo app_lang("contacts"); ?></a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-bank"><?php echo app_lang("bank"); ?></a></li>
@@ -36,7 +51,7 @@
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-specialties"><?php echo app_lang("specialties"); ?></a></li>
         </ul>
 
-        <div class="tab-content p15">
+        <div class="tab-content pod-vendor-card-body">
             <div class="tab-pane fade show active" id="tab-docs">
                 <table id="vendor-docs-table" class="display" width="100%"></table>
             </div>

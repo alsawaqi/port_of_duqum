@@ -63,8 +63,8 @@ class Tender_criteria_model extends Crud_model
         $tr = $this->db->prefixTable("tender_requests");
 
         $sql = "SELECT
-                    $tr.technical_weight,
-                    $tr.commercial_weight
+                    COALESCE($t.technical_weight, $tr.technical_weight) AS technical_weight,
+                    COALESCE($t.commercial_weight, $tr.commercial_weight) AS commercial_weight
                 FROM $t
                 LEFT JOIN $tr
                     ON $tr.id = $t.tender_request_id

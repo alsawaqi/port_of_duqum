@@ -1,4 +1,4 @@
-<div class="vur-page">
+<div id="page-content" class="page-wrapper clearfix vur-page pod-page-shell pod-vendor-page pod-vendor-updates-page">
     <style>
         .vur-page {
             --vur-radius: 18px;
@@ -274,6 +274,19 @@
             color: #111827;
         }
     </style>
+
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => $vendor_info->vendor_name . " - " . app_lang("vendor_update_requests"),
+        "subtitle" => "Review all pending profile changes submitted by this vendor and process approvals in bulk.",
+        "icon" => "clipboard",
+        "breadcrumbs" => [
+            ["label" => "Vendor Update Requests", "url" => get_uri("vendor_update_requests")],
+            ["label" => "Grouped by Vendor", "url" => get_uri("vendor_update_requests/vendors")],
+            ["label" => $vendor_info->vendor_name]
+        ]
+    ]);
+    ?>
 
     <div class="vur-shell">
         <div class="card vur-card">

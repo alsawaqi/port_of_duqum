@@ -1,4 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => app_lang("tender_technical_inbox"),
+        "subtitle" => "Evaluate technical bid packages and track pending tender reviews.",
+        "icon" => "clipboard"
+    ]);
+    ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("tender_technical_inbox"); ?></h1>
@@ -14,6 +21,8 @@
 $(document).ready(function () {
     $("#tender-technical-inbox-table").appTable({
         source: '<?php echo_uri("tender_technical_inbox/list_data"); ?>',
+        order: [],
+        stateSave: false,
         columns: [
             {title: "Reference"},
             {title: "Title"},

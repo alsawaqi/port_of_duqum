@@ -598,6 +598,9 @@ $view_data["currency_dropdown"] = $currency_dropdown;
                 $vehData = [
                     "gate_pass_request_id" => $new_id,
                     "plate_no" => $veh->plate_no,
+                    "is_international_plate" => (int)($veh->is_international_plate ?? 0),
+                    "plate_country" => $veh->plate_country ?? null,
+                    "international_plate_no" => $veh->international_plate_no ?? null,
                     "type" => $veh->type ?? "private",
                     "make" => null,
                     "model" => null,
@@ -724,7 +727,11 @@ $view_data["currency_dropdown"] = $currency_dropdown;
 
         foreach ($vehicles as $veh) {
             $plate = strtoupper(trim((string)($veh->plate_no ?? "")));
-            if ($plate !== "" && !gate_pass_plate_no_is_valid($plate)) {
+            if ((int)($veh->is_international_plate ?? 0) === 1) {
+                if (trim((string)($veh->plate_country ?? "")) === "" || !gate_pass_international_plate_no_is_valid((string)($veh->international_plate_no ?? $veh->plate_no ?? ""))) {
+                    return ["ok" => false, "message" => app_lang("gate_pass_international_plate_required")];
+                }
+            } elseif ($plate !== "" && !gate_pass_plate_no_is_valid($plate)) {
                 return ["ok" => false, "message" => app_lang("gate_pass_plate_invalid_chars")];
             }
             $mulkiyah = gate_pass_vehicle_mulkiyah_path_value($veh);
@@ -1180,7 +1187,7 @@ function calc_fee_preview()
         $vehicleRows = "";
         if ($reqType !== "person") {
             foreach ($vehicles as $veh) {
-                $vehicleRows .= "<tr><td>" . $h($veh->plate_no ?? "") . "</td></tr>";
+                $vehicleRows .= "<tr><td>" . $h(gate_pass_vehicle_plate_display($veh)) . "</td></tr>";
             }
             if ($vehicleRows === "") {
                 $vehicleRows = "<tr><td>—</td></tr>";
@@ -2015,8 +2022,6 @@ HTML;
         $this->validate_submitted_data([
             "id" => "numeric",
             "gate_pass_request_id" => "required|numeric",
-            "plate_prefix" => "required",
-            "plate_digits" => "required",
         ]);
 
         $id = $this->request->getPost("id");
@@ -2039,25 +2044,26 @@ HTML;
             return;
         }
 
-        $built = gate_pass_plate_merge_from_post_parts(
+        $plate_payload = gate_pass_prepare_vehicle_plate_payload(
+            (int) $this->request->getPost("is_international_plate") === 1,
             (string) $this->request->getPost("plate_prefix"),
-            (string) $this->request->getPost("plate_digits")
+            (string) $this->request->getPost("plate_digits"),
+            (string) $this->request->getPost("plate_country"),
+            (string) $this->request->getPost("international_plate_no")
         );
-        if (empty($built["ok"])) {
-            echo json_encode(["success" => false, "message" => $built["message"] ?? app_lang("gate_pass_plate_invalid_chars")]);
+        if (empty($plate_payload["ok"])) {
+            echo json_encode(["success" => false, "message" => $plate_payload["message"] ?? app_lang("gate_pass_plate_invalid_chars")]);
             return;
         }
-        $plate_in = $built["plate"];
 
         $existing = $id ? $this->Gate_pass_request_vehicles_model->get_details(["id" => $id])->getRow() : null;
 
-        $data = [
+        $data = array_merge([
             "gate_pass_request_id" => $request_id,
-            "plate_no" => $plate_in,
             "make" => null,
             "model" => null,
             "color" => null,
-        ];
+        ], (array) ($plate_payload["data"] ?? []));
 
         $upload_dir_rel = "gate_pass_vehicles/request_" . $request_id . "/";
         $upload_dir = WRITEPATH . "uploads/" . $upload_dir_rel;
@@ -2089,7 +2095,7 @@ HTML;
 
         if ($save_id) {
             $saved_veh = $this->Gate_pass_request_vehicles_model->get_details(["id" => (int)$save_id])->getRow();
-            $plate_disp = $saved_veh ? strtoupper(trim((string)($saved_veh->plate_no ?? ""))) : "";
+            $plate_disp = $saved_veh ? gate_pass_vehicle_plate_display($saved_veh) : "";
             if ($plate_disp === "") {
                 $plate_disp = app_lang("gate_pass_audit_unspecified_plate");
             }
@@ -2173,7 +2179,7 @@ HTML;
             : "<span class='badge bg-secondary'>" . app_lang("no") . "</span>";
 
         return [
-            $row->plate_no ?: "-",
+            gate_pass_vehicle_plate_display($row),
             $mulkiyah,
             $actions_cell
         ];

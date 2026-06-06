@@ -16,7 +16,8 @@ ALTER TABLE `pod_tender_bid_openings`
 ALTER TABLE `pod_tender_bid_opening_entries`
   ADD COLUMN IF NOT EXISTS `signature_statement` text DEFAULT NULL AFTER `confirmed_at`,
   ADD COLUMN IF NOT EXISTS `signature_name` varchar(255) DEFAULT NULL AFTER `signature_statement`,
-  ADD COLUMN IF NOT EXISTS `signed_at` datetime DEFAULT NULL AFTER `signature_name`,
+  ADD COLUMN IF NOT EXISTS `signature_image_path` varchar(500) DEFAULT NULL AFTER `signature_name`,
+  ADD COLUMN IF NOT EXISTS `signed_at` datetime DEFAULT NULL AFTER `signature_image_path`,
   ADD COLUMN IF NOT EXISTS `signature_ip_address` varchar(45) DEFAULT NULL AFTER `signed_at`,
   ADD COLUMN IF NOT EXISTS `signature_user_agent` text DEFAULT NULL AFTER `signature_ip_address`;
 

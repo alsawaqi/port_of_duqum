@@ -72,7 +72,7 @@ class Tender_requests_model extends Crud_model
                 LEFT JOIN $users requester ON requester.id = $req.requester_id
                 LEFT JOIN $users manager ON manager.id = $req.department_manager_user_id
                 $where
-                ORDER BY $req.id DESC";
+                ORDER BY COALESCE($req.created_at, $req.request_date) DESC, $req.id DESC";
 
         return $this->db->query($sql);
     }

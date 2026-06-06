@@ -7,6 +7,7 @@ $weighted_evaluation_scores = $weighted_evaluation_scores ?? [];
 $technical_evaluations = $technical_evaluations ?? [];
 $commercial_evaluations = $commercial_evaluations ?? [];
 $communications = $communications ?? [];
+$communication_attachments = $communication_attachments ?? [];
 $extensions = $extensions ?? [];
 $workflow_history = $workflow_history ?? [];
 $opening_audit = $opening_audit ?? [];
@@ -159,12 +160,17 @@ foreach ($opening_signatures as $signature) {
 }
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page tender-report-page">
-    <div class="mb15">
-        <a href="<?php echo get_uri("tender_reports"); ?>" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i> Back to Tender Register
-        </a>
-    </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page tender-report-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Tender Register Detail",
+        "subtitle" => "Review tender timeline, teams, vendors, documents, evaluations, clarifications, and audit trail.",
+        "icon" => "activity",
+        "actions" => '<a href="' . esc(get_uri("tender_reports"), "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+            . '<i data-feather="arrow-left" class="icon-16"></i> Back to Tender Register'
+            . '</a>'
+    ]);
+    ?>
 
     <div class="card gp-pro-card mb15 tender-report-hero">
         <div class="card-body">
@@ -347,6 +353,11 @@ foreach ($opening_signatures as $signature) {
 
                 <div class="row mt10">
                     <div class="col-md-6">
+                        <div class="mb15">
+                            <a href="<?php echo get_uri("tender_reports/bid_opening_form/" . (int) $tender->id); ?>" class="btn btn-default" target="_blank">
+                                <i data-feather="clipboard" class="icon-16"></i> Review Generated Bid Opening Form
+                            </a>
+                        </div>
                         <?php echo form_open_multipart(get_uri("tender_reports/save_manual_bid_opening_form"), [
                             "id" => "manual-bid-opening-form",
                             "class" => "general-form",
@@ -354,7 +365,7 @@ foreach ($opening_signatures as $signature) {
                         ]); ?>
                             <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
                             <div class="form-group">
-                                <label>Upload Manual Signed Bid Opening Form</label>
+                                <label>Manual Signed Bid Opening Form (Fallback)</label>
                                 <input type="file" name="manual_bid_opening_form" class="form-control" required>
                             </div>
                             <button type="submit" class="btn btn-default">
@@ -369,16 +380,12 @@ foreach ($opening_signatures as $signature) {
                             "role" => "form"
                         ]); ?>
                             <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+                            <input type="hidden" name="technical_proposals_reviewed" value="1" />
+                            <input type="hidden" name="commercial_proposals_reviewed" value="1" />
                             <div class="form-group mb10">
-                                <label class="d-flex align-items-center gap-2">
-                                    <input type="checkbox" name="technical_proposals_reviewed" value="1" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>>
-                                    <span>Confirm technical proposals reviewed</span>
-                                </label>
-                            </div>
-                            <div class="form-group mb10">
-                                <label class="d-flex align-items-center gap-2">
-                                    <input type="checkbox" name="commercial_proposals_reviewed" value="1" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>>
-                                    <span>Confirm commercial proposals reviewed</span>
+                                <label class="d-flex align-items-start gap-2">
+                                    <input type="checkbox" name="generated_bid_opening_form_confirmed" value="1" <?php echo $opening_ready_for_technical && $opening_status !== "manual_accepted" ? "required" : "disabled"; ?>>
+                                    <span>Confirm generated bid opening form is correct</span>
                                 </label>
                             </div>
                             <div class="form-group">
@@ -390,7 +397,7 @@ foreach ($opening_signatures as $signature) {
                                 <input type="datetime-local" name="technical_end_at" class="form-control" value="<?php echo esc($default_open_until); ?>">
                             </div>
                             <button type="submit" class="btn btn-primary" title="Start Technical Review" <?php echo $opening_ready_for_technical ? "" : "disabled"; ?>>
-                                <i data-feather="play-circle" class="icon-16"></i> Confirm Review & Send to Technical Evaluation
+                                <i data-feather="play-circle" class="icon-16"></i> Confirm Generated Form & Start Technical Review
                             </button>
                         <?php echo form_close(); ?>
                     </div>
@@ -742,7 +749,7 @@ foreach ($opening_signatures as $signature) {
                             <i data-feather="send" class="icon-24"></i>
                         </div>
 
-                        <?php echo form_open(get_uri("tender_reports/save_update"), [
+                        <?php echo form_open_multipart(get_uri("tender_reports/save_update"), [
                             "id" => "tender-group-update-form",
                             "class" => "general-form",
                             "role" => "form"
@@ -769,9 +776,20 @@ foreach ($opening_signatures as $signature) {
                                 </div>
                             </div>
 
-                            <div class="form-group">
-                                <label>Message</label>
-                                <textarea name="message" class="form-control" rows="4" required></textarea>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="form-group">
+                                        <label>Message</label>
+                                        <textarea name="message" class="form-control" rows="4" required></textarea>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Attachment</label>
+                                        <input type="file" name="update_files[]" class="form-control" multiple>
+                                        <small class="form-text text-muted">Optional files visible to all tender participants.</small>
+                                    </div>
+                                </div>
                             </div>
 
                             <button type="submit" class="btn btn-primary">
@@ -799,6 +817,7 @@ foreach ($opening_signatures as $signature) {
                                 <?php } ?>
                                 <?php foreach ($communications as $item) {
                                     $communication_type = strtolower((string) ($item->type ?? ""));
+                                    $item_attachments = $communication_attachments[(int) ($item->id ?? 0)] ?? [];
                                     $is_team_request = in_array($communication_type, ["technical_clarification_request", "commercial_clarification_request"], true) && !(int) ($item->parent_id ?? 0);
                                     $reply_visibility = $communication_type === "commercial_clarification_request" ? "commercial" : "technical";
                                     $reply_team_label = $reply_visibility === "commercial" ? "Commercial Team" : "Technical Team";
@@ -819,6 +838,16 @@ foreach ($opening_signatures as $signature) {
                                         <td>
                                             <strong><?php echo esc($item->subject ?? "-"); ?></strong>
                                             <div class="text-off mt5"><?php echo nl2br(esc($item->message ?? "")); ?></div>
+                                            <?php if ($item_attachments) { ?>
+                                                <div class="communication-attachments mt10">
+                                                    <?php foreach ($item_attachments as $attachment) { ?>
+                                                        <a href="<?php echo get_uri("tender_reports/download_update_attachment/" . (int) $attachment->id); ?>" class="badge bg-light text-dark me-1 mb5">
+                                                            <i data-feather="paperclip" class="icon-12"></i>
+                                                            <?php echo esc($attachment->original_name ?: basename((string) $attachment->path)); ?>
+                                                        </a>
+                                                    <?php } ?>
+                                                </div>
+                                            <?php } ?>
                                         </td>
                                         <td><?php echo $visible_badge; ?></td>
                                         <td><?php echo esc($item->created_by_name ?: "-"); ?></td>
@@ -1079,7 +1108,7 @@ $(document).ready(function () {
     $("#start-technical-review-form").appForm({
         isModal: false,
         beforeAjaxSubmit: function () {
-            return confirm("Confirm procurement reviewed both technical and commercial proposals, then send this tender to technical evaluation?");
+            return confirm("Confirm the bid opening form is correct, then send this tender to technical evaluation?");
         },
         onSuccess: function (response) {
             appAlert.success(response.message || "Procurement proposal review recorded.", {duration: 2000});

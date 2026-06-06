@@ -40,6 +40,7 @@ class Tender_bids_model extends Crud_model
                     $t.tender_type,
                     $t.status,
                     $t.workflow_stage,
+                    $t.created_at,
                     $t.published_at,
                     $t.closing_at,
                     $t.technical_start_at,
@@ -66,15 +67,13 @@ class Tender_bids_model extends Crud_model
                     $t.tender_type,
                     $t.status,
                     $t.workflow_stage,
+                    $t.created_at,
                     $t.published_at,
                     $t.closing_at,
                     $t.technical_start_at,
                     $t.technical_end_at
                 HAVING COUNT(DISTINCT CASE WHEN $tb.deleted = 0 THEN $tb.id END) > 0
-                ORDER BY
-                    CASE WHEN $t.technical_end_at IS NULL THEN 1 ELSE 0 END ASC,
-                    $t.technical_end_at ASC,
-                    $t.id DESC";
+                ORDER BY COALESCE($t.created_at, $t.published_at, $t.closing_at) DESC, $t.id DESC";
 
         return $this->db->query($sql, [$user_id])->getResult();
     }
@@ -212,6 +211,8 @@ class Tender_bids_model extends Crud_model
                     $t.status,
                     $t.workflow_stage,
                     'technical' AS opening_stage,
+                    $t.created_at,
+                    $t.published_at,
                     $t.closing_at,
                     $t.closing_at AS opening_start_at,
                     $t.bid_opening_at AS opening_end_at,
@@ -237,13 +238,12 @@ class Tender_bids_model extends Crud_model
                     $t.title,
                     $t.status,
                     $t.workflow_stage,
+                    $t.created_at,
+                    $t.published_at,
                     $t.closing_at,
                     $t.bid_opening_at
                 HAVING COUNT(DISTINCT $tb.id) > 0
-                ORDER BY
-                    CASE WHEN $t.bid_opening_at IS NULL THEN 1 ELSE 0 END ASC,
-                    $t.bid_opening_at ASC,
-                    $t.id DESC";
+                ORDER BY COALESCE($t.created_at, $t.published_at, $t.closing_at) DESC, $t.id DESC";
 
         return $this->db->query($sql, [$user_id])->getResult();
     }
@@ -261,6 +261,8 @@ class Tender_bids_model extends Crud_model
                     $t.tender_type,
                     $t.status,
                     $t.workflow_stage,
+                    $t.created_at,
+                    $t.published_at,
                     $t.closing_at,
                     $t.commercial_start_at,
                     $t.commercial_end_at,
@@ -286,14 +288,13 @@ class Tender_bids_model extends Crud_model
                     $t.tender_type,
                     $t.status,
                     $t.workflow_stage,
+                    $t.created_at,
+                    $t.published_at,
                     $t.closing_at,
                     $t.commercial_start_at,
                     $t.commercial_end_at
                 HAVING COUNT(DISTINCT CASE WHEN $tb.status = 'accepted' THEN $tb.id END) > 0
-                ORDER BY
-                    CASE WHEN $t.commercial_end_at IS NULL THEN 1 ELSE 0 END ASC,
-                    $t.commercial_end_at ASC,
-                    $t.id DESC";
+                ORDER BY COALESCE($t.created_at, $t.published_at, $t.closing_at) DESC, $t.id DESC";
 
         return $this->db->query($sql, [$user_id])->getResult();
     }

@@ -1,4 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => app_lang("tender_finance_inbox"),
+        "subtitle" => "Review tender budgets, fees, and finance approvals in one workspace.",
+        "icon" => "credit-card"
+    ]);
+    ?>
   <div class="card gp-pro-card">
     <div class="page-title clearfix">
       <h1><?php echo app_lang("tender_finance_inbox"); ?></h1>
@@ -52,6 +59,8 @@ $(document).ready(function () {
 
   $("#tender-finance-inbox-table").appTable({
     source: '<?php echo_uri("tender_finance_inbox/list_data"); ?>',
+    order: [],
+    stateSave: false,
     columns: [
       {title: "Reference"},
       {title: "Subject"},

@@ -921,7 +921,32 @@ class Vendor_portal extends Security_Controller
             return true;
         }
 
+        if (
+            in_array(strtolower((string) ($tender->status ?? "")), ["closed"], true)
+            && $this->_vendor_participated_in_tender((int) ($tender->id ?? 0), $vendor_id)
+        ) {
+            return true;
+        }
+
         return $this->Tender_communications_model->has_vendor_visible_evaluator_clarification_request((int) ($tender->id ?? 0), $vendor_id);
+    }
+
+    private function _vendor_participated_in_tender(int $tender_id, int $vendor_id): bool
+    {
+        $tb = $this->db->prefixTable("tender_bids");
+
+        $row = $this->db->query(
+            "SELECT id
+             FROM $tb
+             WHERE deleted = 0
+               AND tender_id = ?
+               AND vendor_id = ?
+               AND status <> 'draft'
+             LIMIT 1",
+            [$tender_id, $vendor_id]
+        )->getRow();
+
+        return (bool) $row;
     }
 
     private function _make_tender_row($row)
@@ -975,6 +1000,7 @@ class Vendor_portal extends Security_Controller
         }
 
         $eligibility_labels = [
+            "participated" => "Participated",
             "specific_vendor" => "Selected vendor",
             "invited" => "Invited",
             "vendor_group" => "Vendor group",

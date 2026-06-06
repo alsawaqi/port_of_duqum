@@ -1,4 +1,14 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => "PTW Reasons",
+        "subtitle" => "Maintain standard rejection and revision reasons for each PTW approval stage.",
+        "icon" => "message-square",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => "PTW Reasons"]
+        ]
+    ]); ?>
+
     <div class="card gp-pro-card">
         <div class="page-title clearfix gp-pro-title">
             <h1>PTW Reasons</h1>

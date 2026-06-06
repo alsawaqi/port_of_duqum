@@ -7,6 +7,9 @@ $bid_requirement_labels = $bid_requirement_labels ?? [];
 $testing_stage_options = $testing_stage_options ?? ["" => "- Keep normal date-based flow -"];
 $procurement_manager_status = (string)($tender->procurement_manager_status ?? "draft");
 $can_publish_after_manager_approval = $procurement_manager_status === "approved";
+$evaluation_method_value = $tender->evaluation_method ?? $request->evaluation_method ?? "separate";
+$technical_weight_value = $tender->technical_weight ?? $request->technical_weight ?? 70;
+$commercial_weight_value = $tender->commercial_weight ?? $request->commercial_weight ?? 30;
 
 $dtValue = function ($value) {
     if (empty($value)) {
@@ -116,6 +119,52 @@ $dtValue = function ($value) {
                             <?php } ?>
                         </label>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Evaluation Method</label>
+                    <?php
+                    echo form_dropdown(
+                        "evaluation_method",
+                        ["separate" => "Technical & Commercial Separate", "combined" => "Combined"],
+                        $evaluation_method_value,
+                        "class='form-control select2'"
+                    );
+                    ?>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Technical Weight (%)</label>
+                    <?php echo form_input([
+                        "name" => "technical_weight",
+                        "type" => "number",
+                        "min" => "0",
+                        "max" => "100",
+                        "step" => "1",
+                        "value" => esc($technical_weight_value),
+                        "class" => "form-control",
+                        "data-rule-required" => true,
+                    ]); ?>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Commercial Weight (%)</label>
+                    <?php echo form_input([
+                        "name" => "commercial_weight",
+                        "type" => "number",
+                        "min" => "0",
+                        "max" => "100",
+                        "step" => "1",
+                        "value" => esc($commercial_weight_value),
+                        "class" => "form-control",
+                        "data-rule-required" => true,
+                    ]); ?>
                 </div>
             </div>
         </div>
@@ -254,7 +303,7 @@ $dtValue = function ($value) {
                         "chairman_user_id",
                         ["" => "- " . app_lang("select") . " -"] + ($committee_users_dropdown ?? []),
                         $existing_team_ids["chairman"] ?? "",
-                        "class='form-control select2'"
+                        "class='form-control select2' data-committee-role='chairman'"
                     ); ?>
                 </div>
             </div>
@@ -265,8 +314,9 @@ $dtValue = function ($value) {
                         "secretary_user_id",
                         ["" => "- " . app_lang("select") . " -"] + ($committee_users_dropdown ?? []),
                         $existing_team_ids["secretary"] ?? "",
-                        "class='form-control select2'"
+                        "class='form-control select2' data-committee-role='secretary' " . (empty($existing_team_ids["chairman"]) ? "disabled='disabled'" : "")
                     ); ?>
+                    <small class="form-text text-muted" data-committee-lock-message="secretary">Choose a chairman first.</small>
                 </div>
             </div>
         </div>
@@ -277,8 +327,9 @@ $dtValue = function ($value) {
                 "itc_member_user_ids[]",
                 $committee_users_dropdown ?? [],
                 $existing_team_ids["itc_member"] ?? [],
-                "class='form-control select2' multiple='multiple'"
+                "class='form-control select2' multiple='multiple' data-committee-role='itc_member' " . (empty($existing_team_ids["secretary"]) ? "disabled='disabled'" : "")
             ); ?>
+            <small class="form-text text-muted" data-committee-lock-message="itc_member">Choose a secretary before selecting ITC members.</small>
         </div>
 
         <hr>
@@ -478,6 +529,100 @@ $dtValue = function ($value) {
 
 <script>
 $(document).ready(function () {
+    function initTenderCommitteeRoleSelection(scope) {
+        var $scope = $(scope);
+        var $chairman = $scope.find("[data-committee-role='chairman']");
+        var $secretary = $scope.find("[data-committee-role='secretary']");
+        var $itcMembers = $scope.find("[data-committee-role='itc_member']");
+        var isSyncing = false;
+
+        if (!$chairman.length || !$secretary.length || !$itcMembers.length) {
+            return;
+        }
+
+        function selectedValues($field) {
+            var value = $field.val();
+            if (Array.isArray(value)) {
+                return value.filter(function (item) {
+                    return item !== "";
+                }).map(String);
+            }
+
+            return value ? [String(value)] : [];
+        }
+
+        function setFieldValue($field, value) {
+            isSyncing = true;
+            $field.val(value).trigger("change");
+            isSyncing = false;
+        }
+
+        function syncDisabledSelect2($field, disabled) {
+            var role = $field.data("committee-role");
+            $field.prop("disabled", disabled);
+            $scope.find("[data-committee-lock-message='" + role + "']").toggle(disabled);
+
+            if ($field.data("select2")) {
+                try {
+                    $field.select2("enable", !disabled);
+                } catch (e) {
+                    $field.trigger("change.select2");
+                }
+            }
+        }
+
+        function blockOptions($field, blockedValues) {
+            $field.find("option").prop("disabled", false);
+            blockedValues.forEach(function (value) {
+                $field.find("option[value='" + value + "']").prop("disabled", true);
+            });
+
+            if ($field.data("select2")) {
+                $field.trigger("change.select2");
+            }
+        }
+
+        function updateCommitteeRoleSelection() {
+            var chairmanId = String($chairman.val() || "");
+            var secretaryId = String($secretary.val() || "");
+
+            syncDisabledSelect2($secretary, !chairmanId);
+            blockOptions($secretary, chairmanId ? [chairmanId] : []);
+            if (!chairmanId || secretaryId === chairmanId) {
+                setFieldValue($secretary, "");
+                secretaryId = "";
+            }
+
+            var reservedIds = [chairmanId, secretaryId].filter(Boolean);
+            syncDisabledSelect2($itcMembers, !secretaryId);
+            blockOptions($itcMembers, reservedIds);
+
+            if (!secretaryId) {
+                setFieldValue($itcMembers, []);
+                return;
+            }
+
+            var currentMembers = selectedValues($itcMembers);
+            var allowedMembers = currentMembers.filter(function (id) {
+                return reservedIds.indexOf(id) === -1;
+            });
+
+            if (allowedMembers.length !== currentMembers.length) {
+                setFieldValue($itcMembers, allowedMembers);
+            }
+        }
+
+        $chairman.add($secretary).add($itcMembers).on("change", function () {
+            if (!isSyncing) {
+                updateCommitteeRoleSelection();
+            }
+        });
+
+        updateCommitteeRoleSelection();
+    }
+
+    initTenderCommitteeRoleSelection("#tender-procurement-form");
+
     function toggleTargetMode() {
         var mode = $("#target_mode").val();
         $("#target-by-specialty-wrap").toggle(mode === "specialty");

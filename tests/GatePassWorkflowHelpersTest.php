@@ -77,4 +77,11 @@ $assertSame(
     "vehicle-only or legacy request-level scans can still be logged"
 );
 
+$internationalPlate = gate_pass_prepare_vehicle_plate_payload(true, "", "", "United Arab Emirates", "dubai / 12345");
+$assertTrue($internationalPlate["ok"], "international plate payload accepts country plus free-text plate");
+$assertSame(1, $internationalPlate["data"]["is_international_plate"], "international plate payload marks the vehicle as international");
+$assertSame("United Arab Emirates", $internationalPlate["data"]["plate_country"], "international plate payload keeps selected country");
+$assertSame("DUBAI / 12345", $internationalPlate["data"]["international_plate_no"], "international plate payload normalizes free-text plate");
+$assertSame("DUBAI / 12345 (United Arab Emirates)", gate_pass_vehicle_plate_display((object) $internationalPlate["data"]), "international plate display includes free-text plate and country");
+
 echo "Gate pass workflow helpers passed." . PHP_EOL;

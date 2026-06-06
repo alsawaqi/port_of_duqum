@@ -1,4 +1,14 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => app_lang("ptw_hmo_users"),
+        "subtitle" => "Manage HMO reviewers who can handle Permit to Work approvals.",
+        "icon" => "users",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => app_lang("ptw_hmo_users")]
+        ]
+    ]); ?>
+
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("ptw_hmo_users"); ?></h1>

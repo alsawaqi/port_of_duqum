@@ -1,4 +1,14 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => app_lang("ptw_filter_requests"),
+        "subtitle" => "Filter all Permit to Work requests by company, workflow stage, status, date, and applicant details.",
+        "icon" => "filter",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => app_lang("ptw_filter_requests")]
+        ]
+    ]); ?>
+
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("ptw_filter_requests"); ?></h1>

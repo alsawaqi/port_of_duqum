@@ -344,7 +344,7 @@ if ($return_stage_label === $return_stage_lang_key) {
                 <?php $mp = gate_pass_vehicle_mulkiyah_path_value($veh); ?>
                 <?php if ($mp === "") { continue; } ?>
                 <div class="mb0">
-                    <div class="fw-semibold mb8"><?php echo app_lang("vehicles"); ?>: <?php echo esc($veh->plate_no ?? "-"); ?></div>
+                    <div class="fw-semibold mb8"><?php echo app_lang("vehicles"); ?>: <?php echo esc(gate_pass_vehicle_plate_display($veh)); ?></div>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb0">
                             <thead><tr><th><?php echo app_lang("attachment"); ?></th><th class="text-center w180"><?php echo app_lang("actions"); ?></th></tr></thead>

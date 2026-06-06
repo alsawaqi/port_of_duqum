@@ -2,6 +2,7 @@
     <?php
     $user = $login_user->id;
     $dashboard_link = get_uri("dashboard");
+    $app_title = get_setting("app_title") ? get_setting("app_title") : "Port of Duqm";
     $user_dashboard = get_setting("user_" . $user . "_dashboard");
     if ($user_dashboard) {
         $dashboard_link = get_uri("dashboard/view/" . $user_dashboard);
@@ -11,10 +12,22 @@
         <i data-feather="x" class="icon mt0"></i>
     </a>
     <div id="left-menu-topbar-button-container" class="d-block d-sm-none float-end"></div>
-    <a class="sidebar-brand brand-logo hidden-xs" href="<?php echo $dashboard_link; ?>"><img class="dashboard-image" src="<?php echo get_logo_url(); ?>" /></a>
-    <a class="sidebar-brand brand-logo-mini" href="<?php echo $dashboard_link; ?>"><img class="dashboard-image" src="<?php echo get_favicon_url(); ?>" /></a>
+    <a class="sidebar-brand brand-logo hidden-xs pod-sidebar-brand" href="<?php echo $dashboard_link; ?>" aria-label="<?php echo esc($app_title); ?> dashboard">
+        <span class="pod-sidebar-logo-frame">
+            <img class="dashboard-image" src="<?php echo get_logo_url(); ?>" alt="<?php echo esc($app_title); ?>" />
+        </span>
+        <span class="pod-sidebar-brand-copy">
+            <strong><?php echo esc($app_title); ?></strong>
+            <small>Operations Portal</small>
+        </span>
+    </a>
+    <a class="sidebar-brand brand-logo-mini pod-sidebar-brand-mini" href="<?php echo $dashboard_link; ?>" aria-label="<?php echo esc($app_title); ?> dashboard">
+        <span class="pod-sidebar-logo-frame">
+            <img class="dashboard-image" src="<?php echo get_favicon_url(); ?>" alt="<?php echo esc($app_title); ?>" />
+        </span>
+    </a>
 
-    <div class="sidebar-scroll">
+    <nav class="sidebar-scroll" aria-label="Primary navigation">
         <ul id="sidebar-menu" class="sidebar-menu">
             <?php
             foreach ($sidebar_menu as $main_menu) {
@@ -31,16 +44,21 @@
                 $submenu = get_array_value($main_menu, "submenu");
 
                 $has_any_submenu = false;
+                $has_active_submenu = false;
                 if ($submenu && count($submenu)) {
 
                     foreach ($submenu as $s_menu) {
                         if ($s_menu && count($s_menu)) {
                             $has_any_submenu = true;
+                            if (get_array_value($s_menu, "is_active_menu")) {
+                                $has_active_submenu = true;
+                            }
                         }
                     }
 
                     if (!$has_any_submenu) {
                         $submenu = "";
+                        $has_active_submenu = false;
                     }
                 }
 
@@ -64,13 +82,13 @@
 
                 $badge = get_array_value($main_menu, "badge");
                 $badge_class = get_array_value($main_menu, "badge_class");
-                $target = ($is_custom_menu_item && $open_in_new_tab) ? "target='_blank'" : "";
+                $target = ($is_custom_menu_item && $open_in_new_tab) ? "target='_blank' rel='noopener noreferrer'" : "";
             ?>
 
-                <li class="<?php echo $active_class . " " . $expend_class . " " . $submenu_open_class . " "; ?> main">
-                    <a <?php echo $target; ?> href="<?php echo (!$url || $url === '#' || $url === '') ? '#' : ($is_custom_menu_item ? $url : get_uri($url)); ?>">
-                        <i data-feather="<?php echo $class; ?>" class="icon"></i>
-                        <span class="menu-text <?php echo $custom_class; ?>"><?php echo $main_menu_name; ?></span>
+                <li class="<?php echo $active_class . " " . $expend_class . " " . $submenu_open_class . " "; ?> main pod-menu-item">
+                    <a class="pod-menu-link" <?php echo $target; ?> href="<?php echo (!$url || $url === '#' || $url === '') ? '#' : ($is_custom_menu_item ? $url : get_uri($url)); ?>" data-menu-title="<?php echo esc($main_menu_name); ?>" <?php echo ($active_class && !$has_active_submenu) ? "aria-current='page'" : ""; ?> <?php echo $submenu ? "aria-expanded='" . ($submenu_open_class ? "true" : "false") . "'" : ""; ?>>
+                        <i data-feather="<?php echo $class; ?>" class="icon pod-menu-icon"></i>
+                        <span class="menu-text pod-menu-label <?php echo $custom_class; ?>"><?php echo $main_menu_name; ?></span>
                         <?php
                         if ($badge) {
                             echo "<span class='badge rounded-pill $badge_class'>$badge</span>";
@@ -100,10 +118,11 @@
 
                             if ($s_menu_name) {
                                 $open_in_new_tab = get_array_value($s_menu, "open_in_new_tab");
-                                $sub_menu_target = ($is_custom_menu_item && $open_in_new_tab) ? "target='_blank'" : "";
+                                $sub_menu_target = ($is_custom_menu_item && $open_in_new_tab) ? "target='_blank' rel='noopener noreferrer'" : "";
+                                $s_active_class = get_array_value($s_menu, "is_active_menu") ? "active is-active" : "";
                     ?>
-                <li>
-                    <a <?php echo $sub_menu_target; ?> href="<?php echo $is_custom_menu_item ? $url : get_uri($url); ?>">
+                <li class="pod-submenu-item <?php echo $s_active_class; ?>">
+                    <a class="pod-submenu-link" <?php echo $sub_menu_target; ?> href="<?php echo $is_custom_menu_item ? $url : get_uri($url); ?>" data-menu-title="<?php echo esc($s_menu_name); ?>" <?php echo $s_active_class ? "aria-current='page'" : ""; ?>>
                         <i data-feather='minus' width='12'></i>
                         <span><?php echo $s_menu_name; ?></span>
                     </a>
@@ -119,15 +138,34 @@
             }
 ?>
         </ul>
-    </div>
+    </nav>
 </div><!-- sidebar menu end -->
 
 <script type='text/javascript'>
     if (typeof feather !== "undefined") feather.replace();
 
     $(document).ready(function() {
-        $("#sidebar-menu li").click(function() {
-            $("#sidebar-menu li.active").removeClass("active");
+        $("#sidebar-menu").on("click.podMenuActive", "a[href]", function() {
+            var $link = $(this);
+            var href = $link.attr("href") || "";
+
+            if (!href || href === "#" || $link.attr("target")) {
+                return;
+            }
+
+            var $item = $link.closest("li");
+            var $parent = $item.closest("ul").closest("li.expand");
+
+            $("#sidebar-menu li.active, #sidebar-menu li.is-active").removeClass("active is-active");
+            $("#sidebar-menu a[aria-current='page']").removeAttr("aria-current");
+
+            $item.addClass("active is-active");
+            $link.attr("aria-current", "page");
+
+            if ($parent.length) {
+                $parent.addClass("active open");
+                $parent.children("a").attr("aria-expanded", "true");
+            }
         });
     });
 </script>

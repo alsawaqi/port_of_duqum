@@ -47,7 +47,8 @@ class Tender_bid_openings_model extends Crud_model
         $entry_columns = [
             "signature_statement" => "ALTER TABLE `$entries` ADD COLUMN `signature_statement` TEXT DEFAULT NULL AFTER `confirmed_at`",
             "signature_name" => "ALTER TABLE `$entries` ADD COLUMN `signature_name` VARCHAR(255) DEFAULT NULL AFTER `signature_statement`",
-            "signed_at" => "ALTER TABLE `$entries` ADD COLUMN `signed_at` DATETIME DEFAULT NULL AFTER `signature_name`",
+            "signature_image_path" => "ALTER TABLE `$entries` ADD COLUMN `signature_image_path` VARCHAR(500) DEFAULT NULL AFTER `signature_name`",
+            "signed_at" => "ALTER TABLE `$entries` ADD COLUMN `signed_at` DATETIME DEFAULT NULL AFTER `signature_image_path`",
             "signature_ip_address" => "ALTER TABLE `$entries` ADD COLUMN `signature_ip_address` VARCHAR(45) DEFAULT NULL AFTER `signed_at`",
             "signature_user_agent" => "ALTER TABLE `$entries` ADD COLUMN `signature_user_agent` TEXT DEFAULT NULL AFTER `signature_ip_address`",
         ];
@@ -274,7 +275,7 @@ class Tender_bid_openings_model extends Crud_model
         );
     }
 
-    public function save_signature(int $opening_id, int $user_id, string $role, string $statement, string $signature_name): bool
+    public function save_signature(int $opening_id, int $user_id, string $role, string $statement, string $signature_name, ?string $signature_image_path = null): bool
     {
         $tbl = $this->db->prefixTable("tender_bid_opening_entries");
         $now = $this->get_tender_business_now();
@@ -300,6 +301,7 @@ class Tender_bid_openings_model extends Crud_model
             "UPDATE $tbl
              SET signature_statement=?,
                  signature_name=?,
+                 signature_image_path=COALESCE(?, signature_image_path),
                  signed_at=IFNULL(signed_at, ?),
                  signature_ip_address=?,
                  signature_user_agent=?,
@@ -308,6 +310,7 @@ class Tender_bid_openings_model extends Crud_model
             [
                 $statement,
                 $signature_name,
+                $signature_image_path,
                 $now,
                 get_real_ip(),
                 $_SERVER['HTTP_USER_AGENT'] ?? null,

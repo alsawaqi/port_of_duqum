@@ -1,4 +1,14 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => app_lang("ptw_hsse_users"),
+        "subtitle" => "Manage HSSE reviewers and keep safety approval assignments current.",
+        "icon" => "user-check",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => app_lang("ptw_hsse_users")]
+        ]
+    ]); ?>
+
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("ptw_hsse_users"); ?></h1>

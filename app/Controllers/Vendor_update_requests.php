@@ -536,58 +536,32 @@ class Vendor_update_requests extends Security_Controller
         $can_approve = $this->can_approve_vendor_update_requests();
         $can_reject = $this->can_reject_vendor_update_requests();
 
-        $actions = "";
+        $action_options = "";
         if ($can_view) {
-            $actions .= modal_anchor(
-                get_uri("vendor_update_requests/view"),
-                "<i data-feather='eye' class='icon-16'></i>",
-                [
-                    "title" => app_lang("view_details"),
-                    "data-post-id" => $row->id,
-                    "class" => "btn btn-default btn-sm"
-                ]
-            );
+            $action_options .= "<option value='view'>" . app_lang("view_details") . "</option>";
         }
 
         // ONLY allow approve / reject if pending
         if ($row->status === "pending") {
             if ($can_approve) {
-                $actions .= ajax_anchor(
-                    get_uri("vendor_update_requests/approve"),
-                    "<i data-feather='check' class='icon-16'></i>",
-                    [
-                        "title" => app_lang("approve"),
-                        "class" => "btn btn-success btn-sm ml5",
-                        "data-post-id" => $row->id,
-                        "data-reload-on-success" => "1"
-                    ]
-                );
+                $action_options .= "<option value='approve'>" . app_lang("approve") . "</option>";
             }
 
             if ($can_review) {
-                $actions .= modal_anchor(
-                    get_uri("vendor_update_requests/review_modal"),
-                    "<i data-feather='message-square' class='icon-16'></i>",
-                    [
-                        "title" => app_lang("review"),
-                        "class" => "btn btn-info btn-sm ml5",
-                        "data-post-id" => $row->id
-                    ]
-                );
+                $action_options .= "<option value='review'>" . app_lang("review") . "</option>";
             }
 
             if ($can_reject) {
-                $actions .= modal_anchor(
-                    get_uri("vendor_update_requests/reject_modal"),
-                    "<i data-feather='x' class='icon-16'></i>",
-                    [
-                        "title" => app_lang("reject"),
-                        "class" => "btn btn-danger btn-sm ml5",
-                        "data-post-id" => $row->id
-                    ]
-                );
+                $action_options .= "<option value='reject'>" . app_lang("reject") . "</option>";
             }
         }
+
+        $actions = $action_options
+            ? "<select class='form-select form-select-sm vur-action-select' data-id='" . (int)$row->id . "'>"
+                . "<option value=''>Select action</option>"
+                . $action_options
+                . "</select>"
+            : "<span class='text-muted'>-</span>";
 
 
         return [

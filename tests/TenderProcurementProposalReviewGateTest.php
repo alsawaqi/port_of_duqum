@@ -24,9 +24,9 @@ $assertContains("_record_procurement_proposal_review", $reportsController, "cont
 $assertContains("_is_bid_opening_completed", $reportsController, "procurement document access should open after completed bid opening");
 
 $assertContains("Procurement Proposal Review", $reportsView, "report should show the procurement review gate");
-$assertContains("Confirm technical proposals reviewed", $reportsView, "review form should include technical confirmation");
-$assertContains("Confirm commercial proposals reviewed", $reportsView, "review form should include commercial confirmation");
-$assertContains("Confirm Review & Send to Technical Evaluation", $reportsView, "release button should describe the review gate");
+$assertContains("Review Generated Bid Opening Form", $reportsView, "review form should link the generated bid opening form");
+$assertContains("generated_bid_opening_form_confirmed", $reportsView, "review form should require generated form confirmation");
+$assertContains("Confirm Generated Form & Start Technical Review", $reportsView, "release button should describe the generated form gate");
 $assertContains("proposal-review-documents", $reportsView, "review gate should expose proposal document checklist");
 
 echo "OK" . PHP_EOL;

@@ -51,13 +51,17 @@ $commercial_doc_button = function ($doc_id, string $label) {
 };
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="mb15">
-        <a href="<?php echo get_uri('tender_commercial_inbox'); ?>" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i>
-            Back to Commercial Inbox
-        </a>
-    </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Commercial Evaluation",
+        "subtitle" => "Review commercial submissions, pricing documents, evaluator actions, and award readiness.",
+        "icon" => "bar-chart-2",
+        "actions" => '<a href="' . esc(get_uri('tender_commercial_inbox'), "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+            . '<i data-feather="arrow-left" class="icon-16"></i> Back to Commercial Inbox'
+            . '</a>'
+    ]);
+    ?>
 
     <div class="card gp-pro-card mb15">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">

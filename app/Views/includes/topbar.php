@@ -2,8 +2,8 @@
 
 <nav class="navbar navbar-expand fixed-top navbar-light navbar-custom" role="navigation" id="default-navbar">
     <div class="container-fluid">
-        <div class="collapse navbar-collapse">
-            <ul class="navbar-nav me-auto mb-lg-0">
+        <div class="collapse navbar-collapse pod-topbar-collapse">
+            <ul class="navbar-nav me-auto mb-lg-0 pod-topbar-left">
                 <li class="nav-item hidden-xs sidebar-toggle-btn-li">
                     <a class="nav-link sidebar-toggle-btn" aria-current="page" href="#">
                         <i data-feather="menu" class="icon"></i>
@@ -52,19 +52,8 @@
                 ?>
             </ul>
 
-            <div class="d-flex w-auto">
-                <ul class="navbar-nav">
-
-                    <?php
-                    if ($login_user->user_type == "staff") { ?>
-                        <li id="topbar-search-btn" class="nav-item hidden-sm" title="<?php echo app_lang('search') . ' (/)'; ?>">
-                            <?php
-                            // echo modal_anchor(get_uri("search/search_modal_form"), "<i data-feather='search' class='icon'></i>", array("class" => "nav-link", "data-modal-title" => app_lang('search') . ' (/)', "data-post-hide-header" => true, "data-modal-close" => "1", "id" => "global-search-btn"));
-
-
-                            ?>
-                        </li>
-                    <?php } ?>
+            <div class="d-flex w-auto pod-topbar-actions">
+                <ul class="navbar-nav pod-topbar-right">
 
                     <?php
                     // if (!in_array("quick_add", $hidden_topbar_menus)) {
@@ -72,35 +61,55 @@
                     // }
                     ?>
 
+                    <li class="nav-item pod-theme-toggle-item">
+                        <button type="button" id="pod-theme-toggle" class="nav-link pod-theme-toggle" aria-label="Switch to dark mode" aria-pressed="false" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Switch to dark mode">
+                            <i data-feather="moon" class="icon pod-theme-icon pod-theme-moon"></i>
+                            <i data-feather="sun" class="icon pod-theme-icon pod-theme-sun"></i>
+                            <span class="visually-hidden pod-theme-toggle-label">Light mode</span>
+                        </button>
+                    </li>
+
                     <?php if (!in_array("language", $hidden_topbar_menus) && (($login_user->user_type == "staff" && !get_setting("disable_language_selector_for_team_members")) || ($login_user->user_type == "client" && !get_setting("disable_language_selector_for_clients")))) { ?>
 
-                        <li id="topbar-language-dropdown" class="nav-item dropdown hidden-xs">
+                        <li id="topbar-language-dropdown" class="nav-item dropdown pod-language-item">
                             <?php
+                            $user_language = $login_user->language;
+                            $system_language = get_setting("language");
+                            $current_language = $user_language ? $user_language : $system_language;
+                            $current_language_code = strtoupper(substr($current_language ? $current_language : "en", 0, 2));
 
-                            echo js_anchor("<i data-feather='globe' class='icon'></i>", array("id" => "personal-language-icon", "class" => "nav-link dropdown-toggle p20", "data-bs-toggle" => "dropdown"));
+                            echo js_anchor("<i data-feather='globe' class='icon'></i><span class='pod-language-current'>" . esc($current_language_code) . "</span>", array(
+                                "id" => "personal-language-icon",
+                                "class" => "nav-link dropdown-toggle pod-language-toggle",
+                                "data-bs-toggle" => "dropdown",
+                                "aria-label" => app_lang("language"),
+                                "aria-expanded" => "false"
+                            ));
 
 
                             ?>
 
-                            <ul class="dropdown-menu dropdown-menu-end language-dropdown">
+                            <ul class="dropdown-menu dropdown-menu-end language-dropdown pod-language-menu">
                                 <li>
                                     <?php
-                                    $user_language = $login_user->language;
-                                    $system_language = get_setting("language");
-
                                     foreach (get_language_list() as $language) {
-                                        $language_status = "";
-                                        $language_text = $language;
+                                        $language_key = strtolower($language);
+                                        $is_active_language = ($user_language == $language_key || (!$user_language && $system_language == $language_key));
+                                        $language_code = strtoupper(substr($language_key, 0, 2));
+                                        $language_flag_class = $language_key === "arabic" ? "pod-language-flag-ar" : "pod-language-flag-en";
+                                        $language_option_class = "dropdown-item pod-language-option" . ($is_active_language ? " active" : "");
 
-                                        if ($user_language == strtolower($language) || (!$user_language && $system_language == strtolower($language))) {
-                                            $language_status = "<span class='float-end checkbox-checked m0'></span>";
-                                            $language_text = "<strong>" . $language . "</strong>";
-                                        }
+                                        $language_text = "<span class='pod-language-flag " . $language_flag_class . "' aria-hidden='true'></span>"
+                                            . "<span class='pod-language-copy'>"
+                                            . "<span class='pod-language-name'>" . esc($language) . "</span>"
+                                            . "<span class='pod-language-meta'>" . esc($language_code) . " language</span>"
+                                            . "</span>"
+                                            . "<i data-feather='check' class='icon pod-language-check'></i>";
 
                                         if ($login_user->user_type == "staff") {
-                                            echo ajax_anchor(get_uri("team_members/save_personal_language/$language"), $language_text . $language_status, array("class" => "dropdown-item clearfix", "data-reload-on-success" => "1"));
+                                            echo ajax_anchor(get_uri("team_members/save_personal_language/$language"), $language_text, array("class" => $language_option_class, "data-reload-on-success" => "1"));
                                         } else {
-                                            echo ajax_anchor(get_uri("clients/save_personal_language/$language"), $language_text . $language_status, array("class" => "dropdown-item clearfix", "data-reload-on-success" => "1"));
+                                            echo ajax_anchor(get_uri("clients/save_personal_language/$language"), $language_text, array("class" => $language_option_class, "data-reload-on-success" => "1"));
                                         }
                                     }
                                     ?>
@@ -126,30 +135,37 @@
                         ?>
                     <?php } ?>
 
-                    <li class="nav-item dropdown">
+                    <li class="nav-item dropdown pod-notification-item">
                         <?php
 
-                        // echo js_anchor("<i data-feather='bell' class='icon'></i><span class='notification-badge-container'></span>", array(
-                        //     "id" => "web-notification-icon",
-                        //     "class" => "nav-link dropdown-toggle",
-                        //     "data-bs-toggle" => "dropdown",
-                        //     "data-count_url" => get_uri('notifications/count_notifications'),
-                        //     "data-list_url" => get_uri('notifications/get_notifications'),
-                        //     "data-status_update_url" => get_uri('notifications/update_notification_checking_status'),
-                        //     "data-fetch_interval" => get_setting('check_notification_after_every'),
-                        // )); 
+                        echo js_anchor("<span class='pod-notification-dot' aria-hidden='true'><span></span></span><i data-feather='bell' class='icon'></i><span class='notification-badge-container'></span>", array(
+                            "id" => "web-notification-icon",
+                            "class" => "nav-link dropdown-toggle pod-header-icon-btn pod-notification-trigger",
+                            "data-bs-toggle" => "dropdown",
+                            "data-count_url" => get_uri('notifications/count_notifications'),
+                            "data-list_url" => get_uri('notifications/get_notifications'),
+                            "data-status_update_url" => get_uri('notifications/update_notification_checking_status'),
+                            "data-fetch_interval" => get_setting('check_notification_after_every'),
+                            "aria-label" => app_lang("notifications")
+                        ));
 
 
                         ?>
-                        <div class="dropdown-menu dropdown-menu-end notification-dropdown w400">
-                            <div class="card m0">
-                                <div class="dropdown-details bg-white m0">
+                        <div class="dropdown-menu dropdown-menu-end notification-dropdown pod-notification-menu">
+                            <div class="card m0 pod-notification-panel">
+                                <div class="pod-notification-head">
+                                    <h5><?php echo app_lang("notifications"); ?></h5>
+                                    <button type="button" class="pod-dropdown-close" data-pod-close-dropdown aria-label="<?php echo app_lang("close"); ?>">
+                                        <i data-feather="x" class="icon"></i>
+                                    </button>
+                                </div>
+                                <div class="dropdown-details bg-white m0 pod-notification-body">
                                     <div class="list-group">
                                         <span class="list-group-item inline-loader p10"></span>
                                     </div>
                                 </div>
-                                <div class="card-footer text-center">
-                                    <?php echo anchor("notifications", app_lang('see_all'), array("class" => "w-100 d-block")); ?>
+                                <div class="card-footer text-center pod-notification-footer">
+                                    <?php echo anchor("notifications", app_lang('see_all'), array("class" => "w-100 d-block pod-notification-view-all")); ?>
                                 </div>
                             </div>
                         </div>
@@ -181,14 +197,19 @@
                         </li>
                     <?php } ?> -->
 
-                    <li class="nav-item dropdown">
-                        <a id="user-dropdown" href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
+                    <li class="nav-item dropdown pod-user-menu-item">
+                        <a id="user-dropdown" href="#" class="nav-link pod-user-dropdown" data-bs-toggle="dropdown" role="button" aria-expanded="false">
                             <span class="avatar-xs avatar me-1">
                                 <img alt="..." src="<?php echo get_avatar($login_user->image); ?>">
                             </span>
                             <span class="user-name ml10"><?php echo $login_user->first_name . " " . $login_user->last_name; ?></span>
+                            <i data-feather="chevron-down" class="icon pod-user-chevron"></i>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end w200 user-dropdown-menu">
+                        <ul class="dropdown-menu dropdown-menu-end user-dropdown-menu pod-user-menu">
+                            <li class="pod-user-menu-head">
+                                <span class="pod-user-menu-name"><?php echo esc($login_user->first_name . " " . $login_user->last_name); ?></span>
+                                <span class="pod-user-menu-email"><?php echo esc($login_user->email); ?></span>
+                            </li>
                             <?php if ($login_user->user_type == "client") { ?>
                                 <div class="company-switch-option d-none"><?php show_clients_of_this_client_contact($login_user, true); ?></div>
                                 <li><?php echo get_client_contact_profile_link($login_user->id . '/general', "<i data-feather='user' class='icon-16 me-2'></i>" . app_lang('my_profile'), array("class" => "dropdown-item")); ?></li>
@@ -210,7 +231,7 @@
                             <?php } ?>
 
                             <li class="dropdown-divider"></li>
-                            <li><a href="<?php echo_uri('signin/sign_out'); ?>" class="dropdown-item"><i data-feather="log-out" class='icon-16 me-2'></i> <?php echo app_lang('sign_out'); ?></a></li>
+                            <li><a href="<?php echo_uri('signin/sign_out'); ?>" class="dropdown-item pod-signout-link"><i data-feather="log-out" class='icon-16 me-2'></i> <?php echo app_lang('sign_out'); ?></a></li>
                         </ul>
                     </li>
                 </ul>
@@ -247,9 +268,21 @@
 
         $('[data-bs-toggle="tooltip"]').tooltip();
 
+        $("body").on("click", "[data-pod-close-dropdown]", function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var $dropdown = $(this).closest(".dropdown");
+            var toggle = $dropdown.find("[data-bs-toggle='dropdown']")[0];
+            if (toggle && window.bootstrap && bootstrap.Dropdown) {
+                bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+            } else {
+                $dropdown.find(".dropdown-menu").removeClass("show");
+                $dropdown.removeClass("show");
+            }
+        });
+
         if (isMobile()) {
-            moveTopbarButtonsToLeftMenu($("#topbar-language-dropdown"));
-            moveTopbarButtonsToLeftMenu($("#topbar-search-btn"));
             moveTopbarButtonsToLeftMenu($("#topbar-timer-dropdown"));
         }
     });

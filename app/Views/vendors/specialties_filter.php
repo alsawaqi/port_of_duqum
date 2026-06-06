@@ -4,7 +4,7 @@ $can_filter_vendor_specialties = isset($can_filter_vendor_specialties) ? (bool) 
 $filter_disabled_attr = $can_filter_vendor_specialties ? "" : "disabled='disabled'";
 ?>
 
-<div id="page-content" class="page-wrapper clearfix vendor-specialties-filter-page">
+<div id="page-content" class="page-wrapper clearfix vendor-specialties-filter-page pod-page-shell pod-vendor-page pod-vendor-master-page">
     <style>
         .vendor-specialties-filter-page {
             --vf-radius: 18px;
@@ -133,11 +133,23 @@ $filter_disabled_attr = $can_filter_vendor_specialties ? "" : "disabled='disable
         }
     </style>
 
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => app_lang("vendor_specialties_filter"),
+        "subtitle" => app_lang("filter_vendors_by_specialty_category"),
+        "icon" => "filter",
+        "breadcrumbs" => [
+            ["label" => app_lang("vendors_master")],
+            ["label" => app_lang("vendor_specialties_filter")]
+        ]
+    ]);
+    ?>
+
     <div class="vf-shell">
         <div class="card vf-card">
             <div class="vf-header">
-                <h1><?php echo app_lang("vendor_specialties_filter"); ?></h1>
-                <p><?php echo app_lang("filter_vendors_by_specialty_category"); ?></p>
+                <h1>Filter Workspace</h1>
+                <p>Choose a category and sub category to inspect matching vendor specialties.</p>
             </div>
 
             <div class="vf-body">

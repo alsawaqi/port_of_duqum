@@ -125,6 +125,10 @@
             background: #22c55e;
         }
 
+        .vpt-pill-dot.participated {
+            background: #f59e0b;
+        }
+
         .vpt-hint {
             font-size: 11px;
             color: var(--vpt-muted);
@@ -189,8 +193,12 @@
                         <span class="vpt-pill-dot invited"></span>
                         <span>Invited or selected</span>
                     </span>
+                    <span class="vpt-pill">
+                        <span class="vpt-pill-dot participated"></span>
+                        <span>Participated</span>
+                    </span>
                 </div>
-                <div class="vpt-hint">Only active tenders matching your vendor profile are shown.</div>
+                <div class="vpt-hint">Active tenders matching your vendor profile and tenders you participated in are shown.</div>
             </div>
 
             <div class="vpt-table-wrap">
@@ -213,6 +221,8 @@ $(document).ready(function () {
 
     $("#vendor-tenders-table").appTable({
         source: '<?php echo_uri("vendor_portal/tenders_list_data"); ?>',
+        order: [],
+        stateSave: false,
         columns: [
             {title: "Reference"},
             {title: "Title"},

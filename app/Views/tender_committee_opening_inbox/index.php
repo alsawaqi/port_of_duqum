@@ -1,4 +1,11 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Bid Opening",
+        "subtitle" => "Open submitted bids securely and capture committee signatures.",
+        "icon" => "unlock"
+    ]);
+    ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1>Bid Opening</h1>
@@ -13,6 +20,8 @@
 $(document).ready(function () {
     $("#tender-committee-opening-table").appTable({
         source: '<?php echo_uri("tender_committee_opening_inbox/list_data"); ?>',
+        order: [],
+        stateSave: false,
         columns: [
             {title: "Reference"},
             {title: "Title"},

@@ -3543,6 +3543,169 @@ if (!function_exists('gate_pass_plate_merge_from_post_parts')) {
     }
 }
 
+if (!function_exists('gate_pass_country_options_for_ui')) {
+
+    /**
+     * Country dropdown for international vehicle plates. Values are stored in English;
+     * labels are localized when ICU country names are available.
+     *
+     * @return array<string, string>
+     */
+    function gate_pass_country_options_for_ui(string $current = ""): array
+    {
+        $options = ["" => "- " . app_lang("select_country") . " -"];
+        $label_locale = gate_pass_plate_ui_prefers_arabic_script() ? "ar" : "en";
+        $english_countries = gate_pass_icu_country_names("en");
+        $localized_countries = gate_pass_icu_country_names($label_locale);
+
+        if ($english_countries) {
+            foreach ($english_countries as $code => $english_name) {
+                $options[$english_name] = $localized_countries[$code] ?? $english_name;
+            }
+        } else {
+            $countries = [];
+            $config = APPPATH . "Config/intl_phone_dial_codes.php";
+            if (is_file($config)) {
+                $countries = require $config;
+            }
+
+            foreach ($countries as $country) {
+                $name = trim((string) ($country["country"] ?? ""));
+                if ($name !== "") {
+                    $options[$name] = $name;
+                }
+            }
+        }
+
+        $current = trim($current);
+        if ($current !== "" && !isset($options[$current])) {
+            $options[$current] = $current;
+        }
+
+        return $options;
+    }
+}
+
+if (!function_exists('gate_pass_icu_country_names')) {
+
+    /**
+     * @return array<string, string>
+     */
+    function gate_pass_icu_country_names(string $locale): array
+    {
+        if (!class_exists("\ResourceBundle")) {
+            return [];
+        }
+
+        try {
+            $bundle = new \ResourceBundle($locale, "ICUDATA-region");
+            $countries = $bundle->get("Countries");
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        if (!$countries) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($countries as $code => $name) {
+            if (is_string($code) && strlen($code) === 2) {
+                $result[$code] = (string) $name;
+            }
+        }
+
+        asort($result, SORT_NATURAL | SORT_FLAG_CASE);
+        return $result;
+    }
+}
+
+if (!function_exists('gate_pass_international_plate_no_is_valid')) {
+
+    function gate_pass_international_plate_no_is_valid(string $plate): bool
+    {
+        $plate = trim(preg_replace('/\s+/u', " ", $plate));
+        if ($plate === "") {
+            return false;
+        }
+
+        if (function_exists("mb_strlen") && mb_strlen($plate, "UTF-8") > 40) {
+            return false;
+        }
+        if (!function_exists("mb_strlen") && strlen($plate) > 80) {
+            return false;
+        }
+
+        return (bool) preg_match('/^[\p{L}\p{N}][\p{L}\p{N}\s\-\/\.#]{0,79}$/u', $plate);
+    }
+}
+
+if (!function_exists('gate_pass_prepare_vehicle_plate_payload')) {
+
+    /**
+     * @return array{ok:bool,data?:array<string,mixed>,message?:string}
+     */
+    function gate_pass_prepare_vehicle_plate_payload(bool $is_international_plate, string $plate_prefix, string $plate_digits, string $plate_country, string $international_plate_no): array
+    {
+        if ($is_international_plate) {
+            $country = trim($plate_country);
+            $plate = trim(preg_replace('/\s+/u', " ", $international_plate_no));
+
+            if ($country === "") {
+                return ["ok" => false, "message" => app_lang("gate_pass_plate_country_required")];
+            }
+            if (!gate_pass_international_plate_no_is_valid($plate)) {
+                return ["ok" => false, "message" => app_lang("gate_pass_international_plate_required")];
+            }
+
+            $normalized_plate = function_exists("mb_strtoupper") ? mb_strtoupper($plate, "UTF-8") : strtoupper($plate);
+
+            return [
+                "ok" => true,
+                "data" => [
+                    "plate_no" => $normalized_plate,
+                    "is_international_plate" => 1,
+                    "plate_country" => $country,
+                    "international_plate_no" => $normalized_plate,
+                ],
+            ];
+        }
+
+        $built = gate_pass_plate_merge_from_post_parts($plate_prefix, $plate_digits);
+        if (empty($built["ok"])) {
+            return $built;
+        }
+
+        return [
+            "ok" => true,
+            "data" => [
+                "plate_no" => $built["plate"],
+                "is_international_plate" => 0,
+                "plate_country" => null,
+                "international_plate_no" => null,
+            ],
+        ];
+    }
+}
+
+if (!function_exists('gate_pass_vehicle_plate_display')) {
+
+    function gate_pass_vehicle_plate_display($vehicle): string
+    {
+        $plate = trim((string) ($vehicle->international_plate_no ?? $vehicle->plate_no ?? ""));
+        if ($plate === "") {
+            return "-";
+        }
+
+        if ((int) ($vehicle->is_international_plate ?? 0) === 1) {
+            $country = trim((string) ($vehicle->plate_country ?? ""));
+            return $country !== "" ? $plate . " (" . $country . ")" : $plate;
+        }
+
+        return $plate;
+    }
+}
+
 if (!function_exists('gate_pass_plate_no_is_valid')) {
 
     /**

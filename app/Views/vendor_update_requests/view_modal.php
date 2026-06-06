@@ -44,9 +44,44 @@
         }
     }
 
-    $module   = esc($changes["module"] ?? "-");
-    $table    = esc($changes["table"] ?? "-");
-    $action   = esc($changes["action"] ?? "-");
+    if (!function_exists("vur_humanize_key")) {
+        function vur_humanize_key($key): string
+        {
+            $key = trim((string)$key);
+            if ($key === "" || $key === "-") {
+                return "-";
+            }
+
+            $normalized = strtolower(str_replace(".", "_", $key));
+            $labels = [
+                "vendor_id" => "Vendor",
+                "vendor_category_id" => "Category",
+                "vendor_category_name" => "Category Name",
+                "vendor_sub_category_id" => "Sub Category",
+                "vendor_sub_category_name" => "Sub Category Name",
+                "vendor_document_type_id" => "Document Type",
+                "mime_type" => "File Type",
+                "size_bytes" => "File Size",
+                "original_name" => "Original File Name",
+                "record_id" => "Record ID",
+                "uploaded_by" => "Uploaded By",
+                "issued_at" => "Issued Date",
+                "expires_at" => "Expiry Date",
+                "disk" => "Storage",
+                "path" => "File Path"
+            ];
+
+            if (isset($labels[$normalized])) {
+                return $labels[$normalized];
+            }
+
+            return ucwords(str_replace("_", " ", str_replace(".", " ", $key)));
+        }
+    }
+
+    $module   = esc(vur_humanize_key($changes["module"] ?? "-"));
+    $table    = esc(vur_humanize_key($changes["table"] ?? "-"));
+    $action   = esc(vur_humanize_key($changes["action"] ?? "-"));
     $recordId = esc($changes["record_id"] ?? "-");
 
     $before = $changes["before"] ?? [];
@@ -189,6 +224,40 @@
                  margin-bottom: 12px;
              }
 
+             .vur-summary-grid {
+                 display: grid;
+                 grid-template-columns: repeat(4, minmax(0, 1fr));
+                 gap: 10px;
+                 margin-bottom: 12px;
+             }
+
+             .vur-summary-card {
+                 border: 1px solid var(--vur-border);
+                 border-radius: 14px;
+                 background: rgba(15, 23, 42, .025);
+                 padding: 12px;
+             }
+
+             .vur-summary-card span {
+                 display: block;
+                 color: var(--vur-muted);
+                 font-size: 11px;
+                 font-weight: 800;
+                 line-height: 16px;
+             }
+
+             .vur-summary-card strong {
+                 display: block;
+                 margin-top: 4px;
+                 color: var(--vur-title);
+                 font-size: 14px;
+                 font-weight: 900;
+                 line-height: 20px;
+                 overflow: hidden;
+                 text-overflow: ellipsis;
+                 white-space: nowrap;
+             }
+
              .vur-search {
                  max-width: 360px;
                  width: 100%;
@@ -238,9 +307,16 @@
                  letter-spacing: -.1px;
              }
 
+             .vur-field-key {
+                 display: block;
+                 margin-top: 2px;
+                 color: #94a3b8;
+                 font-size: 11px;
+                 font-weight: 700;
+             }
+
              .vur-val {
-                 font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-                 font-size: 12px;
+                 font-size: 12.5px;
                  color: #0f172a;
                  background: rgba(15, 23, 42, .02);
                  border: 1px solid rgba(15, 23, 42, .08);
@@ -320,6 +396,12 @@
              .vur-row-changed td {
                  background: rgba(59, 130, 246, .04);
              }
+
+             @media (max-width: 767px) {
+                 .vur-summary-grid {
+                     grid-template-columns: repeat(2, minmax(0, 1fr));
+                 }
+             }
          </style>
 
          <div class="vur-wrap">
@@ -329,14 +411,14 @@
                      <div>
                          <h4 class="vur-title"><?php echo app_lang("view_details"); ?></h4>
                          <p class="vur-sub">
-                             Field comparison: <strong><?php echo (int)$changedCount; ?></strong> changed out of <strong><?php echo (int)count($keys); ?></strong>
+                             Requested change summary: <strong><?php echo (int)$changedCount; ?></strong> changed fields reviewed from <strong><?php echo (int)count($keys); ?></strong> fields.
                          </p>
 
                          <div class="vur-pills">
-                             <span class="vur-pill"><i data-feather="package"></i> <?php echo app_lang("module"); ?>: <strong><?php echo $module; ?></strong></span>
-                             <span class="vur-pill"><i data-feather="database"></i> <?php echo app_lang("table"); ?>: <strong><?php echo $table; ?></strong></span>
-                             <span class="vur-pill"><i data-feather="activity"></i> <?php echo app_lang("action"); ?>: <strong><?php echo $action; ?></strong></span>
-                             <span class="vur-pill"><i data-feather="hash"></i> <?php echo app_lang("record_id"); ?>: <strong><?php echo $recordId; ?></strong></span>
+                             <span class="vur-pill"><i data-feather="package"></i> Module: <strong><?php echo $module; ?></strong></span>
+                             <span class="vur-pill"><i data-feather="database"></i> Table: <strong><?php echo $table; ?></strong></span>
+                             <span class="vur-pill"><i data-feather="activity"></i> Request: <strong><?php echo $action; ?></strong></span>
+                             <span class="vur-pill"><i data-feather="hash"></i> Record ID: <strong><?php echo $recordId; ?></strong></span>
                          </div>
                      </div>
 
@@ -349,14 +431,30 @@
                                 ); ?>
                          <?php endif; ?>
 
-                         <button type="button" class="btn btn-default btn-sm vur-btn" data-bs-toggle="collapse" data-bs-target="#vurRawJson" aria-expanded="false">
-                             <i data-feather="code" class="icon-16"></i> Raw JSON
-                         </button>
                      </div>
                  </div>
              </div>
 
              <div class="vur-body">
+                 <div class="vur-summary-grid">
+                     <div class="vur-summary-card">
+                         <span>Module</span>
+                         <strong><?php echo $module; ?></strong>
+                     </div>
+                     <div class="vur-summary-card">
+                         <span>Request Type</span>
+                         <strong><?php echo $action; ?></strong>
+                     </div>
+                     <div class="vur-summary-card">
+                         <span>Changed Fields</span>
+                         <strong><?php echo (int)$changedCount; ?></strong>
+                     </div>
+                     <div class="vur-summary-card">
+                         <span>Total Fields</span>
+                         <strong><?php echo (int)count($keys); ?></strong>
+                     </div>
+                 </div>
+
                  <!-- TOOLBAR -->
                  <div class="vur-toolbar">
                      <div class="vur-search">
@@ -374,10 +472,10 @@
                      <table class="table table-sm table-hover">
                          <thead>
                              <tr>
-                                 <th style="min-width: 220px;">Field</th>
-                                 <th style="min-width: 280px;"><?php echo app_lang("before"); ?></th>
-                                 <th style="min-width: 280px;"><?php echo app_lang("after"); ?></th>
-                                 <th class="text-center" style="width: 140px;">Status</th>
+                                 <th style="min-width: 220px;">Requested Field</th>
+                                 <th style="min-width: 280px;">Current Value</th>
+                                 <th style="min-width: 280px;">Submitted Update</th>
+                                 <th class="text-center" style="width: 140px;">Change Type</th>
                              </tr>
                          </thead>
                          <tbody id="vur-diff-body">
@@ -410,7 +508,8 @@
                                      data-status="<?php echo esc($status); ?>"
                                      data-search="<?php echo esc(strtolower($k . ' ' . (string)$bVal . ' ' . (string)$aVal)); ?>">
                                      <td>
-                                         <div class="vur-k"><?php echo esc($k); ?></div>
+                                         <div class="vur-k"><?php echo esc(vur_humanize_key($k)); ?></div>
+                                         <span class="vur-field-key"><?php echo esc($k); ?></span>
                                      </td>
 
                                      <td>
@@ -435,43 +534,11 @@
 
                              <?php if (!count($keys)): ?>
                                  <tr>
-                                     <td colspan="4" class="text-center text-muted p15">No fields found in before/after.</td>
+                                     <td colspan="4" class="text-center text-muted p15">No submitted fields found for this request.</td>
                                  </tr>
                              <?php endif; ?>
                          </tbody>
                      </table>
-                 </div>
-
-                 <!-- RAW JSON COLLAPSE -->
-                 <div class="collapse" id="vurRawJson">
-                     <div class="vur-raw">
-                         <div class="vur-raw-header">
-                             <p class="vur-raw-title mb0">Raw JSON (Before / After)</p>
-                             <div class="d-flex gap-2">
-                                 <button type="button" class="btn btn-default btn-sm" id="vur-copy-before">
-                                     <i data-feather="copy" class="icon-16"></i> Copy Before
-                                 </button>
-                                 <button type="button" class="btn btn-default btn-sm" id="vur-copy-after">
-                                     <i data-feather="copy" class="icon-16"></i> Copy After
-                                 </button>
-                             </div>
-                         </div>
-
-                         <div class="row m0">
-                             <div class="col-md-6 p0" style="border-right:1px solid var(--vur-border);">
-                                 <div class="p10" style="border-bottom:1px solid var(--vur-border); font-weight:800; font-size:12px;">
-                                     <?php echo app_lang("before"); ?>
-                                 </div>
-                                 <pre id="vur-raw-before"><?php echo esc(json_encode($before, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)); ?></pre>
-                             </div>
-                             <div class="col-md-6 p0">
-                                 <div class="p10" style="border-bottom:1px solid var(--vur-border); font-weight:800; font-size:12px;">
-                                     <?php echo app_lang("after"); ?>
-                                 </div>
-                                 <pre id="vur-raw-after"><?php echo esc(json_encode($after, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)); ?></pre>
-                             </div>
-                         </div>
-                     </div>
                  </div>
 
              </div><!-- /vur-body -->
@@ -511,24 +578,6 @@
 
          $root.on("input", "#vur-search", applyFilters);
          $root.on("change", "#vur-only-changed", applyFilters);
-
-         function copyText(text) {
-             if (navigator.clipboard && window.isSecureContext) {
-                 navigator.clipboard.writeText(text);
-                 return;
-             }
-             var $tmp = $("<textarea>").val(text).appendTo("body").select();
-             document.execCommand("copy");
-             $tmp.remove();
-         }
-
-         $root.on("click", "#vur-copy-before", function() {
-             copyText($root.find("#vur-raw-before").text());
-         });
-
-         $root.on("click", "#vur-copy-after", function() {
-             copyText($root.find("#vur-raw-after").text());
-         });
 
          if (window.feather) feather.replace();
      })();

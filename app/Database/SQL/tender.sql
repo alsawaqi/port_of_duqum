@@ -8,6 +8,9 @@ ALTER TABLE `pod_tenders`
   ADD COLUMN `department_id` bigint(20) UNSIGNED DEFAULT NULL AFTER `company_id`,
   ADD COLUMN `brief_description` text DEFAULT NULL AFTER `department_id`,
   ADD COLUMN `tender_fee` DECIMAL(15,3) DEFAULT NULL AFTER `brief_description`,
+  ADD COLUMN `evaluation_method` ENUM('separate','combined') NOT NULL DEFAULT 'separate' AFTER `tender_type`,
+  ADD COLUMN `technical_weight` TINYINT(3) UNSIGNED NOT NULL DEFAULT 70 AFTER `evaluation_method`,
+  ADD COLUMN `commercial_weight` TINYINT(3) UNSIGNED NOT NULL DEFAULT 30 AFTER `technical_weight`,
   ADD COLUMN `release_at` datetime DEFAULT NULL AFTER `workflow_stage`,
   ADD COLUMN `document_purchase_deadline` datetime DEFAULT NULL AFTER `release_at`,
   ADD COLUMN `site_visit_at` datetime DEFAULT NULL AFTER `document_purchase_deadline`,
@@ -26,6 +29,9 @@ SET
   t.`company_id` = COALESCE(t.`company_id`, r.`company_id`),
   t.`department_id` = COALESCE(t.`department_id`, r.`department_id`),
   t.`brief_description` = COALESCE(t.`brief_description`, r.`brief_description`),
+  t.`evaluation_method` = COALESCE(r.`evaluation_method`, t.`evaluation_method`),
+  t.`technical_weight` = COALESCE(r.`technical_weight`, t.`technical_weight`),
+  t.`commercial_weight` = COALESCE(r.`commercial_weight`, t.`commercial_weight`),
   t.`release_at` = COALESCE(t.`release_at`, t.`published_at`)
 WHERE t.`id` > 0
   AND t.`deleted` = 0;

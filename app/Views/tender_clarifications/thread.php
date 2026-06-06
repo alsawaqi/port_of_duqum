@@ -6,13 +6,17 @@ $root_attachments = $attachments[(int) ($clarification->id ?? 0)] ?? [];
 $audience = strtolower((string) ($clarification->internal_audience ?? ""));
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="mb15">
-        <a href="<?php echo get_uri('tender_clarifications/vendor/' . (int) ($tender->id ?? 0) . '/' . (int) ($vendor->id ?? 0)); ?>" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i>
-            Back to Vendor Questions
-        </a>
-    </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Clarification Thread",
+        "subtitle" => "Review the original clarification and publish a controlled response.",
+        "icon" => "message-circle",
+        "actions" => '<a href="' . esc(get_uri('tender_clarifications/vendor/' . (int) ($tender->id ?? 0) . '/' . (int) ($vendor->id ?? 0)), "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+            . '<i data-feather="arrow-left" class="icon-16"></i> Back to Vendor Questions'
+            . '</a>'
+    ]);
+    ?>
 
     <div class="card gp-pro-card mb15">
         <div class="card-header">

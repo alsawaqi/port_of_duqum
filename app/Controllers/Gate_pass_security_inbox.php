@@ -358,7 +358,7 @@ private function _make_vehicle_row($row)
     $mul = $this->_security_vehicle_mulkiyah_cell($row);
 
     return [
-        $row->plate_no ?: "-",
+        gate_pass_vehicle_plate_display($row),
         $row->type ?: "-",
         $mul,
         $edit . " " . $delete
@@ -395,8 +395,6 @@ public function save_vehicle()
     $this->validate_submitted_data([
         "id" => "numeric",
         "gate_pass_request_id" => "required|numeric",
-        "plate_prefix" => "required",
-        "plate_digits" => "required",
     ]);
 
     $id = (int)$this->request->getPost("id");
@@ -413,28 +411,29 @@ public function save_vehicle()
         $vehicle_type = "private";
     }
 
-    $built = gate_pass_plate_merge_from_post_parts(
+    $plate_payload = gate_pass_prepare_vehicle_plate_payload(
+        (int) $this->request->getPost("is_international_plate") === 1,
         (string) $this->request->getPost("plate_prefix"),
-        (string) $this->request->getPost("plate_digits")
+        (string) $this->request->getPost("plate_digits"),
+        (string) $this->request->getPost("plate_country"),
+        (string) $this->request->getPost("international_plate_no")
     );
-    if (empty($built["ok"])) {
+    if (empty($plate_payload["ok"])) {
         return $this->response->setJSON([
             "success" => false,
-            "message" => $built["message"] ?? app_lang("gate_pass_plate_invalid_chars"),
+            "message" => $plate_payload["message"] ?? app_lang("gate_pass_plate_invalid_chars"),
         ]);
     }
-    $plate_no = $built["plate"];
 
     $existing = $id ? $this->Gate_pass_request_vehicles_model->get_details(["id" => $id])->getRow() : null;
 
-    $data = [
+    $data = array_merge([
         "gate_pass_request_id" => $request_id,
-        "plate_no" => $plate_no,
         "type" => $vehicle_type,
         "make" => null,
         "model" => null,
         "color" => null,
-    ];
+    ], (array) ($plate_payload["data"] ?? []));
 
     $upload_dir_rel = "gate_pass_vehicles/request_" . $request_id . "/";
     $upload_dir = WRITEPATH . "uploads/" . $upload_dir_rel;

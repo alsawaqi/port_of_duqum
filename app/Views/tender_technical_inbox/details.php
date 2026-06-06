@@ -52,13 +52,17 @@ $technical_bid_document_actions = function ($doc_id) {
 };
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="mb15">
-        <a href="<?php echo get_uri('tender_technical_inbox'); ?>" class="btn btn-default">
-            <i data-feather="arrow-left" class="icon-16"></i>
-            Back to Technical Inbox
-        </a>
-    </div>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page">
+    <?php
+    echo view("includes/tender_page_header", [
+        "title" => "Technical Evaluation",
+        "subtitle" => "Review tender documents, technical submissions, evaluator actions, and completed bid decisions.",
+        "icon" => "clipboard",
+        "actions" => '<a href="' . esc(get_uri('tender_technical_inbox'), "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
+            . '<i data-feather="arrow-left" class="icon-16"></i> Back to Technical Inbox'
+            . '</a>'
+    ]);
+    ?>
 
     <div class="card gp-pro-card mb15">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">

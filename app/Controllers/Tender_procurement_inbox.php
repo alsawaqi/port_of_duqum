@@ -158,7 +158,7 @@ class Tender_procurement_inbox extends Security_Controller
                         WHERE $t.deleted = 0
                           AND $t.tender_request_id = req.id
                   )
-                ORDER BY tender_id DESC, tender_request_id DESC";
+                ORDER BY created_at DESC, tender_id DESC, tender_request_id DESC";
 
         $list = $this->db->query($sql)->getResult();
         $result = [];
@@ -456,6 +456,9 @@ class Tender_procurement_inbox extends Security_Controller
             "tender_request_id" => "numeric",
             "reference" => "required",
             "title" => "required",
+            "evaluation_method" => "required",
+            "technical_weight" => "required|numeric",
+            "commercial_weight" => "required|numeric",
         ];
         if (!$testing_workflow_stage) {
             $validation_rules["closing_at"] = "required";
@@ -506,6 +509,20 @@ class Tender_procurement_inbox extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "Tender fee cannot be negative and must be a valid amount."]);
         }
         $tender_fee = $tender_fee_input === "" ? null : round((float) $tender_fee_input, 3);
+
+        $evaluation_method = strtolower(trim((string) $this->request->getPost("evaluation_method")));
+        if ($evaluation_method === "" && isset($request->evaluation_method)) {
+            $evaluation_method = (string) $request->evaluation_method;
+        }
+        if (!in_array($evaluation_method, ["separate", "combined"], true)) {
+            return $this->response->setJSON(["success" => false, "message" => "Please select a valid evaluation method."]);
+        }
+
+        $technical_weight = (int) $this->request->getPost("technical_weight");
+        $commercial_weight = (int) $this->request->getPost("commercial_weight");
+        if (!$this->_weights_are_valid($technical_weight, $commercial_weight)) {
+            return $this->response->setJSON(["success" => false, "message" => "Technical and Commercial weights must total 100."]);
+        }
 
         $company_id = (int) ($this->request->getPost("company_id") ?: ($request->company_id ?? 0));
         $department_id = (int) ($this->request->getPost("department_id") ?: ($request->department_id ?? 0));
@@ -568,6 +585,12 @@ class Tender_procurement_inbox extends Security_Controller
 
         $required_sections = (array) $this->request->getPost("required_sections");
         $posted_team_ids = $this->_get_posted_team_ids();
+        if ($this->_has_any_posted_team_selection($posted_team_ids)) {
+            $committee_error = $this->_validate_committee_role_selection($posted_team_ids);
+            if ($committee_error) {
+                return $this->response->setJSON(["success" => false, "message" => $committee_error]);
+            }
+        }
 
         $data = [
             "tender_request_id" => $tender_request_id ?: null,
@@ -578,6 +601,9 @@ class Tender_procurement_inbox extends Security_Controller
             "brief_description" => $brief_description ?: ($request->brief_description ?? null),
             "tender_fee" => $tender_fee,
             "tender_type" => $tender_type,
+            "evaluation_method" => $evaluation_method,
+            "technical_weight" => $technical_weight,
+            "commercial_weight" => $commercial_weight,
             "release_at" => $release_at,
             "document_purchase_deadline" => $document_purchase_deadline,
             "site_visit_at" => $site_visit_at,
@@ -897,6 +923,9 @@ class Tender_procurement_inbox extends Security_Controller
             "brief_description" => $source->brief_description ?? null,
             "tender_fee" => $source->tender_fee ?? null,
             "tender_type" => (string) ($source->tender_type ?? "open"),
+            "evaluation_method" => (string) ($source->evaluation_method ?? "separate"),
+            "technical_weight" => (int) ($source->technical_weight ?? 70),
+            "commercial_weight" => (int) ($source->commercial_weight ?? 30),
             "status" => "draft",
             "workflow_stage" => "bidding",
             "release_at" => null,
@@ -934,6 +963,15 @@ class Tender_procurement_inbox extends Security_Controller
             "SELECT * FROM $t WHERE id=? AND deleted=0 LIMIT 1",
             [$tender_id]
         )->getRow();
+    }
+
+    private function _weights_are_valid(int $technical_weight, int $commercial_weight): bool
+    {
+        return $technical_weight >= 0
+            && $technical_weight <= 100
+            && $commercial_weight >= 0
+            && $commercial_weight <= 100
+            && ($technical_weight + $commercial_weight) === 100;
     }
 
     private function _ensure_tender_site_visit_columns(): void
@@ -1418,8 +1456,21 @@ class Tender_procurement_inbox extends Security_Controller
             "commercial" => (array) $this->request->getPost("commercial_user_ids"),
             "chairman" => (int) $this->request->getPost("chairman_user_id"),
             "secretary" => (int) $this->request->getPost("secretary_user_id"),
-            "itc_member" => (array) $this->request->getPost("itc_member_user_ids"),
+            "itc_member" => $this->_clean_user_ids((array) $this->request->getPost("itc_member_user_ids")),
         ];
+    }
+
+    private function _clean_user_ids(array $ids): array
+    {
+        $clean = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $clean[$id] = $id;
+            }
+        }
+
+        return array_values($clean);
     }
 
     private function _clean_vendor_ids(array $ids): array
@@ -1446,6 +1497,24 @@ class Tender_procurement_inbox extends Security_Controller
         }
 
         return false;
+    }
+
+    private function _validate_committee_role_selection(array $team_ids): ?string
+    {
+        $chairman_id = (int) ($team_ids["chairman"] ?? 0);
+        $secretary_id = (int) ($team_ids["secretary"] ?? 0);
+        $itc_member_ids = $this->_clean_user_ids((array) ($team_ids["itc_member"] ?? []));
+
+        if ($chairman_id > 0 && $secretary_id > 0 && $chairman_id === $secretary_id) {
+            return "Chairman and secretary must be different committee users.";
+        }
+
+        $reserved_ids = array_filter([$chairman_id, $secretary_id]);
+        if ($reserved_ids && array_intersect($reserved_ids, $itc_member_ids)) {
+            return "Chairman and secretary cannot also be selected as ITC members.";
+        }
+
+        return null;
     }
 
     private function _sync_tender_teams_from_post(int $tender_id, array $team_ids): void
@@ -1676,6 +1745,10 @@ class Tender_procurement_inbox extends Security_Controller
         }
         if (count($team_ids["itc_member"]) < 1) {
             return "At least one ITC member is required.";
+        }
+        $committee_error = $this->_validate_committee_role_selection($team_ids);
+        if ($committee_error) {
+            return $committee_error;
         }
 
         if ($tender_type === "close" && $this->_count_active_invites($tender_id) < 1) {

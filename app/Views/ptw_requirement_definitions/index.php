@@ -1,4 +1,15 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => $category_label,
+        "subtitle" => "Configure reusable PTW requirement definitions for hazards, PPE, and work-area preparation.",
+        "icon" => "list",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => "Requirement Definitions"],
+            ["label" => $category_label]
+        ]
+    ]); ?>
+
     <div class="card gp-pro-card">
         <div class="page-title clearfix gp-pro-title">
             <h1><?php echo esc($category_label); ?></h1>

@@ -32,6 +32,48 @@ class Signin extends App_Controller {
         }
     }
 
+    private function signin_error_response($errors) {
+        if ($this->request->isAJAX()) {
+            $messages = is_array($errors) ? $errors : array($errors);
+            $messages = array_map(function ($message) {
+                return esc($message);
+            }, $messages);
+
+            return $this->response->setJSON(array("success" => false, "message" => implode("<br />", $messages)));
+        }
+
+        $this->session->setFlashdata("signin_validation_errors", is_array($errors) ? $errors : array($errors));
+        app_redirect('signin');
+    }
+
+    private function get_signin_redirect_url() {
+        $redirect = $this->request->getPost("redirect");
+
+        if ($redirect) {
+            $allowed_host = $_SERVER['HTTP_HOST'];
+            $parsed_redirect = parse_url($redirect);
+            $redirect_host = get_array_value($parsed_redirect, "host");
+
+            if ($allowed_host === $redirect_host) {
+                return $redirect;
+            }
+        }
+
+        return get_uri("dashboard");
+    }
+
+    private function get_welcome_message() {
+        $user_id = $this->Users_model->login_user_id();
+        $user = $user_id ? $this->Users_model->get_one($user_id) : null;
+        $name = "";
+
+        if ($user && isset($user->id)) {
+            $name = trim($user->first_name . " " . $user->last_name);
+        }
+
+        return $name ? sprintf("Welcome back, %s.", clean_data($name)) : "Welcome back.";
+    }
+
     private function has_recaptcha_error() {
 
         $ReCAPTCHA = new ReCAPTCHA();
@@ -73,32 +115,27 @@ class Signin extends App_Controller {
 
         //don't check password if there is any error
         if ($this->signin_validation_errors) {
-            $this->session->setFlashdata("signin_validation_errors", $this->signin_validation_errors);
-            app_redirect('signin');
+            return $this->signin_error_response($this->signin_validation_errors);
         }
 
         if (!$this->Users_model->authenticate($email, $password)) {
             //authentication failed
             array_push($this->signin_validation_errors, app_lang("authentication_failed"));
-            $this->session->setFlashdata("signin_validation_errors", $this->signin_validation_errors);
-            app_redirect('signin');
+            return $this->signin_error_response($this->signin_validation_errors);
         }
 
         //authentication success
-        $redirect = $this->request->getPost("redirect");
-        if ($redirect) {
-            $allowed_host = $_SERVER['HTTP_HOST'];
+        $redirect_url = $this->get_signin_redirect_url();
 
-            $parsed_redirect = parse_url($redirect);
-            $redirect_host = get_array_value($parsed_redirect, "host");
-            if ($allowed_host === $redirect_host) {
-                return redirect()->to($redirect);
-            } else {
-                app_redirect('dashboard');
-            }
-        } else {
-            app_redirect('dashboard');
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON(array(
+                "success" => true,
+                "message" => $this->get_welcome_message(),
+                "redirect_url" => $redirect_url
+            ));
         }
+
+        return redirect()->to($redirect_url);
     }
 
     function sign_out() {

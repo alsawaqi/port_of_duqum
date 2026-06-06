@@ -1,10 +1,25 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="card gp-pro-card">
-        <div class="page-title clearfix">
-            <h1><?php echo esc($vendor->vendor_name); ?> <span class="text-muted">(#<?php echo (int)$vendor->id; ?>)</span></h1>
+<div id="page-content" class="page-wrapper clearfix pod-page-shell pod-vendor-page pod-vendor-admin-page">
+    <?php
+    echo view("includes/pod_page_header", [
+        "title" => $vendor->vendor_name,
+        "subtitle" => "Internal vendor record view for compliance documents, contacts, bank accounts, branches, credentials, and specialties.",
+        "icon" => "briefcase",
+        "breadcrumbs" => [
+            ["label" => app_lang("vendors"), "url" => get_uri("vendors")],
+            ["label" => $vendor->vendor_name]
+        ]
+    ]);
+    ?>
+
+    <div class="card pod-vendor-card">
+        <div class="pod-vendor-card-header">
+            <div>
+                <h2 class="pod-vendor-card-title"><?php echo esc($vendor->vendor_name); ?> <span class="text-muted">#<?php echo (int)$vendor->id; ?></span></h2>
+                <p class="pod-vendor-card-subtitle">Vendor profile sections available for internal review.</p>
+            </div>
         </div>
 
-        <ul class="nav nav-tabs">
+        <ul class="nav nav-tabs pod-vendor-tabs">
             <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#docs"><?php echo app_lang("documents"); ?></a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#contacts"><?php echo app_lang("contacts"); ?></a></li>
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#bank"><?php echo app_lang("bank"); ?></a></li>
@@ -13,7 +28,7 @@
             <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#specialties"><?php echo app_lang("specialties"); ?></a></li>
         </ul>
 
-        <div class="tab-content p15">
+        <div class="tab-content pod-vendor-card-body">
             <div class="tab-pane fade show active" id="docs">
                 <table id="docs-table" class="display" width="100%"></table>
             </div>
