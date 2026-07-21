@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_blocked_visitors"),
+        "subtitle" => app_lang("gate_pass_blocked_visitors_hint"),
+        "icon" => "slash",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_blocked_visitors")]
+        ]
+    ]); ?>
     <div class="gp-blocked-visitors p15">
         <style>
             .gp-blocked-visitors {

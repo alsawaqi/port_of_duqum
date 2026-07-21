@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix ggp-page">
+<div id="page-content" class="page-wrapper clearfix ggp-page pod-gate-pass-public">
     <style>
         .ggp-page {
             --ggp-navy: #0b1f3a;

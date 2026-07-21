@@ -1,18 +1,31 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="card gp-pro-card">
-        <div class="page-title clearfix">
-            <h1><?php echo app_lang('legal_types'); ?></h1>
+<?php
+$master_data_actions = "";
+if (!empty($can_create_legal_types)) {
+    $master_data_actions = modal_anchor(
+        get_uri("legal_types/modal_form"),
+        "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_legal_type'),
+        array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_legal_type'))
+    );
+}
+?>
 
-            <div class="title-button-group">
-                <?php if (!empty($can_create_legal_types)) { ?>
-                    <?php
-                    echo modal_anchor(
-                        get_uri("legal_types/modal_form"),
-                        "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_legal_type'),
-                        array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_legal_type'))
-                    );
-                    ?>
-                <?php } ?>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-master-page">
+    <?php echo view("includes/master_data_page_header", [
+        "title" => app_lang("legal_types"),
+        "subtitle" => "Maintain legal entity classifications used during vendor and company registration.",
+        "icon" => "file-text",
+        "breadcrumbs" => [
+            ["label" => app_lang("master_data")],
+            ["label" => app_lang("legal_types")]
+        ],
+        "actions" => $master_data_actions
+    ]); ?>
+
+    <div class="card gp-pro-card pod-master-card">
+        <div class="page-title clearfix">
+            <div>
+                <h1><?php echo app_lang('legal_types'); ?></h1>
+                <p class="pod-master-card-subtitle">Standardize legal type names, codes, and active availability.</p>
             </div>
         </div>
 

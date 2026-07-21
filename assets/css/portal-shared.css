@@ -791,6 +791,12 @@
     --ta-brand-soft: #ecf3ff;
 }
 
+.pod-domain-reports {
+    --ta-brand: #0e9384;
+    --ta-brand-dark: #107569;
+    --ta-brand-soft: #f0fdfa;
+}
+
 .pod-focus-page .page-title,
 .ptw-wizard-wrap .page-title,
 .pod-focus-fragment .ps-header,
@@ -6328,7 +6334,474 @@ body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-aut
     color: #d0d5dd;
 }
 
+/* POD Master Data surfaces */
+body:not(.pod-auth-page) .pod-master-page {
+    color: var(--pod-ta-gray-700);
+    animation: pod-page-rise .32s ease both;
+}
+
+body:not(.pod-auth-page) .pod-master-page .gp-pro-card,
+body:not(.pod-auth-page) .pod-master-page .card,
+body:not(.pod-auth-page) .pod-master-page .pod-master-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--pod-ta-gray-200) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    box-shadow: var(--pod-ta-shadow-md) !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .gp-pro-card::before,
+body:not(.pod-auth-page) .pod-master-page .card::before,
+body:not(.pod-auth-page) .pod-master-page .pod-master-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #465fff, #12b76a, #f79009);
+    opacity: .95;
+}
+
+body:not(.pod-auth-page) .pod-master-page .page-title,
+body:not(.pod-auth-page) .pod-master-page .card-header,
+body:not(.pod-auth-page) .pod-master-page .pod-vendor-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 66px;
+    padding: 18px 20px !important;
+    border-bottom: 1px solid var(--pod-ta-gray-200) !important;
+    background: linear-gradient(120deg, rgba(70, 95, 255, .10), rgba(18, 183, 106, .08) 62%, rgba(255, 255, 255, 0)) !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .page-title h1,
+body:not(.pod-auth-page) .pod-master-page .card-header h3,
+body:not(.pod-auth-page) .pod-master-page .card-header h4,
+body:not(.pod-auth-page) .pod-master-page .pod-vendor-card-title {
+    margin: 0 !important;
+    color: var(--pod-ta-gray-900);
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 24px;
+    letter-spacing: 0;
+}
+
+body:not(.pod-auth-page) .pod-master-card-subtitle,
+body:not(.pod-auth-page) .pod-master-page .pod-vendor-card-subtitle,
+body:not(.pod-auth-page) .pod-master-page .text-muted,
+body:not(.pod-auth-page) .pod-master-page .text-off {
+    margin: 4px 0 0;
+    color: var(--pod-ta-gray-500) !important;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+}
+
+body:not(.pod-auth-page) .pod-master-page .card-body,
+body:not(.pod-auth-page) .pod-master-page .panel-body,
+body:not(.pod-auth-page) .pod-master-page .pod-vendor-card-body {
+    padding: 20px !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .title-button-group,
+body:not(.pod-auth-page) .pod-master-page .pod-page-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+body:not(.pod-auth-page) .pod-master-page .btn {
+    min-height: 38px;
+    border-radius: 8px !important;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0;
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background-color .16s ease, color .16s ease;
+}
+
+body:not(.pod-auth-page) .pod-master-page .btn:hover,
+body:not(.pod-auth-page) .pod-master-page .btn:focus {
+    transform: translateY(-1px);
+}
+
+body:not(.pod-auth-page) .pod-master-page .btn-primary,
+body:not(.pod-auth-page) .pod-master-page .gp-pro-btn,
+body:not(.pod-auth-page) .pod-master-page .pod-action-btn {
+    border-color: var(--pod-ta-brand-500) !important;
+    background: var(--pod-ta-brand-500) !important;
+    color: #ffffff !important;
+    box-shadow: 0 10px 18px rgba(70, 95, 255, .20) !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .btn-default,
+body:not(.pod-auth-page) .pod-master-page .gp-pro-btn-secondary,
+body:not(.pod-auth-page) .pod-master-page .btn-light,
+body:not(.pod-auth-page) .pod-master-page .btn-outline-light {
+    border: 1px solid var(--pod-ta-gray-200) !important;
+    background: #ffffff !important;
+    color: var(--pod-ta-gray-700) !important;
+    box-shadow: var(--pod-ta-shadow-xs) !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .btn-sm,
+body:not(.pod-auth-page) .pod-master-page .btn-xs {
+    min-height: 32px;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .gp-pro-table-shell,
+body:not(.pod-auth-page) .pod-master-page .pod-table-shell,
+body:not(.pod-auth-page) .pod-master-page .pod-vendor-table-shell,
+body:not(.pod-auth-page) .pod-master-page .table-responsive {
+    max-width: 100%;
+    border: 1px solid var(--pod-ta-gray-200) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    overflow-x: auto !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .dataTables_wrapper {
+    padding: 16px;
+}
+
+body:not(.pod-auth-page) .pod-master-page table.table,
+body:not(.pod-auth-page) .pod-master-page table.display {
+    margin-bottom: 0 !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page table.table thead th,
+body:not(.pod-auth-page) .pod-master-page table.display thead th,
+body:not(.pod-auth-page) .pod-master-page table.dataTable thead th {
+    border-bottom: 1px solid var(--pod-ta-gray-200) !important;
+    background: var(--pod-ta-gray-50) !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    white-space: nowrap;
+}
+
+body:not(.pod-auth-page) .pod-master-page table.table tbody td,
+body:not(.pod-auth-page) .pod-master-page table.display tbody td,
+body:not(.pod-auth-page) .pod-master-page table.dataTable tbody td {
+    border-top-color: var(--pod-ta-gray-100) !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 13px !important;
+    vertical-align: middle;
+}
+
+body:not(.pod-auth-page) .pod-master-page table.table tbody tr,
+body:not(.pod-auth-page) .pod-master-page table.display tbody tr,
+body:not(.pod-auth-page) .pod-master-page table.dataTable tbody tr {
+    transition: background-color .16s ease;
+}
+
+body:not(.pod-auth-page) .pod-master-page table.table tbody tr:hover,
+body:not(.pod-auth-page) .pod-master-page table.display tbody tr:hover,
+body:not(.pod-auth-page) .pod-master-page table.dataTable tbody tr:hover {
+    background: var(--pod-ta-brand-50) !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page td.option a,
+body:not(.pod-auth-page) .pod-master-page .action-option {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 !important;
+    border-color: var(--pod-ta-gray-200);
+    border-radius: 8px;
+    color: var(--pod-ta-gray-500);
+    box-shadow: var(--pod-ta-shadow-xs);
+}
+
+body:not(.pod-auth-page) .pod-master-page td.option a:hover,
+body:not(.pod-auth-page) .pod-master-page .action-option:hover {
+    border-color: var(--pod-ta-brand-500);
+    background: var(--pod-ta-brand-50);
+    color: var(--pod-ta-brand-500);
+}
+
+body:not(.pod-auth-page) .pod-master-page .dataTables_filter input,
+body:not(.pod-auth-page) .pod-master-page .dataTables_length select,
+body:not(.pod-auth-page) .pod-master-page .form-control,
+body:not(.pod-auth-page) .pod-master-page .form-select,
+body:not(.pod-auth-page) .pod-master-page select.form-control,
+body:not(.pod-auth-page) .pod-master-page textarea.form-control {
+    min-height: 40px;
+    border: 1px solid var(--pod-ta-gray-200) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 13px;
+    box-shadow: none !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page .dataTables_filter input:focus,
+body:not(.pod-auth-page) .pod-master-page .dataTables_length select:focus,
+body:not(.pod-auth-page) .pod-master-page .form-control:focus,
+body:not(.pod-auth-page) .pod-master-page .form-select:focus {
+    border-color: var(--pod-ta-brand-500) !important;
+    box-shadow: 0 0 0 4px rgba(70, 95, 255, .12) !important;
+}
+
+body:not(.pod-auth-page) .pod-master-page label,
+body:not(.pod-auth-page) .pod-master-page .form-label {
+    color: var(--pod-ta-gray-700);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+body:not(.pod-auth-page) .pod-master-page .badge,
+body:not(.pod-auth-page) .pod-master-page .badge.bg-light,
+body:not(.pod-auth-page) .pod-master-page .badge.bg-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 999px;
+    padding: 6px 9px;
+    background: var(--pod-ta-gray-100) !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+body:not(.pod-auth-page) .modal-dialog.pod-master-modal-dialog {
+    max-width: min(760px, calc(100vw - 32px));
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal {
+    overflow: hidden;
+    border: 1px solid var(--pod-ta-gray-200) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    box-shadow: 0 24px 64px rgba(16, 24, 40, .22) !important;
+    animation: pod-page-rise .24s ease both;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-header {
+    padding: 18px 20px !important;
+    border-bottom: 1px solid var(--pod-ta-gray-200) !important;
+    background: linear-gradient(120deg, rgba(70, 95, 255, .10), rgba(18, 183, 106, .08) 62%, #ffffff) !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-title,
+body:not(.pod-auth-page) .modal-content.pod-master-modal h4,
+body:not(.pod-auth-page) .modal-content.pod-master-modal h5 {
+    color: var(--pod-ta-gray-900) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-body {
+    max-height: min(72vh, 680px);
+    padding: 20px !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: #ffffff !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-body > .container-fluid {
+    padding-right: 0;
+    padding-left: 0;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .form-group {
+    margin-bottom: 16px;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .form-control,
+body:not(.pod-auth-page) .modal-content.pod-master-modal .form-select,
+body:not(.pod-auth-page) .modal-content.pod-master-modal select.form-control,
+body:not(.pod-auth-page) .modal-content.pod-master-modal textarea.form-control {
+    min-height: 42px;
+    border-color: var(--pod-ta-gray-200) !important;
+    border-radius: 8px !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 13px;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal label {
+    color: var(--pod-ta-gray-700);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-footer {
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 20px !important;
+    border-top: 1px solid var(--pod-ta-gray-200) !important;
+    background: var(--pod-ta-gray-50) !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-master-modal .btn {
+    min-height: 38px;
+    border-radius: 8px !important;
+    font-weight: 800 !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .gp-pro-card,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .gp-pro-card,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .card,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .card,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .gp-pro-table-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .gp-pro-table-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .pod-vendor-table-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .pod-vendor-table-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .table-responsive,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .table-responsive {
+    border-color: var(--pod-topbar-border) !important;
+    background: var(--pod-ta-gray-900) !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .page-title,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .page-title,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .card-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .card-header,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .pod-vendor-card-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .pod-vendor-card-header {
+    border-bottom-color: var(--pod-topbar-border) !important;
+    background: rgba(255, 255, 255, .04) !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .page-title h1,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .page-title h1,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .card-header h3,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .card-header h3,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .card-header h4,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .pod-master-page .card-header h4,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .pod-vendor-card-title,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .pod-vendor-card-title {
+    color: #ffffff !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-master-card-subtitle,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-card-subtitle,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .pod-vendor-card-subtitle,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .pod-vendor-card-subtitle {
+    color: #98a2b3 !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .dataTables_filter input,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .dataTables_filter input,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .dataTables_length select,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .dataTables_length select,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .form-control,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .form-control,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page .form-select,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page .form-select {
+    border-color: var(--pod-topbar-border) !important;
+    background-color: rgba(255, 255, 255, .04) !important;
+    color: #d0d5dd !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-master-page table.table thead th,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page table.table thead th,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page table.display thead th,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page table.display thead th,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page table.table tbody td,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page table.table tbody td,
+body.color-1E202D:not(.pod-auth-page) .pod-master-page table.display tbody td,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-master-page table.display tbody td {
+    border-color: var(--pod-topbar-border) !important;
+    background: transparent !important;
+    color: #d0d5dd !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal .modal-body,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal .modal-body {
+    border-color: var(--pod-topbar-border) !important;
+    background: var(--pod-ta-gray-900) !important;
+    color: #d0d5dd !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal .modal-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal .modal-header,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal .modal-footer,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal .modal-footer {
+    border-color: var(--pod-topbar-border) !important;
+    background: rgba(255, 255, 255, .04) !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal .modal-title,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal .modal-title,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal h4,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal h4,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal h5,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal h5,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal label,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal label {
+    color: #ffffff !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal .form-control,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal .form-control,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-master-modal .form-select,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-master-modal .form-select {
+    border-color: var(--pod-topbar-border) !important;
+    background-color: rgba(255, 255, 255, .04) !important;
+    color: #d0d5dd !important;
+}
+
 @media (max-width: 767px) {
+    body:not(.pod-auth-page) .pod-master-page .page-title,
+    body:not(.pod-auth-page) .pod-master-page .card-header,
+    body:not(.pod-auth-page) .pod-master-page .pod-vendor-card-header {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 16px !important;
+    }
+
+    body:not(.pod-auth-page) .pod-master-page .title-button-group,
+    body:not(.pod-auth-page) .pod-master-page .pod-page-actions {
+        justify-content: flex-start;
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .pod-master-page .title-button-group .btn,
+    body:not(.pod-auth-page) .pod-master-page .pod-page-actions .btn {
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .pod-master-page .card-body,
+    body:not(.pod-auth-page) .pod-master-page .panel-body,
+    body:not(.pod-auth-page) .pod-master-page .pod-vendor-card-body {
+        padding: 16px !important;
+    }
+
+    body:not(.pod-auth-page) .pod-master-page .dataTables_wrapper {
+        padding: 12px;
+    }
+
+    body:not(.pod-auth-page) .modal-dialog.pod-master-modal-dialog {
+        max-width: calc(100vw - 16px);
+        margin-right: 8px;
+        margin-left: 8px;
+    }
+
+    body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-body {
+        max-height: calc(100vh - 150px);
+        padding: 16px !important;
+    }
+
+    body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-footer {
+        align-items: stretch;
+        flex-direction: column-reverse;
+        padding: 14px 16px !important;
+    }
+
+    body:not(.pod-auth-page) .modal-content.pod-master-modal .modal-footer .btn {
+        width: 100%;
+    }
+
     body:not(.pod-auth-page) .pod-page-shell {
         box-sizing: border-box;
         max-width: 100%;
@@ -6735,6 +7208,614 @@ body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-aut
     body:not(.pod-auth-page) .pod-chart-wrap.pod-chart-wrap-sm {
         height: 170px;
         min-height: 170px;
+    }
+}
+
+/* Operational reports workspace */
+body:not(.pod-auth-page) .pod-reports-page,
+body:not(.pod-auth-page) .pod-report-page {
+    color: var(--pod-ta-gray-700);
+}
+
+body:not(.pod-auth-page) .pod-reports-page .pod-page-icon,
+body:not(.pod-auth-page) .pod-report-page .pod-page-icon {
+    background: #f0fdfa;
+    color: #0e9384;
+}
+
+body:not(.pod-auth-page) .pod-report-header-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body:not(.pod-auth-page) .opr-command-strip,
+body:not(.pod-auth-page) .opr-module-card,
+body:not(.pod-auth-page) .opr-panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--pod-ta-gray-200);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(16, 24, 40, .05);
+    animation: pod-report-rise .36s ease both;
+}
+
+body:not(.pod-auth-page) .opr-command-strip {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+    padding: 18px 20px;
+    background:
+        linear-gradient(120deg, rgba(70, 95, 255, .08), rgba(18, 183, 106, .10) 58%, rgba(247, 144, 9, .10)),
+        #ffffff;
+}
+
+body:not(.pod-auth-page) .opr-command-strip::before,
+body:not(.pod-auth-page) .opr-module-card::before,
+body:not(.pod-auth-page) .opr-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #465fff, #12b76a, #f79009);
+    pointer-events: none;
+}
+
+body:not(.pod-auth-page) .opr-command-copy {
+    min-width: 0;
+}
+
+body:not(.pod-auth-page) .opr-command-copy span,
+body:not(.pod-auth-page) .opr-command-metrics small {
+    display: block;
+    color: var(--pod-ta-gray-500);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 18px;
+    text-transform: uppercase;
+}
+
+body:not(.pod-auth-page) .opr-command-copy strong {
+    display: block;
+    margin-top: 4px;
+    color: var(--pod-ta-gray-900);
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 30px;
+}
+
+body:not(.pod-auth-page) .opr-command-copy p {
+    max-width: 760px;
+    margin: 6px 0 0;
+    color: var(--pod-ta-gray-500);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 22px;
+}
+
+body:not(.pod-auth-page) .opr-command-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+    gap: 10px;
+    min-width: min(430px, 100%);
+}
+
+body:not(.pod-auth-page) .opr-command-metrics > div {
+    min-width: 0;
+    padding: 12px 14px;
+    border-left: 3px solid #465fff;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .76);
+    box-shadow: inset 0 0 0 1px rgba(228, 231, 236, .82);
+}
+
+body:not(.pod-auth-page) .opr-command-metrics > div:nth-child(2) {
+    border-left-color: #f79009;
+}
+
+body:not(.pod-auth-page) .opr-command-metrics > div:nth-child(3) {
+    border-left-color: #12b76a;
+}
+
+body:not(.pod-auth-page) .opr-command-metrics strong {
+    display: block;
+    margin-top: 3px;
+    color: var(--pod-ta-gray-900);
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 28px;
+}
+
+body:not(.pod-auth-page) .opr-module-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+body:not(.pod-auth-page) .opr-module-card {
+    min-width: 0;
+    padding: 16px;
+}
+
+body:not(.pod-auth-page) .opr-module-card-vendor::before {
+    background: #12b76a;
+}
+
+body:not(.pod-auth-page) .opr-module-card-tender::before {
+    background: #465fff;
+}
+
+body:not(.pod-auth-page) .opr-module-card-gate::before {
+    background: #f79009;
+}
+
+body:not(.pod-auth-page) .opr-module-card-ptw::before {
+    background: #06aed4;
+}
+
+body:not(.pod-auth-page) .opr-module-head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 14px;
+}
+
+body:not(.pod-auth-page) .opr-module-head > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--pod-ta-brand-50);
+    color: var(--pod-ta-brand-500);
+}
+
+body:not(.pod-auth-page) .opr-module-head h3,
+body:not(.pod-auth-page) .opr-panel-head h3,
+body:not(.pod-auth-page) .opr-duration-grid h4 {
+    margin: 0;
+    color: var(--pod-ta-gray-900);
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+body:not(.pod-auth-page) .opr-module-head h3 {
+    font-size: 15px;
+    line-height: 21px;
+}
+
+body:not(.pod-auth-page) .opr-module-head small,
+body:not(.pod-auth-page) .opr-panel-head span {
+    color: var(--pod-ta-gray-500);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+}
+
+body:not(.pod-auth-page) .opr-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+body:not(.pod-auth-page) .opr-kpi-row div {
+    min-width: 0;
+    padding: 8px 0;
+    border-top: 1px solid var(--pod-ta-gray-100);
+    border-bottom: 1px solid var(--pod-ta-gray-100);
+}
+
+body:not(.pod-auth-page) .opr-kpi-row small {
+    display: block;
+    overflow: hidden;
+    color: var(--pod-ta-gray-500);
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body:not(.pod-auth-page) .opr-kpi-row strong {
+    display: block;
+    margin-top: 3px;
+    color: var(--pod-ta-gray-900);
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 28px;
+}
+
+body:not(.pod-auth-page) .opr-risk-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+body:not(.pod-auth-page) .opr-breakdown {
+    display: grid;
+    gap: 8px;
+}
+
+body:not(.pod-auth-page) .opr-bar-row div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    margin-bottom: 4px;
+    color: var(--pod-ta-gray-500);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+}
+
+body:not(.pod-auth-page) .opr-bar-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body:not(.pod-auth-page) .opr-bar-row strong {
+    color: var(--pod-ta-gray-900);
+    font-weight: 800;
+}
+
+body:not(.pod-auth-page) .opr-bar-row i {
+    display: block;
+    height: 7px;
+    max-width: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #465fff, #12b76a);
+}
+
+body:not(.pod-auth-page) .opr-empty-state {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 9px 10px;
+    border: 1px dashed var(--pod-ta-gray-200);
+    border-radius: 8px;
+    background: var(--pod-ta-gray-50);
+    color: var(--pod-ta-gray-400);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+body:not(.pod-auth-page) .opr-chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, .9fr);
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+body:not(.pod-auth-page) .opr-bottom-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+    gap: 14px;
+}
+
+body:not(.pod-auth-page) .opr-panel {
+    min-width: 0;
+    padding: 16px;
+}
+
+body:not(.pod-auth-page) .opr-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+body:not(.pod-auth-page) .opr-panel-head h3 {
+    font-size: 16px;
+    line-height: 22px;
+}
+
+body:not(.pod-auth-page) .opr-panel-head strong {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    max-width: 170px;
+    padding: 0 10px;
+    overflow: hidden;
+    border: 1px solid var(--pod-ta-gray-200);
+    border-radius: 999px;
+    background: var(--pod-ta-gray-50);
+    color: var(--pod-ta-gray-700);
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body:not(.pod-auth-page) .opr-panel .pod-chart-wrap {
+    border: 1px solid var(--pod-ta-gray-100);
+}
+
+body:not(.pod-auth-page) .opr-duration-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+body:not(.pod-auth-page) .opr-duration-grid h4 {
+    margin-bottom: 10px;
+    font-size: 14px;
+    line-height: 20px;
+}
+
+body:not(.pod-auth-page) .opr-processing-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+    min-width: 0;
+    padding: 10px 0;
+    border-top: 1px solid var(--pod-ta-gray-100);
+}
+
+body:not(.pod-auth-page) .opr-processing-row:first-of-type {
+    border-top: 0;
+}
+
+body:not(.pod-auth-page) .opr-processing-row span {
+    overflow: hidden;
+    color: var(--pod-ta-gray-500);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 18px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body:not(.pod-auth-page) .opr-processing-row strong {
+    color: var(--pod-ta-gray-900);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 18px;
+}
+
+body:not(.pod-auth-page) .opr-processing-row small {
+    grid-column: 1 / -1;
+    color: var(--pod-ta-gray-400);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 15px;
+}
+
+body:not(.pod-auth-page) .opr-activity-table {
+    min-width: 620px;
+}
+
+body:not(.pod-auth-page) .opr-activity-table th {
+    color: var(--pod-ta-gray-500) !important;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+body:not(.pod-auth-page) .opr-activity-table td {
+    color: var(--pod-ta-gray-700);
+    font-size: 13px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-reports-page,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-reports-page,
+body.color-1E202D:not(.pod-auth-page) .pod-report-page,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-report-page {
+    color: #d0d5dd;
+}
+
+body.color-1E202D:not(.pod-auth-page) .opr-command-strip,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-strip,
+body.color-1E202D:not(.pod-auth-page) .opr-module-card,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-module-card,
+body.color-1E202D:not(.pod-auth-page) .opr-panel,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-panel {
+    border-color: var(--pod-topbar-border);
+    background: var(--pod-ta-gray-900);
+    box-shadow: none;
+}
+
+body.color-1E202D:not(.pod-auth-page) .opr-command-strip,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-strip {
+    background:
+        linear-gradient(120deg, rgba(70, 95, 255, .18), rgba(18, 183, 106, .14) 58%, rgba(247, 144, 9, .12)),
+        var(--pod-ta-gray-900);
+}
+
+body.color-1E202D:not(.pod-auth-page) .opr-command-copy strong,
+body.color-1E202D:not(.pod-auth-page) .opr-command-metrics strong,
+body.color-1E202D:not(.pod-auth-page) .opr-module-head h3,
+body.color-1E202D:not(.pod-auth-page) .opr-panel-head h3,
+body.color-1E202D:not(.pod-auth-page) .opr-duration-grid h4,
+body.color-1E202D:not(.pod-auth-page) .opr-kpi-row strong,
+body.color-1E202D:not(.pod-auth-page) .opr-bar-row strong,
+body.color-1E202D:not(.pod-auth-page) .opr-processing-row strong,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-copy strong,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-metrics strong,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-module-head h3,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-panel-head h3,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-duration-grid h4,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-kpi-row strong,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-bar-row strong,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-processing-row strong {
+    color: #ffffff;
+}
+
+body.color-1E202D:not(.pod-auth-page) .opr-command-copy p,
+body.color-1E202D:not(.pod-auth-page) .opr-command-copy span,
+body.color-1E202D:not(.pod-auth-page) .opr-command-metrics small,
+body.color-1E202D:not(.pod-auth-page) .opr-module-head small,
+body.color-1E202D:not(.pod-auth-page) .opr-panel-head span,
+body.color-1E202D:not(.pod-auth-page) .opr-bar-row div,
+body.color-1E202D:not(.pod-auth-page) .opr-processing-row span,
+body.color-1E202D:not(.pod-auth-page) .opr-processing-row small,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-copy p,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-copy span,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-metrics small,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-module-head small,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-panel-head span,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-bar-row div,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-processing-row span,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-processing-row small {
+    color: #98a2b3;
+}
+
+body.color-1E202D:not(.pod-auth-page) .opr-command-metrics > div,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-command-metrics > div,
+body.color-1E202D:not(.pod-auth-page) .opr-empty-state,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-empty-state,
+body.color-1E202D:not(.pod-auth-page) .opr-panel-head strong,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-panel-head strong,
+body.color-1E202D:not(.pod-auth-page) .opr-panel .pod-chart-wrap,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-panel .pod-chart-wrap {
+    border-color: var(--pod-topbar-border);
+    background: #1d2939;
+}
+
+body.color-1E202D:not(.pod-auth-page) .opr-kpi-row div,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-kpi-row div,
+body.color-1E202D:not(.pod-auth-page) .opr-processing-row,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-processing-row {
+    border-color: var(--pod-topbar-border);
+}
+
+@keyframes pod-report-rise {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 1399px) {
+    body:not(.pod-auth-page) .opr-module-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body:not(.pod-auth-page) .opr-chart-grid,
+    body:not(.pod-auth-page) .opr-bottom-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 991px) {
+    body:not(.pod-auth-page) .opr-command-strip {
+        flex-direction: column;
+    }
+
+    body:not(.pod-auth-page) .opr-command-metrics {
+        min-width: 0;
+    }
+
+    body:not(.pod-auth-page) .opr-duration-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 767px) {
+    body:not(.pod-auth-page) .opr-command-strip,
+    body:not(.pod-auth-page) .opr-module-card,
+    body:not(.pod-auth-page) .opr-panel {
+        padding: 14px;
+    }
+
+    body:not(.pod-auth-page) .opr-command-metrics,
+    body:not(.pod-auth-page) .opr-module-grid,
+    body:not(.pod-auth-page) .opr-kpi-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body:not(.pod-auth-page) .opr-command-copy strong {
+        font-size: 19px;
+        line-height: 26px;
+    }
+
+    body:not(.pod-auth-page) .opr-panel-head {
+        flex-direction: column;
+    }
+
+    body:not(.pod-auth-page) .opr-panel-head strong {
+        max-width: 100%;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-panel .table-responsive {
+        overflow-x: visible !important;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table {
+        min-width: 0;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table thead {
+        display: none;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table,
+    body:not(.pod-auth-page) .opr-activity-table tbody,
+    body:not(.pod-auth-page) .opr-activity-table tr,
+    body:not(.pod-auth-page) .opr-activity-table td {
+        display: block;
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table tr {
+        margin-bottom: 10px;
+        border: 1px solid var(--pod-ta-gray-200);
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: var(--pod-ta-shadow-xs);
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table td {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 10px 12px !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--pod-ta-gray-100) !important;
+        text-align: right;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table td:last-child {
+        border-bottom: 0 !important;
+    }
+
+    body:not(.pod-auth-page) .opr-activity-table td::before {
+        content: attr(data-label);
+        min-width: 82px;
+        color: var(--pod-ta-gray-500);
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 18px;
+        text-align: left;
+        text-transform: uppercase;
+    }
+
+    body.color-1E202D:not(.pod-auth-page) .opr-activity-table tr,
+    body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-activity-table tr {
+        border-color: var(--pod-topbar-border);
+        background: #1d2939;
+        box-shadow: none;
+    }
+
+    body.color-1E202D:not(.pod-auth-page) .opr-activity-table td,
+    body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .opr-activity-table td {
+        border-bottom-color: var(--pod-topbar-border) !important;
     }
 }
 
@@ -7211,5 +8292,823 @@ body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-aut
         height: 34px !important;
         padding: 0 10px !important;
         font-size: 12px !important;
+    }
+}
+
+/* POD Gate Pass surfaces */
+body:not(.pod-auth-page) .pod-gate-pass-page,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate,
+body:not(.pod-auth-page) .gp-portal-home,
+body:not(.pod-auth-page) .gp-requests {
+    --pod-gp-brand: #2563eb;
+    --pod-gp-brand-dark: #1d4ed8;
+    --pod-gp-brand-soft: #eff6ff;
+    --pod-gp-accent: #0f9f7a;
+    --pod-gp-warning: #f79009;
+    --pod-gp-ink: var(--pod-ta-gray-900);
+    --pod-gp-muted: var(--pod-ta-gray-500);
+    --pod-gp-border: var(--pod-ta-gray-200);
+    --pod-gp-surface: #ffffff;
+    --pod-gp-soft: var(--pod-ta-gray-50);
+    color: var(--pod-ta-gray-700);
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page {
+    animation: pod-page-rise .32s ease both;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .pod-page-icon {
+    background: linear-gradient(135deg, rgba(37, 99, 235, .12), rgba(15, 159, 122, .10));
+    color: var(--pod-gp-brand);
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-card,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-card,
+body:not(.pod-auth-page) .pod-gate-pass-page .card,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-tabs-card,
+body:not(.pod-auth-page) .pod-gate-pass-page #gp-tabs-content,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-shell,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .ps-shell {
+    position: relative;
+    max-width: 100%;
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: var(--pod-gp-surface) !important;
+    box-shadow: var(--pod-ta-shadow-md) !important;
+    overflow: hidden;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-card::before,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-card::before,
+body:not(.pod-auth-page) .pod-gate-pass-page .card::before,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-shell::after,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-shell::after,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-shell::after,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-shell::before,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-shell::before,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, var(--pod-gp-brand), var(--pod-gp-accent), var(--pod-gp-warning));
+    opacity: .95;
+    pointer-events: none;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-shell::before,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-shell::before,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-shell::before {
+    opacity: .35 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .page-title,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-header,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-head,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-header,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-section-title,
+body:not(.pod-auth-page) .pod-gate-pass-page .card-header,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-header,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .ps-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 64px;
+    padding: 18px 20px !important;
+    border-bottom: 1px solid var(--pod-gp-border) !important;
+    background: linear-gradient(120deg, rgba(37, 99, 235, .09), rgba(15, 159, 122, .07) 58%, rgba(255, 255, 255, 0)) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .page-title h1,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-h2,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-h1,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-page-title,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-header-title h4,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-header-title h4,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-header-title h4,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-title h1,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-header-title h4,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .ps-header-title {
+    margin: 0 !important;
+    color: var(--pod-gp-ink) !important;
+    font-size: 17px !important;
+    font-weight: 800 !important;
+    line-height: 24px !important;
+    letter-spacing: 0 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .text-off,
+body:not(.pod-auth-page) .pod-gate-pass-page .text-muted,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-page-desc,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-header-sub,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-header-sub,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-header-sub,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-subtitle,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-header-sub,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .ps-header-sub {
+    color: var(--pod-gp-muted) !important;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-header-icon,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-header-icon,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-header-icon,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-title-icon,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-section-icon,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-info-icon,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-action-icon,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-header-icon,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .ps-stat-icon {
+    border: 1px solid rgba(37, 99, 235, .14) !important;
+    border-radius: 8px !important;
+    background: var(--pod-gp-brand-soft) !important;
+    color: var(--pod-gp-brand-dark) !important;
+    box-shadow: none !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .title-button-group,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-actions-row,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-commercial-actions,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-tools,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-action-btns,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-rop-action-btns,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-actions,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-scan-visitors-tools {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn {
+    min-height: 38px;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0 !important;
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background-color .16s ease, color .16s ease;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn:hover,
+body:not(.pod-auth-page) .pod-gate-pass-page .btn:focus {
+    transform: translateY(-1px);
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-primary,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-btn,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-btn-primary,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .btn-primary {
+    border-color: var(--pod-gp-brand) !important;
+    background: var(--pod-gp-brand) !important;
+    color: #ffffff !important;
+    box-shadow: 0 10px 18px rgba(37, 99, 235, .20) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-primary:hover,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-btn:hover,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-btn-primary:hover,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .btn-primary:hover {
+    border-color: var(--pod-gp-brand-dark) !important;
+    background: var(--pod-gp-brand-dark) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-default,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-btn,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-btn-secondary,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .btn-default {
+    border: 1px solid var(--pod-gp-border) !important;
+    background: #ffffff !important;
+    color: var(--pod-ta-gray-700) !important;
+    box-shadow: var(--pod-ta-shadow-xs) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-default:hover,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-btn:hover,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-btn-secondary:hover,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .btn-default:hover {
+    border-color: var(--pod-gp-brand) !important;
+    background: var(--pod-gp-brand-soft) !important;
+    color: var(--pod-gp-brand-dark) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-success {
+    border-color: #12b76a !important;
+    background: #12b76a !important;
+    color: #ffffff !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-warning {
+    border-color: #f79009 !important;
+    background: #fffaeb !important;
+    color: #b54708 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-danger {
+    border-color: #f04438 !important;
+    background: #f04438 !important;
+    color: #ffffff !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-sm,
+body:not(.pod-auth-page) .pod-gate-pass-page .btn-xs {
+    min-height: 32px;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-table-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .pod-table-shell,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpci-table-wrap,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpdi-table-wrap,
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-table-wrap,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-table-wrap,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-table-card,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-dt-panel,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-table-wrap,
+body:not(.pod-auth-page) .pod-gate-pass-page .table-responsive,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-table-wrap,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .table-responsive {
+    max-width: 100%;
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .dataTables_wrapper,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .dataTables_wrapper {
+    min-width: 0;
+    padding: 16px !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page table.display,
+body:not(.pod-auth-page) .pod-gate-pass-page table.table,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.display,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.table {
+    width: 100% !important;
+    margin-bottom: 0 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page table.display thead th,
+body:not(.pod-auth-page) .pod-gate-pass-page table.table thead th,
+body:not(.pod-auth-page) .pod-gate-pass-page table.dataTable thead th,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.display thead th,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.table thead th,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.dataTable thead th {
+    border-bottom: 1px solid var(--pod-gp-border) !important;
+    background: var(--pod-gp-soft) !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    white-space: nowrap;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page table.display tbody td,
+body:not(.pod-auth-page) .pod-gate-pass-page table.table tbody td,
+body:not(.pod-auth-page) .pod-gate-pass-page table.dataTable tbody td,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.display tbody td,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.table tbody td,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.dataTable tbody td {
+    border-top-color: var(--pod-ta-gray-100) !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 13px !important;
+    vertical-align: middle;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page table.display tbody tr,
+body:not(.pod-auth-page) .pod-gate-pass-page table.table tbody tr,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.display tbody tr,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.table tbody tr {
+    transition: background-color .16s ease, transform .16s ease;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page table.display tbody tr:hover,
+body:not(.pod-auth-page) .pod-gate-pass-page table.table tbody tr:hover,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.display tbody tr:hover,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate table.table tbody tr:hover {
+    background: var(--pod-gp-brand-soft) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page td.option,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate td.option {
+    white-space: normal !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page td.option a,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate td.option a,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal td.option a {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 !important;
+    border-color: var(--pod-gp-border);
+    border-radius: 8px;
+    color: var(--pod-ta-gray-500);
+    box-shadow: var(--pod-ta-shadow-xs);
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page td.option a:hover,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate td.option a:hover,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal td.option a:hover {
+    border-color: var(--pod-gp-brand);
+    background: var(--pod-gp-brand-soft);
+    color: var(--pod-gp-brand-dark);
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .form-control,
+body:not(.pod-auth-page) .pod-gate-pass-page .form-select,
+body:not(.pod-auth-page) .pod-gate-pass-page select.form-control,
+body:not(.pod-auth-page) .pod-gate-pass-page textarea.form-control,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .form-control,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .form-select,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-control,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-select {
+    min-height: 40px;
+    max-width: 100%;
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: var(--pod-ta-gray-700) !important;
+    font-size: 13px;
+    box-shadow: none !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .form-control:focus,
+body:not(.pod-auth-page) .pod-gate-pass-page .form-select:focus,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .form-control:focus,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .form-select:focus,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-control:focus,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-select:focus {
+    border-color: var(--pod-gp-brand) !important;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .12) !important;
+    outline: 0;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page label,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate label,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal label {
+    color: var(--pod-ta-gray-700);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .badge,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-chip,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-badge,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-badge,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .badge,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gp-portal-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    border: 1px solid transparent;
+    border-radius: 999px !important;
+    padding: 6px 9px !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    letter-spacing: 0 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .badge-soft-primary,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-badge-soft-primary,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-primary,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-submitted,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-department_approved,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-commercial_approved {
+    border-color: rgba(37, 99, 235, .18) !important;
+    background: var(--pod-gp-brand-soft) !important;
+    color: var(--pod-gp-brand-dark) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .badge-soft-success,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-badge-soft-success,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-success,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-rop_approved,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-issued {
+    border-color: #a6f4c5 !important;
+    background: #ecfdf3 !important;
+    color: #027a48 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .badge-soft-warning,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-badge-soft-warning,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge-soft-info,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-badge-soft-info,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-warning,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-info,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-returned {
+    border-color: #fedf89 !important;
+    background: #fffaeb !important;
+    color: #b54708 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .badge-soft-danger,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-badge-soft-danger,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-danger,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-status-rejected {
+    border-color: #fecdca !important;
+    background: #fef3f2 !important;
+    color: #b42318 !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .badge-soft-secondary,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-badge-soft-secondary,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-light,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-secondary,
+body:not(.pod-auth-page) .pod-gate-pass-page .badge.bg-dark {
+    border-color: var(--pod-ta-gray-200) !important;
+    background: var(--pod-ta-gray-100) !important;
+    color: var(--pod-ta-gray-700) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-grid,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-summary,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-action-card .card-body,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-scan-visitor-checks {
+    min-width: 0;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-info,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-stat-card,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-summary-item,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-scan-visitor-check,
+body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .ps-stat-card {
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    box-shadow: var(--pod-ta-shadow-xs) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gpro-filter-panel {
+    border-color: var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: var(--pod-gp-soft) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-hub-nav-inner,
+body:not(.pod-auth-page) .pod-gate-pass-page #gp-tabs.gp-portal-nav {
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    box-shadow: var(--pod-ta-shadow-xs) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-hub-nav-item,
+body:not(.pod-auth-page) .pod-gate-pass-page #gp-tabs.gp-portal-nav .nav-link {
+    border-radius: 8px !important;
+    color: var(--pod-ta-gray-600) !important;
+    font-weight: 800;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-hub-nav-item.is-active,
+body:not(.pod-auth-page) .pod-gate-pass-page #gp-tabs.gp-portal-nav .nav-link.active {
+    border-color: var(--pod-gp-brand) !important;
+    background: var(--pod-gp-brand) !important;
+    color: #ffffff !important;
+    box-shadow: 0 10px 18px rgba(37, 99, 235, .20) !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-hero {
+    border-radius: 8px !important;
+    background: #ffffff !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-title {
+    font-size: 24px !important;
+    line-height: 31px !important;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-hero-top,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-title-row,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-badge-row,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-meta,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-title-block,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-title,
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-hero-aside {
+    min-width: 0;
+}
+
+body:not(.pod-auth-page) .pod-gate-pass-page .gp-dot {
+    color: var(--pod-ta-gray-300);
+}
+
+body:not(.pod-auth-page) .modal-dialog.pod-gate-pass-modal-dialog {
+    max-width: min(920px, calc(100vw - 32px));
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal {
+    --pod-gp-brand: #2563eb;
+    --pod-gp-brand-dark: #1d4ed8;
+    --pod-gp-brand-soft: #eff6ff;
+    --pod-gp-accent: #0f9f7a;
+    --pod-gp-ink: var(--pod-ta-gray-900);
+    --pod-gp-muted: var(--pod-ta-gray-500);
+    --pod-gp-border: var(--pod-ta-gray-200);
+    --pod-gp-surface: #ffffff;
+    --pod-gp-soft: var(--pod-ta-gray-50);
+    overflow: hidden;
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    box-shadow: 0 24px 64px rgba(16, 24, 40, .22) !important;
+    animation: pod-page-rise .24s ease both;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-header {
+    padding: 18px 20px !important;
+    border-bottom: 1px solid var(--pod-gp-border) !important;
+    background: linear-gradient(120deg, rgba(37, 99, 235, .10), rgba(15, 159, 122, .08) 62%, #ffffff) !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-title,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal h4,
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal h5 {
+    color: var(--pod-ta-gray-900) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-body {
+    max-height: min(72vh, 700px);
+    padding: 20px !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: #ffffff !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .table-responsive {
+    max-width: 100%;
+    border: 1px solid var(--pod-gp-border) !important;
+    border-radius: 8px !important;
+    overflow-x: auto !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-footer {
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 20px !important;
+    border-top: 1px solid var(--pod-gp-border) !important;
+    background: var(--pod-ta-gray-50) !important;
+}
+
+body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .btn {
+    min-height: 38px;
+    border-radius: 8px !important;
+    font-weight: 800 !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page,
+body.color-1E202D:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal {
+    --pod-gp-ink: #ffffff;
+    --pod-gp-muted: #98a2b3;
+    --pod-gp-border: var(--pod-topbar-border);
+    --pod-gp-surface: var(--pod-ta-gray-900);
+    --pod-gp-soft: rgba(255, 255, 255, .04);
+    color: #d0d5dd;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-card,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-pro-card,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-card,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-card,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .card,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .card,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gpdi-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gpdi-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gpci-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gpci-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gpro-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gpro-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-shell,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .table-responsive,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .table-responsive,
+body.color-1E202D:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-shell,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .gpr-shell {
+    border-color: var(--pod-gp-border) !important;
+    background: var(--pod-gp-surface) !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .page-title,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .page-title,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-header,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-head,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-head,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-header,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .gp-section-title,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .gp-section-title,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .card-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .card-header {
+    border-bottom-color: var(--pod-gp-border) !important;
+    background: rgba(255, 255, 255, .04) !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page table.display thead th,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page table.display thead th,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page table.table thead th,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page table.table thead th,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page table.display tbody td,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page table.display tbody td,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page table.table tbody td,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page table.table tbody td {
+    border-color: var(--pod-gp-border) !important;
+    background: transparent !important;
+    color: #d0d5dd !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .form-control,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .form-control,
+body.color-1E202D:not(.pod-auth-page) .pod-gate-pass-page .form-select,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .pod-gate-pass-page .form-select,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-control,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-control,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-select,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal .form-select {
+    border-color: var(--pod-gp-border) !important;
+    background: rgba(255, 255, 255, .04) !important;
+    color: #d0d5dd !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-body,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-body {
+    border-color: var(--pod-gp-border) !important;
+    background: var(--pod-ta-gray-900) !important;
+    color: #d0d5dd !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-header,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-header,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-footer,
+body:is(.color-1d2632, .color-2e4053, .color-404040, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-footer {
+    border-color: var(--pod-gp-border) !important;
+    background: rgba(255, 255, 255, .04) !important;
+}
+
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-title,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-title,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal h4,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal h4,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal h5,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal h5,
+body.color-1E202D:not(.pod-auth-page) .modal-content.pod-gate-pass-modal label,
+body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-auth-page) .modal-content.pod-gate-pass-modal label {
+    color: #ffffff !important;
+}
+
+@media (max-width: 767px) {
+    body:not(.pod-auth-page) .pod-gate-pass-page {
+        box-sizing: border-box;
+        min-width: 0;
+        overflow-x: hidden;
+        padding: 18px 14px 28px;
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .page-title,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-header,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-head,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-header,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-section-title,
+    body:not(.pod-auth-page) .pod-gate-pass-page .card-header {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 16px !important;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .title-button-group,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-actions-row,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-commercial-actions,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-tools,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-action-btns,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-rop-action-btns,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-actions,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-scan-visitors-tools {
+        justify-content: flex-start !important;
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .title-button-group .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-actions-row .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-commercial-actions .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-req-tools .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-action-btns .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-rop-action-btns .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-blocked-actions .btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sec-scan-visitors-tools .btn {
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-pro-table-shell,
+    body:not(.pod-auth-page) .pod-gate-pass-page .pod-table-shell,
+    body:not(.pod-auth-page) .pod-gate-pass-page .table-responsive,
+    body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .table-responsive {
+        margin-right: 0;
+        margin-left: 0;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .dataTables_wrapper,
+    body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .dataTables_wrapper {
+        padding: 12px !important;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .dataTables_filter,
+    body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .dataTables_filter {
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .dataTables_filter input,
+    body:not(.pod-auth-page) .pod-focus-fragment.pod-domain-gate .dataTables_filter input {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-hero-top,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-hero-aside,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-title-row,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-badge-row,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-detail-meta,
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-sub {
+        align-items: flex-start;
+        justify-content: flex-start;
+        width: 100%;
+        text-align: left !important;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-dot {
+        display: none;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .gp-portal-title {
+        font-size: 20px !important;
+        line-height: 27px !important;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .input-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    body:not(.pod-auth-page) .pod-gate-pass-page .input-group .form-control,
+    body:not(.pod-auth-page) .pod-gate-pass-page .input-group .input-group-btn,
+    body:not(.pod-auth-page) .pod-gate-pass-page .input-group .btn {
+        width: 100%;
+    }
+
+    body:not(.pod-auth-page) .modal-dialog.pod-gate-pass-modal-dialog {
+        max-width: calc(100vw - 16px);
+        margin-right: 8px;
+        margin-left: 8px;
+    }
+
+    body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-body {
+        max-height: calc(100vh - 150px);
+        padding: 16px !important;
+    }
+
+    body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-footer {
+        align-items: stretch;
+        flex-direction: column-reverse;
+        padding: 14px 16px !important;
+    }
+
+    body:not(.pod-auth-page) .modal-content.pod-gate-pass-modal .modal-footer .btn {
+        width: 100%;
     }
 }

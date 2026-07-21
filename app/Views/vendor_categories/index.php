@@ -9,21 +9,21 @@ if (!empty($can_create_vendor_categories)) {
 }
 ?>
 
- <div id="page-content" class="page-wrapper clearfix pod-page-shell pod-vendor-page pod-vendor-master-page">
+ <div id="page-content" class="page-wrapper clearfix pod-page-shell pod-master-page pod-vendor-page pod-vendor-master-page">
     <?php
-    echo view("includes/pod_page_header", [
+    echo view("includes/master_data_page_header", [
         "title" => app_lang("vendor_categories"),
         "subtitle" => "Maintain the top-level vendor category structure used for registration and specialties.",
         "icon" => "folder",
         "breadcrumbs" => [
-            ["label" => app_lang("vendors_master")],
+            ["label" => app_lang("master_data")],
             ["label" => app_lang("vendor_categories")]
         ],
         "actions" => $vendor_page_actions
     ]);
     ?>
 
-     <div class="card pod-vendor-card">
+     <div class="card pod-vendor-card pod-master-card">
         <div class="pod-vendor-card-header">
             <div>
                 <h2 class="pod-vendor-card-title"><?php echo app_lang('vendor_categories'); ?></h2>

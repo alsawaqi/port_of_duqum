@@ -1,16 +1,31 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="card gp-pro-card">
-        <div class="page-title clearfix">
-            <h1><?php echo app_lang('regions'); ?></h1>
-
-            <div class="title-button-group">
-            <?php if (!empty($can_create_regions)) { ?>
-    <?php echo modal_anchor(get_uri("regions/modal_form"),
+<?php
+$master_data_actions = "";
+if (!empty($can_create_regions)) {
+    $master_data_actions = modal_anchor(
+        get_uri("regions/modal_form"),
         "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_region'),
         array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_region'))
-    ); ?>
-<?php } ?>
+    );
+}
+?>
 
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-master-page">
+    <?php echo view("includes/master_data_page_header", [
+        "title" => app_lang("regions"),
+        "subtitle" => "Maintain regional location records under each country for accurate filtering and registration.",
+        "icon" => "map",
+        "breadcrumbs" => [
+            ["label" => app_lang("master_data")],
+            ["label" => app_lang("regions")]
+        ],
+        "actions" => $master_data_actions
+    ]); ?>
+
+    <div class="card gp-pro-card pod-master-card">
+        <div class="page-title clearfix">
+            <div>
+                <h1><?php echo app_lang('regions'); ?></h1>
+                <p class="pod-master-card-subtitle">Connect region names and codes to their parent countries.</p>
             </div>
         </div>
 

@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+<?php echo view("includes/gate_pass_page_header", [
+    "title" => app_lang("gate_pass_commercial_requests"),
+    "subtitle" => "Review commercial-stage requests, set fees, process waivers, and return incomplete applications.",
+    "icon" => "credit-card",
+    "breadcrumbs" => [
+        ["label" => "Gate Pass"],
+        ["label" => app_lang("gate_pass_commercial_requests")]
+    ]
+]); ?>
 <div class="gp-commercial-inbox p15">
     <style>
         .gp-commercial-inbox {

@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix gp-details-page gp-sec-hub-page">
+<div id="page-content" class="page-wrapper clearfix gp-details-page gp-sec-hub-page pod-page-shell pod-gate-pass-page">
     <?php
     $status = $request->status ?? "";
     $stage  = $request->stage ?? "";
@@ -22,6 +22,17 @@
 
     $show_review_btn = ($status === "commercial_approved" && $stage === "security");
     ?>
+
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_request_details"),
+        "subtitle" => "Review security-stage request data, visitor status, gate controls, and scan readiness.",
+        "icon" => "shield",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_security_nav_requests"), "url" => get_uri("gate_pass_security_inbox")],
+            ["label" => "#" . ($request->reference ?? "")]
+        ]
+    ]); ?>
 
     <div class="gp-sec-hub-page-inner p15">
         <?php echo view("gate_pass_security_inbox/_hub_nav", ["active" => $security_nav_active ?? "requests"]); ?>

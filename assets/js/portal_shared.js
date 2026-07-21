@@ -302,6 +302,30 @@ var PortalUI = (function ($) {
 
     function _domainFromText(text) {
         text = String(text || '').toLowerCase();
+        if (
+            text.indexOf('pod-reports') !== -1 ||
+            text.indexOf('pod-report') !== -1 ||
+            text.indexOf('pod_reports') !== -1 ||
+            text.indexOf('operational reports') !== -1 ||
+            text.indexOf('operational reporting') !== -1
+        ) {
+            return 'reports';
+        }
+        if (
+            text.indexOf('pod-master') !== -1 ||
+            text.indexOf('master_data') !== -1 ||
+            text.indexOf('master data') !== -1 ||
+            text.indexOf('gate_pass_companies') !== -1 ||
+            text.indexOf('gate_pass_departments') !== -1 ||
+            text.indexOf('country') !== -1 ||
+            text.indexOf('regions') !== -1 ||
+            text.indexOf('cities') !== -1 ||
+            text.indexOf('legal_types') !== -1 ||
+            text.indexOf('vendor_categories') !== -1 ||
+            text.indexOf('vendor_sub_categories') !== -1
+        ) {
+            return 'master';
+        }
         if (text.indexOf('gate_pass') !== -1 || text.indexOf('gate-pass') !== -1 || text.indexOf('gp-') !== -1) {
             return 'gate';
         }
@@ -325,6 +349,10 @@ var PortalUI = (function ($) {
     function _nearestModuleRoot($el) {
         var selector = [
             '#page-content',
+            '.pod-reports-page',
+            '.pod-report-page',
+            '.pod-gate-pass-page',
+            '.ggp-page',
             '.gp-portal-home',
             '.gp-requests',
             '.vp-overview',
@@ -338,6 +366,7 @@ var PortalUI = (function ($) {
             '.ptw-apps',
             '.ptw-wizard-wrap',
             '.ptw-detail-shell',
+            '.pod-master-page',
             '.tender-wizard-page',
             '.tender-manager-review-page'
         ].join(', ');
@@ -386,9 +415,51 @@ var PortalUI = (function ($) {
             var $table = $(this);
             var domain = _domainFromText($table.attr('id') || $table.attr('class') || window.location.pathname);
             var $root = _nearestModuleRoot($table);
+            if ($root.hasClass('pod-reports-page') || $root.hasClass('pod-report-page')) {
+                domain = 'reports';
+            } else if ($root.hasClass('pod-master-page')) {
+                domain = 'master';
+            }
             _markRoot($root, domain);
 
             $table.closest('.table-responsive, .dataTables_wrapper').addClass('pod-table-shell');
+        });
+    }
+
+    function _markGatePassModals() {
+        $('.modal-content').each(function () {
+            var $modal = $(this);
+            if ($modal.hasClass('pod-gate-pass-modal') || $modal.hasClass('pod-master-modal')) return;
+
+            var masterDataSelector = [
+                'form[action*="gate_pass_companies"]',
+                'form[action*="gate_pass_departments"]',
+                '#company-form',
+                '#department-form'
+            ].join(', ');
+
+            if ($modal.find(masterDataSelector).length) return;
+
+            var gatePassSelector = [
+                'form[action*="gate_pass_"]',
+                'form[action*="gate_pass/"]',
+                'form[action*="guest_gate_pass"]',
+                'form[id*="gate-pass"]',
+                'form[id*="gp-"]',
+                '[id*="gate-pass"]',
+                '[id*="gp-"]',
+                '[class*="gate-pass"]',
+                '[class*="gp-"]',
+                'a[href*="gate_pass_"]',
+                'a[href*="gate_pass/"]',
+                'a[href*="guest_gate_pass"]'
+            ].join(', ');
+
+            if ($modal.find(gatePassSelector).length || _domainFromText($modal.text().slice(0, 1200)) === 'gate') {
+                $modal.addClass('pod-gate-pass-modal');
+                $modal.closest('.modal-dialog').addClass('pod-gate-pass-modal-dialog');
+                $modal.find('.table-responsive').addClass('pod-table-shell');
+            }
         });
     }
 
@@ -439,12 +510,44 @@ var PortalUI = (function ($) {
         });
     }
 
+    function _markMasterDataModals() {
+        $('.modal-content').each(function () {
+            var $modal = $(this);
+            if ($modal.hasClass('pod-master-modal')) return;
+
+            var masterSelector = [
+                'form[action*="gate_pass_companies"]',
+                'form[action*="gate_pass_departments"]',
+                'form[action*="legal_types"]',
+                'form[action*="vendor_categories"]',
+                'form[action*="vendor_sub_categories"]',
+                'form[action*="country"]',
+                'form[action*="regions"]',
+                'form[action*="cities"]',
+                '#company-form',
+                '#department-form',
+                '#legal-types-form',
+                '#vendor-category-form',
+                '#vendor-sub-category-form',
+                '#country-form',
+                '#regions-form',
+                '#cities-form'
+            ].join(', ');
+
+            if ($modal.find(masterSelector).length || _domainFromText($modal.text().slice(0, 1200)) === 'master') {
+                $modal.addClass('pod-master-modal');
+                $modal.closest('.modal-dialog').addClass('pod-master-modal-dialog');
+                $modal.find('.table-responsive').addClass('pod-table-shell');
+            }
+        });
+    }
+
     function _markStaticScreens() {
         var pathDomain = _domainFromText(window.location.pathname);
 
         $('#page-content').each(function () {
             var $page = $(this);
-            var domain = pathDomain || _domainFromText($page.attr('class') || '');
+            var domain = ($page.hasClass('pod-reports-page') || $page.hasClass('pod-report-page')) ? 'reports' : ($page.hasClass('pod-master-page') ? 'master' : (pathDomain || _domainFromText($page.attr('class') || '')));
             if (!domain && $page.find('[id*="tender"], [id*="ptw"], [id*="gate-pass"], [id*="vendor"], [class*="tender-"], [class*="ptw-"], [class*="vendor"], [class*="gp-"]').length) {
                 domain = _domainFromText(($page.html() || '').slice(0, 5000));
             }
@@ -454,6 +557,10 @@ var PortalUI = (function ($) {
         });
 
         $([
+            '.pod-gate-pass-page',
+            '.pod-reports-page',
+            '.pod-report-page',
+            '.ggp-page',
             '.gp-portal-home',
             '.gp-requests',
             '.vp-overview',
@@ -467,11 +574,12 @@ var PortalUI = (function ($) {
             '.ptw-apps',
             '.ptw-wizard-wrap',
             '.ptw-detail-shell',
+            '.pod-master-page',
             '.tender-wizard-page',
             '.tender-manager-review-page'
         ].join(', ')).each(function () {
             var $root = $(this);
-            var domain = _domainFromText($root.attr('class') || '') || pathDomain;
+            var domain = ($root.hasClass('pod-reports-page') || $root.hasClass('pod-report-page')) ? 'reports' : ($root.hasClass('pod-master-page') ? 'master' : (_domainFromText($root.attr('class') || '') || pathDomain));
             _markRoot($root, domain);
         });
     }
@@ -479,8 +587,10 @@ var PortalUI = (function ($) {
     function _polishFocusedUi() {
         _markStaticScreens();
         _markTables();
+        _markGatePassModals();
         _markTenderModals();
         _markPtwModals();
+        _markMasterDataModals();
 
         $('[data-feather]').each(function () {
             var $icon = $(this);

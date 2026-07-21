@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+  <?php echo view("includes/gate_pass_page_header", [
+    "title" => "Gate Pass Fee Rules",
+    "subtitle" => "Configure duration-based fees, waivers, and active charging rules for gate pass requests.",
+    "icon" => "credit-card",
+    "breadcrumbs" => [
+      ["label" => "Gate Pass"],
+      ["label" => "Gate Pass Fee Rules"]
+    ]
+  ]); ?>
   <div class="card gp-pro-card">
     <div class="page-title clearfix">
       <h1>Gate Pass Fee Rules</h1>

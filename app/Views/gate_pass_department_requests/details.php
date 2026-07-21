@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix gp-details-page">
+<div id="page-content" class="page-wrapper clearfix gp-details-page pod-page-shell pod-gate-pass-page">
     <?php
     $status = $request->status ?? "";
     $stage  = $request->stage ?? "";
@@ -25,6 +25,17 @@
 
     $show_review_btn = ($status === "submitted" || $status === "returned");
     ?>
+
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_request_details"),
+        "subtitle" => "Review department-stage request information, visitors, vehicles, and approval history.",
+        "icon" => "clipboard",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_department_requests"), "url" => get_uri("gate_pass_department_requests")],
+            ["label" => "#" . ($request->reference ?? "")]
+        ]
+    ]); ?>
 
     <!-- Header / Summary -->
     <div class="card gp-card mb15">

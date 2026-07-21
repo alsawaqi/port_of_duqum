@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_purposes"),
+        "subtitle" => "Maintain the approved visit purposes available when creating gate pass requests.",
+        "icon" => "clipboard",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_purposes")]
+        ]
+    ]); ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("gate_pass_purposes"); ?></h1>

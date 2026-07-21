@@ -3,6 +3,16 @@
  * Gate Pass Portal — main shell (requests + dashboard tabs).
  */
 ?>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+<?php echo view("includes/gate_pass_page_header", [
+    "title" => app_lang("gate_pass_portal"),
+    "subtitle" => app_lang("gate_pass_portal_home_subtitle"),
+    "icon" => "shield",
+    "breadcrumbs" => [
+        ["label" => "Gate Pass"],
+        ["label" => app_lang("gate_pass_portal")]
+    ]
+]); ?>
 <div class="gp-portal-home clearfix">
     <style>
         .gp-portal-home {
@@ -252,6 +262,7 @@
         <div class="tab-pane fade show active" id="gp-requests" role="tabpanel" aria-labelledby="gp-tab-requests-link"></div>
         <div class="tab-pane fade" id="gp-dashboard" role="tabpanel" aria-labelledby="gp-tab-dashboard-link"></div>
     </div>
+</div>
 </div>
 
 <script>

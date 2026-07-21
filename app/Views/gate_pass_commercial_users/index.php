@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_commercial_users"),
+        "subtitle" => "Manage commercial reviewers responsible for fees, waivers, and commercial decisions.",
+        "icon" => "credit-card",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_commercial_users")]
+        ]
+    ]); ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("gate_pass_commercial_users"); ?></h1>

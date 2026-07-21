@@ -1,18 +1,31 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
-    <div class="card gp-pro-card">
-        <div class="page-title clearfix">
-            <h1><?php echo app_lang('cities'); ?></h1>
+<?php
+$master_data_actions = "";
+if (!empty($can_create_cities)) {
+    $master_data_actions = modal_anchor(
+        get_uri("cities/modal_form"),
+        "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_city'),
+        array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_city'))
+    );
+}
+?>
 
-            <div class="title-button-group">
-                <?php if (!empty($can_create_cities)) { ?>
-                    <?php
-                    echo modal_anchor(
-                        get_uri("cities/modal_form"),
-                        "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_city'),
-                        array("class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_city'))
-                    );
-                    ?>
-                <?php } ?>
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-master-page">
+    <?php echo view("includes/master_data_page_header", [
+        "title" => app_lang("cities"),
+        "subtitle" => "Maintain city records linked to countries and regions for clean location selection.",
+        "icon" => "map-pin",
+        "breadcrumbs" => [
+            ["label" => app_lang("master_data")],
+            ["label" => app_lang("cities")]
+        ],
+        "actions" => $master_data_actions
+    ]); ?>
+
+    <div class="card gp-pro-card pod-master-card">
+        <div class="page-title clearfix">
+            <div>
+                <h1><?php echo app_lang('cities'); ?></h1>
+                <p class="pod-master-card-subtitle">Manage city names, codes, status, and their region hierarchy.</p>
             </div>
         </div>
 

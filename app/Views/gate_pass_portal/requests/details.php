@@ -70,7 +70,17 @@ if ($return_stage_label === $return_stage_lang_key) {
 }
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-portal-pro gp-detail-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-portal-pro gp-detail-page pod-page-shell pod-gate-pass-page">
+
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_request_details"),
+        "subtitle" => "Track request progress, visitor and vehicle records, approvals, payments, and issued QR passes.",
+        "icon" => "clipboard",
+        "breadcrumbs" => [
+            ["label" => app_lang("gate_pass_portal"), "url" => get_uri("gate_pass_portal")],
+            ["label" => "#" . ($request->reference ?? "")]
+        ]
+    ]); ?>
 
     <div class="card gp-card gp-detail-hero mb15">
         <div class="gp-detail-hero-top">

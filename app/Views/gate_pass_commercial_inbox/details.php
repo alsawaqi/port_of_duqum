@@ -60,7 +60,18 @@ $step_labels = [
 ];
 ?>
 
-<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-detail-page gp-commercial-detail">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-detail-page gp-commercial-detail pod-page-shell pod-gate-pass-page">
+
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_request_details"),
+        "subtitle" => app_lang("gate_pass_commercial_detail_hint"),
+        "icon" => "credit-card",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_commercial_inbox"), "url" => get_uri("gate_pass_commercial_inbox")],
+            ["label" => "#" . ($request->reference ?? "")]
+        ]
+    ]); ?>
 
     <nav class="gp-commercial-breadcrumb" aria-label="<?php echo app_lang('gate_pass_commercial_inbox'); ?>">
         <a href="<?php echo get_uri('gate_pass_commercial_inbox'); ?>" class="gp-commercial-breadcrumb-link">

@@ -1,4 +1,4 @@
-<div id="page-content" class="page-wrapper clearfix gp-details-page">
+<div id="page-content" class="page-wrapper clearfix gp-details-page pod-page-shell pod-gate-pass-page">
     <?php
     $status = $request->status ?? "";
     $stage  = $request->stage ?? "";
@@ -22,6 +22,17 @@
 
     $show_review_btn = ($status === "security_approved" && $stage === "rop");
     ?>
+
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_request_details"),
+        "subtitle" => "Review ROP-stage request information, visitor records, blocking checks, and issuance status.",
+        "icon" => "check-circle",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_rop_requests"), "url" => get_uri("gate_pass_rop_inbox")],
+            ["label" => "#" . ($request->reference ?? "")]
+        ]
+    ]); ?>
 
     <div class="card gp-card mb15">
         <div class="gp-header">

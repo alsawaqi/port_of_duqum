@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-sec-hub-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page gp-sec-hub-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_security_dashboard"),
+        "subtitle" => app_lang("gate_pass_security_dashboard_hint"),
+        "icon" => "activity",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_security_dashboard")]
+        ]
+    ]); ?>
     <div class="gp-sec-hub-page-inner p15">
         <?php echo view("gate_pass_security_inbox/_hub_nav", ["active" => $security_nav_active ?? "dashboard"]); ?>
 

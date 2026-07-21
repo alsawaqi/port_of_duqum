@@ -1,4 +1,13 @@
-<div id="page-content" class="page-wrapper clearfix gp-pro-page">
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_reasons"),
+        "subtitle" => "Manage reason codes used for returns, rejections, blocking, and operational notes.",
+        "icon" => "message-square",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_reasons")]
+        ]
+    ]); ?>
     <div class="card gp-pro-card">
         <div class="page-title clearfix gp-pro-title">
             <h1><?php echo app_lang("gate_pass_reasons"); ?></h1>
@@ -32,4 +41,3 @@ $(document).ready(function () {
     });
 });
 </script>
-
