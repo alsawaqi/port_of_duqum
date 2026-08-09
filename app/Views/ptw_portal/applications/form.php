@@ -180,7 +180,7 @@ function ptw_render_other_repeater(string $category, $definition, $response, arr
 
 // Determine which step has errors for auto-scroll
 $step_has_error = [1 => false, 2 => false, 3 => false, 4 => false, 5 => false, 6 => false];
-$step1_fields = ['company_name','applicant_name','applicant_position','contact_phone','contact_email'];
+$step1_fields = ['company_id','applicant_name','applicant_position','contact_phone','contact_email'];
 $step2_fields = ['work_description','work_from','work_to','exact_location','work_supervisor_name','supervisor_contact_details','total_workers'];
 $step6_fields = ['declaration_agreed','declaration_responsible_name','declaration_function','signature_file'];
 foreach ($step1_fields as $f) { if (isset($field_errors[$f])) $step_has_error[1] = true; }
@@ -429,17 +429,19 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Company Name <span class="text-danger">*</span></label>
                         <?php
-                        $selected_company = isset($old['company_name']) ? $old['company_name'] : ($app->company_name ?? '');
+                        $selected_company_id = isset($old['company_id'])
+                            ? (int)$old['company_id']
+                            : (int)($app->company_id ?? 0);
                         ?>
-                        <select name="company_name" class="form-select<?php echo ptw_input_class('company_name', $field_errors); ?>" required>
+                        <select name="company_id" class="form-select<?php echo ptw_input_class('company_id', $field_errors); ?>" required>
                             <option value="">— Select Company —</option>
                             <?php foreach (($companies_list ?? []) as $co): ?>
-                                <option value="<?php echo esc($co->name); ?>" <?php echo ($selected_company === $co->name) ? 'selected' : ''; ?>>
+                                <option value="<?php echo (int)$co->id; ?>" <?php echo ($selected_company_id === (int)$co->id) ? 'selected' : ''; ?>>
                                     <?php echo esc($co->name); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <?php echo ptw_field_err('company_name', $field_errors); ?>
+                        <?php echo ptw_field_err('company_id', $field_errors); ?>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Applicant Name <span class="text-danger">*</span></label>
@@ -1080,6 +1082,7 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
         var el = document.querySelector('[name="' + name + '"]');
         if (!el) return '—';
         if (el.type === 'checkbox') return el.checked ? 'Yes ✓' : 'No';
+        if (el.tagName === 'SELECT') return el.options[el.selectedIndex]?.text || '—';
         return el.value || '—';
     }
     function setRev(id, name) {
@@ -1087,7 +1090,8 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
         if (el) el.textContent = getVal(name || id);
     }
     function populateReview() {
-        var fields = ['company_name','applicant_name','applicant_position','contact_phone','contact_email',
+        setRev('company_name', 'company_id');
+        var fields = ['applicant_name','applicant_position','contact_phone','contact_email',
                       'work_description','work_from','work_to','exact_location','work_supervisor_name',
                       'total_workers','declaration_responsible_name','declaration_function'];
         fields.forEach(function(f) { setRev(f); });

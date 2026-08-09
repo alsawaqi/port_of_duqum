@@ -18,6 +18,8 @@ use App\Models\Vendor_document_types_model;
 use App\Models\Vendor_update_requests_model;
 use App\Models\Vendor_bank_accounts_model;
 use App\Models\Vendor_categories_model;
+use App\Models\Vendor_users_model;
+use App\Models\Auth_security_model;
 use App\Models\Tenders_model;
 use App\Models\Tender_documents_model;
 use App\Models\Tender_bids_model;
@@ -28,6 +30,11 @@ use App\Models\Tender_communications_model;
 use App\Models\Tender_evaluations_model;
 use App\Models\Tender_rfq_details_model;
 use App\Models\Tender_rfq_items_model;
+use App\Libraries\Vendor_contact_access;
+use App\Libraries\Vendor_portal_authorizer;
+use App\Libraries\Payments\Eservice_payment_manager;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 
 class Vendor_portal extends Security_Controller
@@ -59,6 +66,12 @@ class Vendor_portal extends Security_Controller
     protected $Tender_evaluations_model;
 
     protected $Vendor_bank_accounts_model;
+    protected $Vendor_contact_access;
+    protected $Vendor_users_model;
+    protected $Auth_security_model;
+    protected $Vendor_portal_authorizer;
+    private $active_vendor_membership = null;
+    private bool $active_vendor_membership_resolved = false;
     // cached per-request (avoid repeating lock checks)
     private array $vendor_module_locked_cache = [];
 
@@ -75,6 +88,10 @@ class Vendor_portal extends Security_Controller
 
         $this->Vendors_model = new Vendors_model();
         $this->Vendor_contacts_model = new Vendor_contacts_model();
+        $this->Vendor_contact_access = new Vendor_contact_access($this->db);
+        $this->Vendor_users_model = new Vendor_users_model();
+        $this->Auth_security_model = new Auth_security_model();
+        $this->Vendor_portal_authorizer = new Vendor_portal_authorizer();
 
         $this->Vendor_branches_model = new Vendor_branches_model();
         $this->Country_model = new Country_model();
@@ -236,11 +253,38 @@ class Vendor_portal extends Security_Controller
         );
     }
 
+    public function preview_tender_document($id = 0)
+    {
+        $context = $this->_get_vendor_tender_document_context((int) $id);
+        $this->_audit_tender_document_access($context, "preview");
+
+        return $this->template->view(
+            "tender_procurement_manager_inbox/file_preview",
+            $this->_make_vendor_tender_document_preview_data(
+                $context["doc"],
+                $context["full_path"],
+                get_uri("vendor_portal/view_tender_document/" . (int) $id)
+            )
+        );
+    }
+
+    public function view_tender_document($id = 0)
+    {
+        $context = $this->_get_vendor_tender_document_context((int) $id);
+        $this->_audit_tender_document_access($context, "view");
+        return $this->_serve_vendor_tender_document($context["doc"], $context["full_path"], false);
+    }
+
     public function download_tender_document($id = 0)
     {
-        $vendor_id = $this->_require_vendor_tender_access();
-        $id = (int) $id;
+        $context = $this->_get_vendor_tender_document_context((int) $id);
+        $this->_audit_tender_document_access($context, "download");
+        return $this->_serve_vendor_tender_document($context["doc"], $context["full_path"], true);
+    }
 
+    private function _get_vendor_tender_document_context(int $id): array
+    {
+        $vendor_id = $this->_require_vendor_tender_access();
         if (!$id) {
             show_404();
         }
@@ -255,21 +299,134 @@ class Vendor_portal extends Security_Controller
             app_redirect("forbidden");
         }
 
+        // Paid tender documents are available only after a provider-verified
+        // settlement and for 72 hours from that settlement.
+        if ($this->_is_tender_fee_required($tender)) {
+            $paidAt = trim((string) ($tender->fee_paid_at ?? ""));
+            if (!$this->_is_tender_fee_paid($tender) || $paidAt === "") {
+                $this->_audit_tender_document_denial($vendor_id, (int) $doc->tender_id, $id, "payment_required");
+                app_redirect("forbidden");
+            }
+
+            try {
+                $paid = new \DateTimeImmutable($paidAt, new \DateTimeZone("UTC"));
+                $downloadExpires = $paid->modify("+72 hours");
+            } catch (\Throwable $exception) {
+                $this->_audit_tender_document_denial($vendor_id, (int) $doc->tender_id, $id, "invalid_payment_time");
+                app_redirect("forbidden");
+            }
+            if ($downloadExpires <= new \DateTimeImmutable("now", new \DateTimeZone("UTC"))) {
+                $this->_audit_tender_document_denial($vendor_id, (int) $doc->tender_id, $id, "download_window_expired");
+                app_redirect("forbidden");
+            }
+        }
+
         if ((int) ($doc->time_limited ?? 0) === 1 && !empty($doc->expires_in_hours) && !empty($doc->created_at)) {
-            $expires_at = strtotime($doc->created_at . " +" . (int) $doc->expires_in_hours . " hours");
+            $expires_at = strtotime((string) $doc->created_at . " +" . (int) $doc->expires_in_hours . " hours");
             if ($expires_at && $expires_at < time()) {
                 app_redirect("forbidden");
             }
         }
 
-        $full_path = getcwd() . "/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_document_path($doc);
+        if (!$full_path || !is_file($full_path)) {
             show_404();
         }
 
-        $download_name = $doc->original_name ?: basename($full_path);
+        return ["doc" => $doc, "tender" => $tender, "vendor_id" => $vendor_id, "full_path" => $full_path];
+    }
 
-        return $this->response->download($full_path, null)->setFileName($download_name);
+    private function _audit_tender_document_access(array $context, string $mode): void
+    {
+        $this->Auth_security_model->audit(
+            "tender_document_" . $mode,
+            "success",
+            (int) $this->login_user->id,
+            "",
+            [
+                "vendor_id" => (int) ($context["vendor_id"] ?? 0),
+                "tender_id" => (int) ($context["doc"]->tender_id ?? 0),
+                "document_id" => (int) ($context["doc"]->id ?? 0),
+            ]
+        );
+    }
+
+    private function _audit_tender_document_denial(
+        int $vendorId,
+        int $tenderId,
+        int $documentId,
+        string $reason
+    ): void {
+        $this->Auth_security_model->audit(
+            "tender_document_access",
+            "denied",
+            (int) $this->login_user->id,
+            "",
+            [
+                "vendor_id" => $vendorId,
+                "tender_id" => $tenderId,
+                "document_id" => $documentId,
+                "reason" => $reason,
+            ]
+        );
+    }
+
+    private function _resolve_tender_document_path($doc): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', (string)($doc->path ?? '')), '/');
+        return (new Upload_security())->resolveStoredFile($relative, 'tender_documents');
+    }
+
+    private function _resolve_protected_upload_path(string $relative, string $allowedPrefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $allowedPrefix = trim(str_replace('\\', '/', $allowedPrefix), '/') . '/';
+        if (!str_starts_with($relative, $allowedPrefix)) {
+            return null;
+        }
+
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($allowedPrefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $root = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+
+        return str_starts_with($candidateCheck, $root) ? $candidate : null;
+    }
+
+    private function _make_vendor_tender_document_preview_data($doc, string $full_path, string $file_url): array
+    {
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = strtolower((string) ($mime ?: "application/octet-stream"));
+        $image_mimes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+
+        return [
+            "file_url" => $file_url,
+            "is_image_file" => in_array($mime, $image_mimes, true),
+            "is_iframe_preview_available" => $mime === "application/pdf",
+            "is_google_preview_available" => false,
+            "is_viewable_video_file" => false,
+            "is_google_drive_file" => false,
+        ];
+    }
+
+    private function _serve_vendor_tender_document($doc, string $full_path, bool $download)
+    {
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = $mime ?: "application/octet-stream";
+        $name = str_replace(["\r", "\n", '"'], "", (string) ($doc->original_name ?: basename($full_path)));
+        $inline_mimes = ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+        $inline = !$download && in_array(strtolower($mime), $inline_mimes, true);
+
+        $response = $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setContentType($mime, "")
+            ->setHeader("X-Content-Type-Options", "nosniff");
+
+        return $inline ? $response->inline() : $response;
     }
 
     public function pay_tender_fee()
@@ -278,10 +435,8 @@ class Vendor_portal extends Security_Controller
             "tender_id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_tender_access();
+        $vendor_id = $this->_require_vendor_tender_participation_access();
         $tender_id = (int) $this->request->getPost("tender_id");
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
         if (!$tender) {
@@ -305,46 +460,22 @@ class Vendor_portal extends Security_Controller
             ]);
         }
 
-        $fee_payments = $this->db->prefixTable("tender_fee_payments");
-        $amount = $this->_tender_fee_amount($tender);
-        $now = date("Y-m-d H:i:s");
-        $reference = "BYPASS-" . $tender_id . "-" . $vendor_id . "-" . time();
+        $return_url = get_uri("vendor_portal/tender/" . $tender_id);
+        $payments = new Eservice_payment_manager($this->db);
+        $result = $payments->start(
+            Eservice_payment_manager::TENDER_FEE,
+            $tender_id,
+            $vendor_id,
+            (int) $this->login_user->id,
+            trim((string) ($tender->tender_fee ?? "0")),
+            "Tender fee " . ((string) ($tender->title ?? "#" . $tender_id)),
+            $return_url . "?payment=processing&session_id={CHECKOUT_SESSION_ID}",
+            $return_url . "?payment=cancelled"
+        );
+        $status_code = (int) ($result["status_code"] ?? 500);
+        unset($result["status_code"]);
 
-        $existing = $this->db->query(
-            "SELECT id
-             FROM $fee_payments
-             WHERE tender_id=? AND vendor_id=? AND deleted=0
-             ORDER BY id DESC
-             LIMIT 1",
-            [$tender_id, $vendor_id]
-        )->getRow();
-
-        if ($existing) {
-            $this->db->query(
-                "UPDATE $fee_payments
-                 SET amount=?,
-                     currency='OMR',
-                     status='paid',
-                     payment_reference=?,
-                     paid_at=?,
-                     updated_at=?,
-                     deleted=0
-                 WHERE id=?",
-                [$amount, $reference, $now, $now, (int) $existing->id]
-            );
-        } else {
-            $this->db->query(
-                "INSERT INTO $fee_payments
-                    (tender_id, vendor_id, amount, currency, status, payment_reference, paid_at, created_by, created_at, updated_at, deleted)
-                 VALUES (?, ?, ?, 'OMR', 'paid', ?, ?, ?, ?, ?, 0)",
-                [$tender_id, $vendor_id, $amount, $reference, $now, $this->login_user->id, $now, $now]
-            );
-        }
-
-        return $this->response->setJSON([
-            "success" => true,
-            "message" => "Tender fee payment bypass recorded successfully."
-        ]);
+        return $this->response->setStatusCode($status_code)->setJSON($result);
     }
 
     public function request_tender_approval()
@@ -353,10 +484,8 @@ class Vendor_portal extends Security_Controller
             "tender_id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_tender_access();
+        $vendor_id = $this->_require_vendor_tender_participation_access();
         $tender_id = (int) $this->request->getPost("tender_id");
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
         if (!$tender) {
@@ -435,11 +564,8 @@ class Vendor_portal extends Security_Controller
             "tender_id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_tender_access();
+        $vendor_id = $this->_require_vendor_tender_participation_access();
         $tender_id = (int) $this->request->getPost("tender_id");
-
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
         if (!$tender) {
@@ -488,11 +614,8 @@ class Vendor_portal extends Security_Controller
             "tender_id" => "required|numeric"
         ]);
 
-        $vendor_id = $this->_require_vendor_tender_access();
+        $vendor_id = $this->_require_vendor_tender_participation_access();
         $tender_id = (int) $this->request->getPost("tender_id");
-
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
         if (!$tender) {
@@ -540,6 +663,24 @@ class Vendor_portal extends Security_Controller
             $uploaded_files[$section] = ($file && $file->isValid() && !$file->hasMoved()) ? $file : null;
         }
 
+        try {
+            $uploadSecurity = new Upload_security();
+            foreach ($uploaded_files as $uploadedFile) {
+                if ($uploadedFile) {
+                    $uploadSecurity->validateUploadedFile(
+                        $uploadedFile,
+                        Upload_security::CONTEXT_SECURITY_DOCUMENT
+                    );
+                }
+            }
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Vendor bid document upload rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
+
         if ($existing_bid) {
             $existing_documents = $this->Tender_bid_documents_model->get_bid_documents_map((int) $existing_bid->id);
             if (!isset($existing_documents["commercial_priced"]) && isset($existing_documents["commercial"])) {
@@ -567,7 +708,7 @@ class Vendor_portal extends Security_Controller
         if (empty($item_price_summary["success"])) {
             return $this->response->setJSON([
                 "success" => false,
-                "message" => $item_price_summary["message"] ?? "Please complete the RFQ/RFP item prices."
+                "message" => $item_price_summary["message"] ?? "Please complete the tender item prices."
             ]);
         }
 
@@ -600,14 +741,19 @@ class Vendor_portal extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_bids/tender_" . $tender_id . "/vendor_" . $vendor_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
-        foreach ($uploaded_files as $section => $file) {
-            if ($file) {
-                $this->_replace_bid_document((int) $bid_id, $section, $file, $upload_dir, $tender_id, $vendor_id);
+        try {
+            foreach ($uploaded_files as $section => $file) {
+                if ($file) {
+                    $this->_replace_bid_document((int) $bid_id, $section, $file, $upload_dir, $tender_id, $vendor_id);
+                }
             }
+        } catch (\Throwable $e) {
+            log_message('error', 'Vendor bid document storage failed.');
+            return $this->response->setStatusCode(500)->setJSON([
+                'success' => false,
+                'message' => app_lang('error_occurred'),
+            ]);
         }
 
         $this->Tender_bid_item_prices_model->sync_bid_item_prices(
@@ -630,10 +776,24 @@ class Vendor_portal extends Security_Controller
             "message" => "required",
         ]);
 
-        $vendor_id = $this->_require_vendor_tender_access();
+        $vendor_id = $this->_require_vendor_tender_participation_access();
         $tender_id = (int) $this->request->getPost("tender_id");
         $message = trim((string) $this->request->getPost("message"));
         $clarification_scope = Tender_communications_model::normalize_clarification_scope($this->request->getPost("clarification_scope"));
+
+        $user_id = (int) ($this->login_user->id ?? 0);
+        $ip_hash = hash("sha256", (string) $this->request->getIPAddress());
+        $throttle_key = "vendor_clarification_post_{$user_id}_{$ip_hash}";
+        $throttler = service("throttler");
+        if (!$throttler->check($throttle_key, 10, 60)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader("Retry-After", (string) max(1, $throttler->getTokenTime()))
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Too many clarification submissions. Please wait and try again.",
+                ]);
+        }
 
         $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
         if (!$tender) {
@@ -684,7 +844,15 @@ class Vendor_portal extends Security_Controller
             ]);
         }
 
-        $this->_save_clarification_files((int) $saved, $tender_id, $vendor_id);
+        try {
+            $this->_save_clarification_files((int) $saved, $tender_id, $vendor_id);
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Vendor clarification attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
 
         return $this->response->setJSON([
             "success" => true,
@@ -715,8 +883,11 @@ class Vendor_portal extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_protected_upload_path(
+            (string)$attachment->path,
+            'tender_clarifications'
+        );
+        if (!$full_path) {
             show_404();
         }
 
@@ -753,8 +924,11 @@ class Vendor_portal extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_protected_upload_path(
+            (string)$doc->path,
+            'tender_bids'
+        );
+        if (!$full_path) {
             show_404();
         }
 
@@ -765,22 +939,27 @@ class Vendor_portal extends Security_Controller
 
     private function _replace_bid_document(int $tender_bid_id, string $section, $file, string $upload_dir, int $tender_id, int $vendor_id): void
     {
+        $stored = (new Upload_security())->storeUploadedFile(
+            $file,
+            $upload_dir,
+            Upload_security::CONTEXT_SECURITY_DOCUMENT,
+            'tb_' . $section . '_'
+        );
+        $new_name = $stored['stored_name'];
+
         $existing = $this->Tender_bid_documents_model->get_bid_document_by_section($tender_bid_id, $section);
         if ($existing) {
             $this->Tender_bid_documents_model->ci_save(["deleted" => 1], (int) $existing->id);
         }
-
-        $new_name = uniqid("tb_" . $section . "_", true) . "." . $file->getExtension();
-        $file->move($upload_dir, $new_name);
 
         $doc_data = [
             "tender_bid_id" => $tender_bid_id,
             "section" => $section,
             "disk" => "local",
             "path" => "tender_bids/tender_" . $tender_id . "/vendor_" . $vendor_id . "/" . $new_name,
-            "original_name" => $file->getClientName(),
-            "mime_type" => $file->getClientMimeType(),
-            "size_bytes" => $file->getSize(),
+            "original_name" => $stored['original_name'],
+            "mime_type" => $stored['detected_mime'],
+            "size_bytes" => $stored['size_bytes'],
             "submitted_at" => date("Y-m-d H:i:s"),
         ];
 
@@ -802,31 +981,27 @@ class Vendor_portal extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $saved_files = [];
+        $security = new Upload_security();
         foreach ($files as $file) {
             if (!$file || !$file->isValid() || $file->hasMoved()) {
                 continue;
             }
-
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("tc_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
+            $stored = $security->storeUploadedFile(
+                $file,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'tc_'
+            );
+            $new_name = $stored['stored_name'];
 
             $saved_files[] = [
                 "disk" => "local",
                 "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
+                "original_name" => $stored['original_name'],
+                "mime_type" => $stored['detected_mime'],
+                "size_bytes" => $stored['size_bytes'],
             ];
         }
 
@@ -1036,29 +1211,97 @@ class Vendor_portal extends Security_Controller
 
     private function _my_vendor_id(): int
     {
-        $db = db_connect();
-        $vendor_users_table = $db->prefixTable("vendor_users");
+        $membership = $this->_active_vendor_membership();
+        if ($membership) {
+            return (int) $membership->vendor_id;
+        }
 
-        $row = $db->query(
-            "SELECT vendor_id 
-             FROM $vendor_users_table
-             WHERE user_id=? AND deleted=0 AND status='active'
-             ORDER BY is_owner DESC, id DESC
-             LIMIT 1",
-            [$this->login_user->id]
-        )->getRow();
+        $user_id = (int) ($this->login_user->id ?? 0);
+        if (!$user_id) {
+            return 0;
+        }
 
-        return $row ? (int)$row->vendor_id : 0;
+        if (count($this->Vendor_users_model->get_accessible_memberships($user_id)) > 1) {
+            app_redirect("signin/vendor_selection");
+        }
+
+        return 0;
+    }
+
+    private function _active_vendor_membership(): ?object
+    {
+        if ($this->active_vendor_membership_resolved) {
+            return $this->active_vendor_membership;
+        }
+
+        $this->active_vendor_membership_resolved = true;
+        $user_id = (int) ($this->login_user->id ?? 0);
+        if ($user_id < 1) {
+            return null;
+        }
+
+        $membership = $this->Vendor_users_model->resolve_context($user_id);
+        if ($membership) {
+            $this->Vendor_users_model->set_active_vendor_context($user_id, (int) $membership->vendor_id);
+            $this->active_vendor_membership = $membership;
+        }
+
+        return $this->active_vendor_membership;
+    }
+
+    private function _require_vendor_capability(string $capability, bool $tender_portal = false): int
+    {
+        $membership = $this->_active_vendor_membership();
+        if (!$membership) {
+            app_redirect("forbidden");
+        }
+
+        $vendor_id = (int) $membership->vendor_id;
+        $status = $this->_vendor_status($vendor_id);
+        $statusAllowed = $tender_portal
+            ? vendor_can_access_tender_portal($status)
+            : vendor_can_access_profile_portal($status);
+
+        if (!$statusAllowed || !$this->Vendor_portal_authorizer->can($membership, $capability)) {
+            app_redirect("forbidden");
+        }
+
+        return $vendor_id;
     }
 
     private function _require_vendor_access(): int
     {
-        $vendor_id = $this->_my_vendor_id();
-        if (!$vendor_id && !$this->login_user->is_admin) {
-            app_redirect("forbidden");
+        return $this->_require_vendor_capability(Vendor_portal_authorizer::PROFILE_VIEW);
+    }
+
+    private function _require_vendor_profile_write_access(): int
+    {
+        return $this->_require_vendor_capability(Vendor_portal_authorizer::PROFILE_EDIT);
+    }
+
+    /**
+     * Contact administration is reserved for the owner of the active CR.
+     * Ordinary contacts may view the CR contact list, but cannot create,
+     * change, remove, or provision another contact account.
+     */
+    private function _can_manage_vendor_contacts(int $vendor_id): bool
+    {
+        $user_id = (int) ($this->login_user->id ?? 0);
+        if ($vendor_id < 1 || $user_id < 1) {
+            return false;
         }
 
-        if ($vendor_id && !vendor_can_access_profile_portal($this->_vendor_status($vendor_id))) {
+        $membership = $this->Vendor_users_model->get_accessible_membership($user_id, $vendor_id);
+        return $this->Vendor_portal_authorizer->can(
+            $membership,
+            Vendor_portal_authorizer::CONTACTS_MANAGE
+        );
+    }
+
+    private function _require_vendor_contact_owner(): int
+    {
+        $vendor_id = $this->_require_vendor_access();
+        if (!$this->_can_manage_vendor_contacts($vendor_id)) {
             app_redirect("forbidden");
         }
 
@@ -1067,16 +1310,12 @@ class Vendor_portal extends Security_Controller
 
     private function _require_vendor_tender_access(): int
     {
-        $vendor_id = $this->_my_vendor_id();
-        if (!$vendor_id && !$this->login_user->is_admin) {
-            app_redirect("forbidden");
-        }
+        return $this->_require_vendor_capability(Vendor_portal_authorizer::TENDER_VIEW, true);
+    }
 
-        if ($vendor_id && !vendor_can_access_tender_portal($this->_vendor_status($vendor_id))) {
-            app_redirect("forbidden");
-        }
-
-        return $vendor_id;
+    private function _require_vendor_tender_participation_access(): int
+    {
+        return $this->_require_vendor_capability(Vendor_portal_authorizer::TENDER_PARTICIPATE, true);
     }
 
     private function _vendor_status(int $vendor_id): string
@@ -1208,7 +1447,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
         $id = $this->request->getPost("id");
 
@@ -1237,7 +1476,7 @@ class Vendor_portal extends Security_Controller
             "bank_account_no" => "required",
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
 
         $id = $this->request->getPost("id");
@@ -1272,12 +1511,21 @@ class Vendor_portal extends Security_Controller
 
         if ($has_new_file) {
             $upload_dir = WRITEPATH . "uploads/vendor_bank_accounts/vendor_" . $vendor_id . "/";
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0775, true);
+            try {
+                $stored = (new Upload_security())->storeUploadedFile(
+                    $file,
+                    $upload_dir,
+                    Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                    'vh_'
+                );
+            } catch (UploadSecurityException $e) {
+                log_message('notice', 'Vendor bank document upload rejected.');
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => app_lang('invalid_file_type'),
+                ]);
             }
-
-            $new_name = uniqid("vh_", true) . "." . $file->getExtension();
-            $file->move($upload_dir, $new_name);
+            $new_name = $stored['stored_name'];
 
             // store RELATIVE path under writable/uploads/
             $data["letter_head_path"] = "vendor_bank_accounts/vendor_" . $vendor_id . "/" . $new_name;
@@ -1361,7 +1609,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $this->_deny_if_vendor_module_locked($vendor_id, "bank");
 
         $id = $this->request->getPost("id");
@@ -1407,9 +1655,12 @@ class Vendor_portal extends Security_Controller
             show_404();
         }
 
-        $full_path = WRITEPATH . "uploads/" . $row->letter_head_path;
+        $full_path = $this->_resolve_protected_upload_path(
+            (string)$row->letter_head_path,
+            'vendor_bank_accounts'
+        );
 
-        if (!is_file($full_path)) {
+        if (!$full_path) {
             show_404();
         }
 
@@ -1611,6 +1862,133 @@ class Vendor_portal extends Security_Controller
         return $this->template->view("vendor_portal/locked_modal");
     }
 
+    /**
+     * Passwords belong to the signed-in identity, not to an individual CR.
+     * Keep this page independent of the active vendor context so changing the
+     * password never changes or clears the selected CR.
+     */
+    public function change_password()
+    {
+        return $this->template->rander("vendor_portal/change_password");
+    }
+
+    public function save_password()
+    {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON([
+                    "success" => false,
+                    "message" => "This action requires a POST request.",
+                ]);
+        }
+
+        $this->validate_submitted_data([
+            "current_password" => "required",
+            "new_password" => "required|min_length[10]|max_length[72]",
+            "new_password_confirm" => "required|matches[new_password]",
+        ]);
+
+        $user_id = (int) ($this->login_user->id ?? 0);
+        if (!$user_id) {
+            return $this->response->setStatusCode(403)->setJSON([
+                "success" => false,
+                "message" => app_lang("authentication_failed"),
+            ]);
+        }
+
+        $current_password = (string) $this->request->getPost("current_password");
+        $new_password = (string) $this->request->getPost("new_password");
+
+        $policyErrors = $this->Users_model->password_policy_errors($new_password);
+        if ($policyErrors) {
+            $this->Auth_security_model->audit(
+                "password_change",
+                "denied",
+                $user_id,
+                "",
+                ["reason" => "policy"]
+            );
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => implode(" ", $policyErrors),
+            ]);
+        }
+
+        $throttler = service("throttler");
+        $ip_hash = hash("sha256", (string) $this->request->getIPAddress());
+        $throttle_key = "password_change_{$user_id}_{$ip_hash}";
+
+        // Consume the attempt before verifying the secret. Otherwise a correct
+        // password could still succeed after the failure bucket is exhausted.
+        if (!$throttler->check($throttle_key, 5, 600)) {
+            $this->Auth_security_model->audit(
+                "password_change",
+                "rate_limited",
+                $user_id,
+                "",
+                ["reason" => "current_password"]
+            );
+
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader(
+                    "Retry-After",
+                    (string) max(1, $throttler->getTokenTime())
+                )
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Too many password attempts. Please wait and try again.",
+                ]);
+        }
+
+        if (!$this->Users_model->verify_user_password($user_id, $current_password)) {
+            $this->Auth_security_model->audit(
+                "password_change",
+                "denied",
+                $user_id,
+                "",
+                ["reason" => "current_password"]
+            );
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "The current password is incorrect.",
+            ]);
+        }
+
+        if (hash_equals($current_password, $new_password)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "The new password must be different from the current password.",
+            ]);
+        }
+
+        $password_hash = password_hash($new_password, PASSWORD_DEFAULT);
+        if (!$password_hash || !$this->Users_model->ci_save(["password" => $password_hash], $user_id)) {
+            return $this->response->setStatusCode(500)->setJSON([
+                "success" => false,
+                "message" => app_lang("error_occurred"),
+            ]);
+        }
+
+        $throttler->remove($throttle_key);
+
+        $has_active_vendor = $this->session->has("active_vendor_id");
+        $active_vendor_id = $has_active_vendor ? $this->session->get("active_vendor_id") : null;
+        $this->session->regenerate(true);
+        if ($has_active_vendor) {
+            $this->session->set("active_vendor_id", $active_vendor_id);
+        }
+
+        $this->Auth_security_model->audit("password_change", "success", $user_id);
+
+        return $this->response->setJSON([
+            "success" => true,
+            "message" => "Your password has been changed successfully.",
+        ]);
+    }
+
     function index($tab = "")
     {
         return $this->view($tab);
@@ -1621,6 +1999,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $view_data["vendor_info"] = $this->Vendors_model->get_one($vendor_id);
+        $view_data["vendor_memberships"] = $this->Vendor_users_model->get_accessible_memberships((int) $this->login_user->id);
         $view_data["tab"] = $tab;
 
         return $this->template->rander("vendor_portal/view", $view_data);
@@ -1641,7 +2020,7 @@ class Vendor_portal extends Security_Controller
 
     function submit_for_review()
     {
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $vendor = $this->Vendors_model->get_one($vendor_id);
         if (!$vendor || (int)($vendor->deleted ?? 0) === 1) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("invalid_request")]);
@@ -1773,6 +2152,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $view_data["is_locked"] = $this->_is_vendor_module_locked($vendor_id, "contacts");
+        $view_data["can_manage_contacts"] = $this->_can_manage_vendor_contacts($vendor_id);
 
         // show latest "review" request comment (if any)
         $view_data["review_request"] = $this->_get_vendor_latest_review_request($vendor_id, "contacts");
@@ -1881,7 +2261,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $id = $this->request->getPost("id");
 
         // ✅ Only block EDIT when pending
@@ -1960,7 +2340,7 @@ class Vendor_portal extends Security_Controller
             "specialty_name" => "required"
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
 
         $id = $this->request->getPost("id");
@@ -2068,7 +2448,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $this->_deny_if_vendor_module_locked($vendor_id, "specialties");
 
         $id = $this->request->getPost("id");
@@ -2210,7 +2590,7 @@ class Vendor_portal extends Security_Controller
 
 
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
 
 
@@ -2330,7 +2710,7 @@ class Vendor_portal extends Security_Controller
                 "email" => "permit_empty|valid_email"
             ));
 
-            $vendor_id = $this->_require_vendor_access();
+            $vendor_id = $this->_require_vendor_profile_write_access();
 
             $id = $this->request->getPost("id");
 
@@ -2451,7 +2831,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(array("id" => "required|numeric"));
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
 
         $id = $this->request->getPost("id");
@@ -2564,7 +2944,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
 
 
@@ -2608,7 +2988,7 @@ class Vendor_portal extends Security_Controller
             "vendor_document_type_id" => "required|numeric",
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
 
         $id = $this->request->getPost("id");
@@ -2649,18 +3029,27 @@ class Vendor_portal extends Security_Controller
 
         if ($has_new_file) {
             $upload_dir = WRITEPATH . "uploads/vendor_documents/vendor_" . $vendor_id . "/";
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0775, true);
+            try {
+                $stored = (new Upload_security())->storeUploadedFile(
+                    $file,
+                    $upload_dir,
+                    Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                    'vd_'
+                );
+            } catch (UploadSecurityException $e) {
+                log_message('notice', 'Vendor document upload rejected.');
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => app_lang('invalid_file_type'),
+                ]);
             }
-
-            $new_name = uniqid("vd_", true) . "." . $file->getExtension();
-            $file->move($upload_dir, $new_name);
+            $new_name = $stored['stored_name'];
 
             $data["disk"] = "local";
             $data["path"] = "vendor_documents/vendor_" . $vendor_id . "/" . $new_name;
-            $data["original_name"] = $file->getClientName();
-            $data["mime_type"] = $file->getClientMimeType();
-            $data["size_bytes"] = $file->getSize();
+            $data["original_name"] = $stored['original_name'];
+            $data["mime_type"] = $stored['detected_mime'];
+            $data["size_bytes"] = $stored['size_bytes'];
             $data["uploaded_by"] = $this->login_user->id;
         }
 
@@ -2744,9 +3133,12 @@ class Vendor_portal extends Security_Controller
             show_404();
         }
 
-        $full_path = WRITEPATH . "uploads/" . $doc->path;
+        $full_path = $this->_resolve_protected_upload_path(
+            (string)$doc->path,
+            'vendor_documents'
+        );
 
-        if (!is_file($full_path)) {
+        if (!$full_path) {
             show_404();
         }
 
@@ -2759,7 +3151,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
 
         // ✅ keep delete locked during pending
         $this->_deny_if_vendor_module_locked($vendor_id, "documents");
@@ -2892,7 +3284,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $id = $this->request->getPost("id");
 
         // ✅ Only block EDIT when pending (id exists)
@@ -2945,7 +3337,7 @@ class Vendor_portal extends Security_Controller
             "number" => "required"
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $id = $this->request->getPost("id");
 
         // ✅ Only block UPDATE when pending (id exists)
@@ -3046,7 +3438,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(array("id" => "required|numeric"));
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_profile_write_access();
         $id = $this->request->getPost("id");
 
         $row = $this->Vendor_credentials_model->get_one($id);
@@ -3147,7 +3539,7 @@ class Vendor_portal extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_contact_owner();
         $id = $this->request->getPost("id");
 
         // ✅ Only block EDIT when pending (not ADD)
@@ -3163,6 +3555,8 @@ class Vendor_portal extends Security_Controller
         }
 
         $view_data["model_info"] = $model_info;
+        $view_data["portal_access_roles"] = $this->Vendor_users_model->get_assignable_roles();
+        $view_data["portal_access_role"] = Vendor_users_model::ROLE_VIEWER;
         return $this->template->view("vendor_portal/contacts/modal_form", $view_data);
     }
 
@@ -3172,6 +3566,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $is_locked = $this->_is_vendor_module_locked($vendor_id, "contacts");
+        $can_manage_contacts = $this->_can_manage_vendor_contacts($vendor_id);
 
         $list_data = $this->Vendor_contacts_model->get_details(array(
             "vendor_id" => $vendor_id
@@ -3179,7 +3574,7 @@ class Vendor_portal extends Security_Controller
 
         $result = array();
         foreach ($list_data as $data) {
-            $result[] = $this->_make_contact_row($data, $is_locked);
+            $result[] = $this->_make_contact_row($data, $is_locked, $can_manage_contacts);
         }
 
         echo json_encode(array("data" => $result));
@@ -3187,17 +3582,42 @@ class Vendor_portal extends Security_Controller
 
     function save_contact()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON([
+                    "success" => false,
+                    "message" => "This action requires a POST request.",
+                ]);
+        }
+
         $this->validate_submitted_data([
             "id" => "numeric",
             "contacts_name" => "required",
-            "email" => "permit_empty|valid_email"
+            "email" => "required|valid_email|max_length[255]",
+            "email_2" => "permit_empty|valid_email|max_length[255]",
+            "access_role" => "required|in_list[VIEWER,BIDDER,EDITOR]"
         ]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_contact_owner();
 
 
-        $id = $this->request->getPost("id");
+        $id = (int) $this->request->getPost("id");
+        $email = Vendor_contact_access::canonicalEmail($this->request->getPost("email"));
+        $accessRoleCode = strtoupper(trim((string) $this->request->getPost("access_role")));
+        $accessRole = $this->Vendor_users_model->get_assignable_role($accessRoleCode);
+        if (!$accessRole) {
+            return $this->response->setStatusCode(422)->setJSON([
+                "success" => false,
+                "message" => "Select a valid least-privilege portal access role.",
+            ]);
+        }
 
+        // Keep raw secrets out of clean_data(), contact rows, approval JSON,
+        // logs, and responses.
+        $initial_password = (string) $this->request->getPost("initial_password");
+        $initial_password_confirm = (string) $this->request->getPost("initial_password_confirm");
 
         if ($id) {
             $this->_deny_if_vendor_module_locked($vendor_id, "contacts");
@@ -3207,32 +3627,147 @@ class Vendor_portal extends Security_Controller
         $before = null;
         if ($id) {
             $row = $this->Vendor_contacts_model->get_one($id);
-            if ((int)$row->vendor_id !== (int)$vendor_id) {
+            if (empty($row->id) || (int) $row->vendor_id !== (int) $vendor_id || (int) $row->deleted) {
                 app_redirect("forbidden");
             }
             $before = $row;
+            if (!empty($row->user_id)
+                && Vendor_contact_access::canonicalEmail($row->email) !== $email
+            ) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => "The login email cannot be changed after this contact is linked to an account. Add a new contact instead."
+                ]);
+                return;
+            }
+
+            if (!empty($row->user_id)
+                && ($initial_password !== "" || $initial_password_confirm !== "")
+            ) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => "A contact manager cannot replace an existing account password. The user can change it after signing in."
+                ]);
+                return;
+            }
         }
 
-        $data = [
-            "vendor_id"     => $vendor_id,
-            "contacts_name" => $this->request->getPost("contacts_name"),
-            "phone"         => $this->request->getPost("phone"),
-            "fax"           => $this->request->getPost("fax"),
-            "designation"   => $this->request->getPost("designation"),
-            "email"         => $this->request->getPost("email"),
-            "email_2"       => $this->request->getPost("email_2"),
-            "mobile"        => $this->request->getPost("mobile"),
-            "role"          => $this->request->getPost("role"),
-            "is_primary"    => $this->request->getPost("is_primary") ? 1 : 0,
-            "is_active"     => $this->request->getPost("is_active") ? 1 : 0,
-            "status"        => "pending",
-        ];
+        $transactionStarted = false;
+        try {
+            if ($this->Vendor_contact_access->duplicateContactExists($vendor_id, $email, $id)) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => "This email is already a contact for the selected CR. The same email may only be reused under a different CR."
+                ]);
+                return;
+            }
 
-        $data = clean_data($data);
+            $existingUser = $this->Vendor_contact_access->findUserByEmail($email);
+            if ($existingUser && (string) $existingUser->user_type !== "staff") {
+                echo json_encode([
+                    "success" => false,
+                    "message" => "This email belongs to a non-staff account and cannot be linked to the vendor portal."
+                ]);
+                return;
+            }
 
-        $save_id = $this->Vendor_contacts_model->ci_save($data, $id);
+            if ($before && !empty($before->user_id)
+                && (!$existingUser || (int) $existingUser->id !== (int) $before->user_id)
+            ) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => "The linked login account does not match this contact email. Ask an administrator to resolve it."
+                ]);
+                return;
+            }
 
-        if ($save_id) {
+            $needsAccessPreparation = !$before || empty($before->user_id);
+            if ($needsAccessPreparation && !$existingUser) {
+                $passwordLength = mb_strlen($initial_password, "UTF-8");
+                $passwordBytes = strlen($initial_password);
+                if ($passwordLength < 10 || $passwordBytes > 72) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "Set an initial password of at least 10 characters and no more than 72 UTF-8 bytes."
+                    ]);
+                    return;
+                }
+                if (!hash_equals($initial_password, $initial_password_confirm)) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "The password confirmation does not match."
+                    ]);
+                    return;
+                }
+            }
+
+            $data = clean_data([
+                "vendor_id"     => $vendor_id,
+                "user_id"       => $before && !empty($before->user_id)
+                    ? (int) $before->user_id
+                    : ($existingUser ? (int) $existingUser->id : null),
+                "contacts_name" => trim((string) $this->request->getPost("contacts_name")),
+                "phone"         => trim((string) $this->request->getPost("phone")),
+                "fax"           => trim((string) $this->request->getPost("fax")),
+                "designation"   => trim((string) $this->request->getPost("designation")),
+                "email"         => $email,
+                "email_2"       => Vendor_contact_access::canonicalEmail($this->request->getPost("email_2")),
+                "mobile"        => trim((string) $this->request->getPost("mobile")),
+                "role"          => trim((string) $this->request->getPost("role")),
+                "is_primary"    => $this->request->getPost("is_primary") ? 1 : 0,
+                "is_active"     => $this->request->getPost("is_active") ? 1 : 0,
+                "status"        => "pending",
+                "updated_at"    => get_current_utc_time(),
+            ]);
+            // clean_data() converts null to an empty string; restore SQL NULL
+            // so the optional user foreign key remains valid until approval.
+            if (empty($data["user_id"])) {
+                $data["user_id"] = null;
+            }
+            if (!$id) {
+                $data["created_at"] = get_current_utc_time();
+            }
+
+            $this->db->transBegin();
+            $transactionStarted = true;
+            $saveResult = $this->Vendor_contacts_model->ci_save($data, $id);
+            if (!$saveResult) {
+                throw new \RuntimeException("Unable to save the contact.");
+            }
+            $save_id = $id ?: (int) $saveResult;
+
+            $access = null;
+            if ($needsAccessPreparation) {
+                $access = $this->Vendor_contact_access->prepareContactAccess(
+                    $save_id,
+                    $initial_password,
+                    (int) $this->login_user->id
+                );
+                // Keep the approval snapshot aligned with the linked row while
+                // keeping the password/hash outside that snapshot.
+                $data["user_id"] = (int) $access["user_id"];
+                $preparedMembership = $this->Vendor_users_model->find_membership(
+                    $vendor_id,
+                    (int) $access["user_id"]
+                );
+                $membershipData = [
+                    "status" => (string) ($preparedMembership->status ?? "invited"),
+                    "invited_by" => (int) $this->login_user->id,
+                ];
+                // Never replace or downgrade the registration owner's role.
+                if (!(int) ($preparedMembership->is_owner ?? 0)) {
+                    $membershipData["vendor_role_id"] = (int) $accessRole->id;
+                }
+                $membershipId = $this->Vendor_users_model->upsert_membership(
+                    $vendor_id,
+                    (int) $access["user_id"],
+                    $membershipData
+                );
+                if (!$membershipId) {
+                    throw new \RuntimeException("Unable to assign the contact portal role.");
+                }
+            }
+
             // create approval request
             $changes = [
                 "module"    => "contacts",
@@ -3241,18 +3776,18 @@ class Vendor_portal extends Security_Controller
                 "record_id" => (int)$save_id,
                 "before"    => $before,
                 "after"     => $data,
+                "portal_access_role" => $accessRoleCode,
             ];
 
 
             // create (or re-submit) approval request
-            $db = db_connect();
-            $vurTable = $db->prefixTable("vendor_update_requests");
+            $vurTable = $this->db->prefixTable("vendor_update_requests");
 
             $existing_review = $this->_get_vendor_review_request_for_record($vendor_id, "contacts", (int)$save_id);
 
             if ($existing_review) {
                 // ✅ If admin previously marked it as "review", re-submit SAME request as pending
-                $ok = $db->table($vurTable)
+                $ok = $this->db->table($vurTable)
                     ->where("id", (int)$existing_review->id)
                     ->update([
                         "changes"        => json_encode($changes, JSON_UNESCAPED_UNICODE),
@@ -3264,9 +3799,7 @@ class Vendor_portal extends Security_Controller
                     ]);
 
                 if (!$ok) {
-                    $err = $db->error();
-                    echo json_encode(["success" => false, "message" => "Failed to re-submit request: " . ($err["message"] ?? "unknown")]);
-                    exit;
+                    throw new \RuntimeException("Unable to re-submit the contact approval request.");
                 }
             } else {
                 // ✅ Normal: create new pending request
@@ -3280,25 +3813,57 @@ class Vendor_portal extends Security_Controller
                     "updated_at"    => date("Y-m-d H:i:s")
                 ];
 
-                $this->Vendor_update_requests_model->ci_save($req);
+                if (!$this->Vendor_update_requests_model->ci_save($req)) {
+                    throw new \RuntimeException("Unable to create the contact approval request.");
+                }
             }
 
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException("The contact transaction failed.");
+            }
+            $this->db->transCommit();
+            $transactionStarted = false;
 
-
-
-
-
+            $message = app_lang("record_saved");
+            if ($access) {
+                $message = !empty($access["uses_existing_password"])
+                    ? "Contact submitted for approval. This person's existing password was retained."
+                    : "Contact submitted for approval. The initial password will work after approval.";
+            }
 
             echo json_encode([
                 "success" => true,
                 "data" => $this->_contact_row_data($save_id),
                 "id" => $save_id,
-                "message" => app_lang("record_saved")
+                "message" => $message
             ]);
             return;
-        }
+        } catch (\Throwable $e) {
+            if ($transactionStarted) {
+                $this->db->transRollback();
+            }
+            log_message("error", "VENDOR CONTACT SAVE FAILED: " . $e->getMessage());
 
-        echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            $isDuplicate = false;
+            try {
+                $isDuplicate = $this->Vendor_contact_access->duplicateContactExists($vendor_id, $email, $id);
+            } catch (\Throwable $ignored) {
+                // Preserve the original error and avoid exposing database details.
+            }
+
+            if ($isDuplicate) {
+                $message = "This email is already a contact for the selected CR. The same email may only be reused under a different CR.";
+            } elseif ($e instanceof \CodeIgniter\Database\Exceptions\DatabaseException) {
+                $message = app_lang("error_occurred");
+            } elseif ($e instanceof \RuntimeException) {
+                $message = $e->getMessage();
+            } else {
+                $message = app_lang("error_occurred");
+            }
+
+            echo json_encode(["success" => false, "message" => $message]);
+            return;
+        }
     }
 
 
@@ -3306,57 +3871,196 @@ class Vendor_portal extends Security_Controller
 
     function delete_contact()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON([
+                    "success" => false,
+                    "message" => "This action requires a POST request.",
+                ]);
+        }
+
         $this->validate_submitted_data(["id" => "required|numeric"]);
 
-        $vendor_id = $this->_require_vendor_access();
+        $vendor_id = $this->_require_vendor_contact_owner();
 
         // ✅ Block delete while pending
         $this->_deny_if_vendor_module_locked($vendor_id, "contacts");
 
-        $id = $this->request->getPost("id");
+        $id = (int) $this->request->getPost("id");
 
         $row = $this->Vendor_contacts_model->get_one($id);
-        if ((int)$row->vendor_id !== (int)$vendor_id) {
+        if (empty($row->id) || (int) $row->vendor_id !== (int) $vendor_id) {
             app_redirect("forbidden");
         }
 
-        if ($this->request->getPost("undo")) {
-            if ($this->Vendor_contacts_model->delete($id, true)) {
+        $this->db->transBegin();
+        try {
+            if ($this->request->getPost("undo")) {
+                if (!$this->Vendor_contacts_model->delete($id, true)) {
+                    throw new \RuntimeException(app_lang("error_occurred"));
+                }
+
+                $restored = $this->Vendor_contacts_model->get_one($id);
+                if ((string) $restored->status === "approved" && (int) $restored->is_active) {
+                    $this->Vendor_contact_access->approveContact($id, (int) $this->login_user->id);
+                }
+
+                if ($this->db->transStatus() === false) {
+                    throw new \RuntimeException("Unable to restore the contact access.");
+                }
+                $this->db->transCommit();
                 echo json_encode([
                     "success" => true,
                     "data" => $this->_contact_row_data($id),
                     "message" => app_lang("record_undone")
                 ]);
-            } else {
-                echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+                return;
             }
-            return;
-        }
 
-        if ($this->Vendor_contacts_model->delete($id)) {
+            if (!$this->Vendor_contacts_model->delete($id)) {
+                throw new \RuntimeException(app_lang("record_cannot_be_deleted"));
+            }
+            if (!$this->Vendor_contact_access->suspendContactMembership($id)) {
+                throw new \RuntimeException("The contact was deleted, but its vendor access could not be suspended.");
+            }
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException("Unable to delete the contact.");
+            }
+            $this->db->transCommit();
             echo json_encode(["success" => true, "message" => app_lang("record_deleted")]);
             return;
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message("error", "VENDOR CONTACT DELETE FAILED: " . $e->getMessage());
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            return;
         }
-
-        echo json_encode(["success" => false, "message" => app_lang("record_cannot_be_deleted")]);
     }
 
 
+
+
+    function contact_password_modal_form()
+    {
+        $this->validate_submitted_data(["id" => "required|numeric"]);
+
+        $vendor_id = $this->_require_vendor_contact_owner();
+        $id = (int) $this->request->getPost("id");
+        $contact = $this->Vendor_contacts_model->get_details([
+            "id" => $id,
+            "vendor_id" => $vendor_id,
+        ])->getRow();
+
+        if (!$this->_can_set_legacy_contact_password($contact)) {
+            app_redirect("forbidden");
+        }
+
+        return $this->template->view(
+            "vendor_portal/contacts/password_modal_form",
+            ["model_info" => $contact]
+        );
+    }
+
+    function save_contact_password()
+    {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON([
+                    "success" => false,
+                    "message" => "This action requires a POST request.",
+                ]);
+        }
+
+        $this->validate_submitted_data([
+            "id" => "required|numeric",
+            "initial_password" => "required|min_length[10]|max_length[72]",
+            "initial_password_confirm" => "required|matches[initial_password]",
+        ]);
+
+        $vendor_id = $this->_require_vendor_contact_owner();
+        $this->_deny_if_vendor_module_locked($vendor_id, "contacts");
+
+        $id = (int) $this->request->getPost("id");
+        $contact = $this->Vendor_contacts_model->get_details([
+            "id" => $id,
+            "vendor_id" => $vendor_id,
+        ])->getRow();
+        if (!$this->_can_set_legacy_contact_password($contact)) {
+            app_redirect("forbidden");
+        }
+
+        $transactionStarted = false;
+        try {
+            $this->db->transBegin();
+            $transactionStarted = true;
+
+            $this->Vendor_contact_access->setInitialPasswordForApprovedContact(
+                $id,
+                (string) $this->request->getPost("initial_password"),
+                (int) $this->login_user->id
+            );
+
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException("Unable to activate the contact login.");
+            }
+
+            $this->db->transCommit();
+            $transactionStarted = false;
+
+            echo json_encode([
+                "success" => true,
+                "data" => $this->_contact_row_data($id),
+                "id" => $id,
+                "message" => "The initial password was saved and this contact can now sign in.",
+            ]);
+            return;
+        } catch (\Throwable $e) {
+            if ($transactionStarted) {
+                $this->db->transRollback();
+            }
+
+            log_message("error", "VENDOR CONTACT PASSWORD SETUP FAILED: " . $e->getMessage());
+            $message = $e instanceof \CodeIgniter\Database\Exceptions\DatabaseException
+                ? app_lang("error_occurred")
+                : ($e instanceof \RuntimeException ? $e->getMessage() : app_lang("error_occurred"));
+
+            echo json_encode(["success" => false, "message" => $message]);
+            return;
+        }
+    }
+
+    private function _can_set_legacy_contact_password($contact): bool
+    {
+        return $contact
+            && !empty($contact->id)
+            && (string) ($contact->status ?? "") === "approved"
+            && (int) ($contact->is_active ?? 0) === 1
+            && (string) ($contact->portal_access_status ?? "") === "invited"
+            && !empty($contact->portal_invited_at)
+            && empty($contact->portal_credentials_ready_at)
+            && ((string) ($contact->account_status ?? "") !== "active"
+                || (int) ($contact->account_login_disabled ?? 0) === 1);
+    }
 
     private function _contact_row_data($id)
     {
         $vendor_id = $this->_require_vendor_access();
         $is_locked = $this->_is_vendor_module_locked($vendor_id, "contacts");
+        $can_manage_contacts = $this->_can_manage_vendor_contacts($vendor_id);
 
         $data = $this->Vendor_contacts_model->get_details(array(
             "id" => $id,
             "vendor_id" => $vendor_id
         ))->getRow();
 
-        return $this->_make_contact_row($data, $is_locked);
+        return $this->_make_contact_row($data, $is_locked, $can_manage_contacts);
     }
 
-    private function _make_contact_row($data, bool $is_locked = false)
+    private function _make_contact_row($data, bool $is_locked = false, bool $can_manage_contacts = false)
     {
         $active = $data->is_active
             ? "<span class='badge bg-success'>" . app_lang("active") . "</span>"
@@ -3368,8 +4072,32 @@ class Vendor_portal extends Security_Controller
 
         $approval = $this->_approval_badge($data->status ?? "pending");
 
+        $accessStatus = strtolower((string) ($data->portal_access_status ?? ""));
+        if ($accessStatus === "active") {
+            $access = "<span class='badge bg-success'>Portal active</span>";
+            if (!empty($data->portal_is_owner)) {
+                $access .= " <span class='badge bg-primary'>Owner</span>";
+            }
+        } elseif ($accessStatus === "invited") {
+            if ((string) ($data->status ?? "") !== "approved") {
+                $access = "<span class='badge bg-light text-dark'>Awaiting approval</span>";
+            } elseif ((string) ($data->account_status ?? "") === "active"
+                && !(int) ($data->account_login_disabled ?? 0)
+            ) {
+                $access = "<span class='badge bg-warning text-dark'>Access activation required</span>";
+            } else {
+                $access = "<span class='badge bg-warning text-dark'>Password setup required</span>";
+            }
+        } elseif ($accessStatus === "suspended") {
+            $access = "<span class='badge bg-secondary'>Portal suspended</span>";
+        } elseif ((string) ($data->status ?? "") === "approved") {
+            $access = "<span class='badge bg-secondary'>Not provisioned</span>";
+        } else {
+            $access = "<span class='badge bg-light text-dark'>Awaiting approval</span>";
+        }
+
         $actions = "";
-        if (!$is_locked) {
+        if ($can_manage_contacts && !$is_locked) {
             $actions = modal_anchor(
                 get_uri("vendor_portal/contact_modal_form"),
                 "<i data-feather='edit' class='icon-16'></i>",
@@ -3386,6 +4114,18 @@ class Vendor_portal extends Security_Controller
             );
         }
 
+        if ($can_manage_contacts && !$is_locked && $this->_can_set_legacy_contact_password($data)) {
+            $actions .= " " . modal_anchor(
+                get_uri("vendor_portal/contact_password_modal_form"),
+                "<i data-feather='key' class='icon-16'></i>",
+                [
+                    "class" => "text-primary",
+                    "title" => "Set initial password",
+                    "data-post-id" => (int) $data->id,
+                ]
+            );
+        }
+
         return array(
             $data->contacts_name,
             $data->designation,
@@ -3394,6 +4134,7 @@ class Vendor_portal extends Security_Controller
             $primary,
             $approval,
             $active,
+            $access,
             $actions
         );
     }

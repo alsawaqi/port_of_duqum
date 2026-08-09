@@ -74,7 +74,8 @@ class Signup extends App_Controller {
         $this->validate_submitted_data(array(
             "first_name" => "required",
             "last_name" => "required",
-            "password" => "required"
+            "password" => "required",
+            "retype_password" => "required|matches[password]"
         ));
 
         //check if there reCaptcha is enabled
@@ -84,8 +85,15 @@ class Signup extends App_Controller {
 
         $first_name = $this->request->getPost("first_name");
         $last_name = $this->request->getPost("last_name");
-        $password = $this->request->getPost("password");
-        $password = clean_data($password);
+        $password = (string) $this->request->getPost("password");
+        $policyErrors = $this->Users_model->password_policy_errors($password);
+        if ($policyErrors) {
+            echo json_encode([
+                "success" => false,
+                "message" => esc(implode(" ", $policyErrors)),
+            ]);
+            return;
+        }
 
         $user_data = array(
             "first_name" => $first_name,
@@ -264,7 +272,7 @@ class Signup extends App_Controller {
 
                 $parser_data["DASHBOARD_URL"] = base_url();
                 $parser_data["CONTACT_LOGIN_EMAIL"] = get_array_value($user_data, "email");
-                $parser_data["CONTACT_LOGIN_PASSWORD"] = $password;
+                $parser_data["CONTACT_LOGIN_PASSWORD"] = app_lang("password_not_sent_by_email");
                 $parser_data["LOGO_URL"] = get_logo_url();
 
                 $message = $this->parser->setData($parser_data)->renderString($email_template->message);
@@ -365,7 +373,7 @@ class Signup extends App_Controller {
             $verification_info = $this->Verification_model->get_details($options)->getRow();
 
             if ($verification_info && $verification_info->id) {
-                $email_verification_info = unserialize($verification_info->params);
+                $email_verification_info = safe_unserialize($verification_info->params);
 
                 $email = get_array_value($email_verification_info, "email");
                 $expire_time = get_array_value($email_verification_info, "expire_time");
@@ -388,7 +396,7 @@ class Signup extends App_Controller {
             $verification_info = $this->Verification_model->get_details($options)->getRow();
 
             if ($verification_info && $verification_info->id) {
-                $invitation_info = unserialize($verification_info->params);
+                $invitation_info = safe_unserialize($verification_info->params);
 
                 $email = get_array_value($invitation_info, "email");
                 $expire_time = get_array_value($invitation_info, "expire_time");

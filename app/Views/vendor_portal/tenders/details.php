@@ -557,17 +557,15 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                 <div class="vtd-section-header">
                     <div class="vtd-section-title">
                         <i data-feather="clipboard" class="icon-16"></i>
-                        <h4>RFQ / RFP Details</h4>
+                        <h4>Tender Details</h4>
                     </div>
                 </div>
                 <div class="vtd-section-body">
                     <div class="vtd-info-grid mb15">
-                        <div class="vtd-info"><span>Reference Number</span><strong><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></strong></div>
-                        <div class="vtd-info"><span>Request Date</span><strong><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></strong></div>
-                        <div class="vtd-info"><span>PR No</span><strong><?php echo esc($rfq_detail->pr_no ?? "-"); ?></strong></div>
+                        <div class="vtd-info"><span>PR No (Optional)</span><strong><?php echo esc($rfq_detail->pr_no ?? "-"); ?></strong></div>
                         <div class="vtd-info"><span>Delivery Location</span><strong><?php echo esc($rfq_detail->delivery_location ?? "-"); ?></strong></div>
                         <div class="vtd-info"><span>INCOTERM</span><strong><?php echo esc($rfq_detail->incoterm ?? "-"); ?></strong></div>
-                        <div class="vtd-info"><span>Material Required On</span><strong><?php echo !empty($rfq_detail->material_required_on) ? format_to_date($rfq_detail->material_required_on, false) : "-"; ?></strong></div>
+                        <div class="vtd-info"><span>Estimated Material/Service Required On</span><strong><?php echo !empty($rfq_detail->material_required_on) ? format_to_date($rfq_detail->material_required_on, false) : "-"; ?></strong></div>
                     </div>
 
                     <?php if (!empty($rfq_detail->terms_reference)) { ?>
@@ -586,7 +584,7 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                                         <th>Description</th>
                                         <th>UOM</th>
                                         <th>Qty</th>
-                                        <th>Brand</th>
+                                        <th>Part No (Optional)</th>
                                         <th style="width: 155px;">Your Unit Price</th>
                                         <th style="width: 155px;">Line Total</th>
                                     </tr>
@@ -604,7 +602,7 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                                             <td><?php echo esc($item->description ?? "-"); ?></td>
                                             <td><?php echo esc($item->uom ?? "-"); ?></td>
                                             <td><?php echo $item->qty !== null ? number_format((float) $item->qty, 3) : "-"; ?></td>
-                                            <td><?php echo esc($item->brand ?? "-"); ?></td>
+                                            <td><?php echo esc($item->part_no ?? ($item->brand ?? "-")); ?></td>
                                             <td>
                                                 <?php if ($submission_open) { ?>
                                                     <input
@@ -641,7 +639,7 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                             </strong>
                         </div>
                     <?php } else { ?>
-                        <div class="text-muted">No RFQ item lines have been published for this tender.</div>
+                        <div class="text-muted">No tender item lines have been published for this tender.</div>
                     <?php } ?>
                 </div>
             </section>
@@ -667,9 +665,21 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                                             <?php } ?>
                                         </div>
                                     </div>
-                                    <a href="<?php echo get_uri('vendor_portal/download_tender_document/' . (int) $doc->id); ?>" class="btn btn-default btn-sm">
-                                        <i data-feather="download" class="icon-14"></i> Download
-                                    </a>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <?php echo js_anchor(
+                                            "<i data-feather='eye' class='icon-14'></i> Preview",
+                                            [
+                                                "title" => "Preview Document",
+                                                "class" => "btn btn-primary btn-sm",
+                                                "data-toggle" => "app-modal",
+                                                "data-sidebar" => "0",
+                                                "data-url" => get_uri("vendor_portal/preview_tender_document/" . (int) $doc->id),
+                                            ]
+                                        ); ?>
+                                        <a href="<?php echo get_uri('vendor_portal/download_tender_document/' . (int) $doc->id); ?>" class="btn btn-default btn-sm">
+                                            <i data-feather="download" class="icon-14"></i> Download
+                                        </a>
+                                    </div>
                                 </div>
                             <?php } ?>
                         </div>
@@ -815,7 +825,7 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                         <?php } else { ?>
                             <div class="vtd-approval-card is-pending">
                                 <strong>Tender fee payment is required before applying.</strong>
-                                <div class="small mt5">Temporary payment bypass is enabled until the payment gateway is integrated.</div>
+                                <div class="small mt5">You will be redirected to the secure payment provider. Payment is confirmed only after the provider notification is verified.</div>
                                 <?php echo form_open(get_uri("vendor_portal/pay_tender_fee"), [
                                     "id" => "vendor-tender-fee-payment-form",
                                     "class" => "general-form mt10",
@@ -889,7 +899,7 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                                             value="<?php echo esc($bid->total_amount ?? ($saved_item_total > 0 ? number_format($saved_item_total, 3, ".", "") : "")); ?>"
                                             <?php echo $rfq_items ? "readonly" : ""; ?>>
                                         <?php if ($rfq_items) { ?>
-                                            <small class="text-muted">Calculated from your RFQ/RFP item prices.</small>
+                                            <small class="text-muted">Calculated from your tender item prices.</small>
                                         <?php } ?>
                                     </div>
                                 </div>
@@ -1005,10 +1015,13 @@ $(document).ready(function () {
     if (feePaymentForm.length) {
         feePaymentForm.appForm({
             onSuccess: function (result) {
-                appAlert.success((result && result.message) || "Tender fee marked as paid.", {duration: 2200});
-                setTimeout(function () {
-                    window.location.reload();
-                }, 500);
+                if (result && result.checkout_url) {
+                    window.location.assign(result.checkout_url);
+                    return;
+                }
+
+                appAlert.success((result && result.message) || "Payment status refreshed.", {duration: 2200});
+                window.location.reload();
             }
         });
     }

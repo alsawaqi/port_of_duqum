@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <?php echo form_open(get_uri("team_members/add_team_member"), array("id" => "team_member-form", "class" => "general-form", "role" => "form")); ?>
 <div class="modal-body clearfix">
     <div class="container-fluid">
@@ -217,17 +218,20 @@
                                     "name" => "password",
                                     "class" => "form-control",
                                     "placeholder" => app_lang('password'),
-                                    "autocomplete" => "off",
+                                    "autocomplete" => "new-password",
                                     "data-rule-required" => true,
                                     "data-msg-required" => app_lang("field_required"),
-                                    "data-rule-minlength" => 6,
-                                    "data-msg-minlength" => app_lang("enter_minimum_6_characters"),
-                                    "autocomplete" => "off",
+                                    "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                                    "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
                                     "style" => "z-index:auto;"
                                 ));
                                 ?>
                                 <button type="button" class="input-group-text clickable no-border" id="generate_password"><span data-feather="key" class="icon-16"></span> <?php echo app_lang('generate'); ?></button>
                             </div>
+                            <small class="text-muted">
+                                Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                                characters with uppercase, lowercase, number, and special character.
+                            </small>
                         </div>
                         <div class="col-md-1 p0">
                             <a href="#" id="show_hide_password" class="btn btn-default" title="<?php echo app_lang('show_text'); ?>"><span data-feather="eye" class="icon-16"></span></a>
@@ -362,7 +366,7 @@
         });
 
         $("#generate_password").click(function () {
-            $("#password").val(getRndomString(8));
+            $("#password").val(getRndomString(12) + "aA1!");
         });
 
         $("#show_hide_password").click(function () {

@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <div id="page-content" class="page-wrapper clearfix">
     <div class="process-order-preview" id="process-order-preview">
         <div class="card">
@@ -210,13 +211,17 @@
                                             "class" => "form-control",
                                             "data-rule-required" => true,
                                             "data-msg-required" => app_lang("field_required"),
-                                            "data-rule-minlength" => 6,
-                                            "data-msg-minlength" => app_lang("enter_minimum_6_characters"),
-                                            "autocomplete" => "off",
+                                            "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                                            "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
+                                            "autocomplete" => "new-password",
                                             "style" => "z-index:auto;",
                                             "placeholder" => app_lang('password'),
                                         ));
                                         ?>
+                                        <small class="text-muted">
+                                            Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                                            characters with uppercase, lowercase, number, and special character.
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -229,8 +234,9 @@
                                             "id" => "retype_password",
                                             "name" => "retype_password",
                                             "class" => "form-control",
-                                            "autocomplete" => "off",
+                                            "autocomplete" => "new-password",
                                             "style" => "z-index:auto;",
+                                            "data-rule-required" => true,
                                             "data-rule-equalTo" => "#password",
                                             "data-msg-equalTo" => app_lang("enter_same_value"),
                                             "placeholder" => app_lang('retype_password'),

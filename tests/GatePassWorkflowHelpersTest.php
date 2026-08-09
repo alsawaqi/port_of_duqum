@@ -67,6 +67,11 @@ $assertSame(
     "visitor-specific QR defaults the scan log to its assigned visitor"
 );
 $assertSame(
+    [102],
+    gate_pass_scan_visitor_ids_to_log([101, 103], 102, [101, 102, 103]),
+    "visitor-specific QR cannot be overridden with another visitor id"
+);
+$assertSame(
     [],
     gate_pass_scan_visitor_ids_to_log([], null, [101, 102, 103]),
     "request with visitors requires a visitor selection when QR is not visitor-specific"
@@ -76,6 +81,14 @@ $assertSame(
     gate_pass_scan_visitor_ids_to_log([], null, []),
     "vehicle-only or legacy request-level scans can still be logged"
 );
+
+$assertTrue(gate_pass_scan_transition(null, "entry")["allowed"], "first entry is allowed");
+$assertFalse(gate_pass_scan_transition("entry", "entry")["allowed"], "replayed entry is denied");
+$assertTrue(gate_pass_scan_transition("entry", "exit")["allowed"], "exit after entry is allowed");
+$assertFalse(gate_pass_scan_transition(null, "exit")["allowed"], "exit before entry is denied");
+$assertFalse(gate_pass_scan_transition("exit", "exit")["allowed"], "replayed exit is denied");
+$assertTrue(gate_pass_scan_transition("exit", "entry")["allowed"], "re-entry after exit is allowed");
+$assertTrue(gate_pass_scan_transition("entry", "check")["allowed"], "checks do not alter movement state");
 
 $internationalPlate = gate_pass_prepare_vehicle_plate_payload(true, "", "", "United Arab Emirates", "dubai / 12345");
 $assertTrue($internationalPlate["ok"], "international plate payload accepts country plus free-text plate");

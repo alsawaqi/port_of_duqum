@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <!DOCTYPE html>
 <html lang="en">
     <head>
@@ -170,12 +171,16 @@
                                             "class" => "form-control",
                                             "data-rule-required" => true,
                                             "data-msg-required" => app_lang("field_required"),
-                                            "data-rule-minlength" => 6,
-                                            "data-msg-minlength" => app_lang("enter_minimum_6_characters"),
-                                            "autocomplete" => "off",
+                                            "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                                            "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
+                                            "autocomplete" => "new-password",
                                             "style" => "z-index:auto;"
                                         ));
                                         ?>
+                                        <small class="text-muted">
+                                            Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                                            characters with uppercase, lowercase, number, and special character.
+                                        </small>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -186,8 +191,9 @@
                                             "id" => "retype_password",
                                             "name" => "retype_password",
                                             "class" => "form-control",
-                                            "autocomplete" => "off",
+                                            "autocomplete" => "new-password",
                                             "style" => "z-index:auto;",
+                                            "data-rule-required" => true,
                                             "data-rule-equalTo" => "#password",
                                             "data-msg-equalTo" => app_lang("enter_same_value")
                                         ));

@@ -34,13 +34,15 @@ $reportsView = $read("app/Views/tender_reports/details.php");
 $clarificationController = $read("app/Controllers/Tender_clarifications.php");
 $procurementChat = $read("app/Views/tender_clarifications/vendor.php");
 $vendorController = $read("app/Controllers/Vendor_portal.php");
+$schemaMigration = $read("app/Database/Migrations/2026_08_03_150000_runtime_schema_ownership_hardening.php");
 
 $assertContains("tender_bid_id", $sql, "SQL should add tender bid linkage for evaluator clarification requests");
 $assertContains("internal_audience", $sql, "SQL should add internal audience for evaluator-procurement messages");
 $assertContains("MODIFY COLUMN `type` VARCHAR(50)", $sql, "SQL should allow internal clarification request and response type values");
 
 $assertContains("commercial_clarification_request", $communicationsModel, "communication roots should include commercial evaluator requests");
-$assertContains("_ensure_type_column_accepts_internal_values", $communicationsModel, "communication model should repair old enum-limited internal type values");
+$assertContains("Runtime_schema_guard::requireColumnProperties", $communicationsModel, "communication model should fail closed on old enum-limited type values");
+$assertContains("MODIFY `type` VARCHAR(50)", $schemaMigration, "deployment migration should repair old enum-limited internal type values");
 $assertContains("get_internal_conversation", $communicationsModel, "model should load evaluator-procurement internal conversation only");
 $assertContains("has_vendor_visible_evaluator_clarification_request", $communicationsModel, "vendor late replies should be allowed for any evaluator request");
 $assertContains("get_latest_vendor_visible_evaluator_request", $communicationsModel, "vendor replies should attach to the evaluator request thread after procurement asks");

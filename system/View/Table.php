@@ -83,7 +83,7 @@ class Table
     /**
      * Callback for custom table layout
      *
-     * @var callable|null
+     * @var (callable(mixed): mixed)|null
      */
     public $function;
 
@@ -108,8 +108,7 @@ class Table
     /**
      * Set the template
      *
-     * @param         array<string, string>        $template
-     * @phpstan-param array<string, string>|string $template
+     * @param array<string, string>|string $template
      *
      * @return bool
      */

@@ -2,6 +2,9 @@
 
 namespace App\Libraries;
 
+use App\Libraries\Payments\Legacy_invoice_payment_manager;
+use DomainException;
+
 class Stripe {
 
     private $stripe_config;
@@ -39,6 +42,12 @@ class Stripe {
 
         if (!($invoice_id || $subscription_id)) {
             return false;
+        }
+
+        // Invoice checkouts use a server-owned, immutable payment attempt. Keep
+        // the subscription setup flow below unchanged.
+        if ($invoice_id && !$subscription_id) {
+            return $this->get_secure_invoice_checkout_session($data, (int)$login_user);
         }
 
         $invoice_info = $this->Invoices_model->get_one($invoice_id);
@@ -200,14 +209,127 @@ class Stripe {
         return $payment_intent;
     }
 
-    public function is_valid_ipn($stripe_ipn_info) {
-        //get the payment_intent with the session_id
-        $session = $this->retrieve_session($stripe_ipn_info->session_id);
-        $payment_intent = $this->retrieve_payment_intent($session->payment_intent);
-        if ($payment_intent && $payment_intent->status == "succeeded") {
-            //so the payment is successful
-            return $payment_intent;
+    private function get_secure_invoice_checkout_session(array $data, int $loginUserId = 0) {
+        $manager = new Legacy_invoice_payment_manager();
+        $attempt = $manager->start('stripe', $data, $loginUserId);
+
+        try {
+            $session = \Stripe\Checkout\Session::create([
+                'mode' => 'payment',
+                'payment_method_types' => $this->stripePaymentMethodTypes((string)$attempt->currency),
+                'client_reference_id' => (string)$attempt->public_id,
+                'metadata' => [
+                    'legacy_invoice_payment_id' => (string)$attempt->public_id,
+                ],
+                'line_items' => [[
+                    'quantity' => 1,
+                    'price_data' => [
+                        'unit_amount' => (int)$attempt->expected_amount_minor,
+                        'currency' => strtolower((string)$attempt->currency),
+                        'product_data' => [
+                            'name' => (string)$attempt->invoice_display_id,
+                            'description' => 'Invoice ' . (string)$attempt->invoice_display_id,
+                            'images' => [get_file_uri('assets/images/stripe-payment-logo.png')],
+                        ],
+                    ],
+                ]],
+                'payment_intent_data' => [
+                    'description' => 'Invoice ' . (string)$attempt->invoice_display_id,
+                    'metadata' => [
+                        'legacy_invoice_payment_id' => (string)$attempt->public_id,
+                    ],
+                ],
+                'success_url' => get_uri('stripe_redirect/index/' . $attempt->public_id),
+                'cancel_url' => $this->invoiceReturnUrl($attempt),
+            ], [
+                'idempotency_key' => 'legacy-invoice-' . (string)$attempt->public_id,
+            ]);
+
+            if (empty($session->id)) {
+                throw new DomainException('Stripe did not create a checkout session.');
+            }
+            $manager->bindProviderReference((int)$attempt->id, (string)$session->id);
+            return $session;
+        } catch (\Throwable $exception) {
+            $manager->markFailed((string)$attempt->public_id, 'stripe', 'checkout_creation_failed');
+            throw $exception;
         }
+    }
+
+    /** Provider-verified and idempotent invoice settlement for browser redirects. */
+    public function settle_invoice_attempt(string $publicId): array {
+        $manager = new Legacy_invoice_payment_manager();
+        $attempt = $manager->getAttempt($publicId, 'stripe');
+        if (!$attempt || empty($attempt->provider_reference)) {
+            throw new DomainException('The Stripe payment attempt is invalid.');
+        }
+
+        $session = $this->retrieve_session((string)$attempt->provider_reference);
+        return $this->settleStripeSession($manager, $attempt, $session);
+    }
+
+    /** Provider-verified and idempotent invoice settlement for signed webhooks. */
+    public function settle_invoice_session(string $sessionId): array {
+        if (!preg_match('/^cs_[A-Za-z0-9_]+$/D', $sessionId)) {
+            throw new DomainException('The Stripe checkout reference is invalid.');
+        }
+        $session = $this->retrieve_session($sessionId);
+        $publicId = trim((string)($session->metadata->legacy_invoice_payment_id ?? $session->client_reference_id ?? ''));
+        $manager = new Legacy_invoice_payment_manager();
+        $attempt = $manager->getAttempt($publicId, 'stripe');
+        if (!$attempt || !hash_equals((string)$attempt->provider_reference, $sessionId)) {
+            throw new DomainException('The Stripe checkout is not bound to this invoice payment.');
+        }
+
+        return $this->settleStripeSession($manager, $attempt, $session);
+    }
+
+    private function settleStripeSession(Legacy_invoice_payment_manager $manager, object $attempt, object $session): array {
+        $sessionPublicId = trim((string)($session->metadata->legacy_invoice_payment_id ?? $session->client_reference_id ?? ''));
+        if (!hash_equals((string)$attempt->public_id, $sessionPublicId)
+            || !hash_equals((string)$attempt->provider_reference, (string)($session->id ?? ''))
+            || (string)($session->mode ?? '') !== 'payment'
+            || (string)($session->status ?? '') !== 'complete'
+            || (string)($session->payment_status ?? '') !== 'paid'
+            || (int)($session->amount_total ?? -1) !== (int)$attempt->expected_amount_minor
+            || strtolower((string)($session->currency ?? '')) !== strtolower((string)$attempt->currency)
+            || empty($session->payment_intent)) {
+            throw new DomainException('Stripe session amount, currency, status, or binding mismatch.');
+        }
+
+        $intent = $this->retrieve_payment_intent((string)$session->payment_intent);
+        $intentPublicId = trim((string)($intent->metadata->legacy_invoice_payment_id ?? ''));
+        if (!hash_equals((string)$attempt->public_id, $intentPublicId)
+            || (string)($intent->status ?? '') !== 'succeeded'
+            || (int)($intent->amount ?? -1) !== (int)$attempt->expected_amount_minor
+            || (int)($intent->amount_received ?? -1) !== (int)$attempt->expected_amount_minor
+            || strtolower((string)($intent->currency ?? '')) !== strtolower((string)$attempt->currency)) {
+            throw new DomainException('Stripe payment amount, currency, status, or binding mismatch.');
+        }
+
+        return $manager->settle(
+            (string)$attempt->public_id,
+            'stripe',
+            (string)$session->id,
+            (string)$intent->id,
+            (int)$intent->amount_received,
+            strtoupper((string)$intent->currency)
+        );
+    }
+
+    private function stripePaymentMethodTypes(string $currency): array {
+        if (strtoupper($currency) === 'EUR'
+            && !empty($this->stripe_config->enable_stripe_ideal_payment)) {
+            return ['card', 'ideal'];
+        }
+        return ['card'];
+    }
+
+    private function invoiceReturnUrl(object $attempt): string {
+        if (!empty($attempt->invoice_verification_code)) {
+            return get_uri('pay_invoice/index/' . $attempt->invoice_verification_code);
+        }
+        return get_uri('invoices/preview/' . (int)$attempt->invoice_id);
     }
 
     public function get_products_list() {

@@ -1,0 +1,41 @@
+# Local environment and credentials
+/.env
+/.env.*
+!/.env.example
+/.vscode/sftp.json
+
+# Local review/tool state
+/.codex-security-review/
+/.qodo/
+/tmp/
+/.phpunit.result.cache
+
+# CodeIgniter runtime state
+/writable/cache/*
+!/writable/cache/index.html
+/writable/debugbar/*
+!/writable/debugbar/index.html
+/writable/logs/*
+!/writable/logs/index.html
+/writable/session/*
+!/writable/session/index.html
+/writable/uploads/*
+!/writable/uploads/index.html
+
+# User-generated/public runtime files. These must be stored outside the
+# deployment repository and served through authorized application endpoints.
+/files/temp/*
+!/files/temp/index.html
+/files/profile_images/*
+!/files/profile_images/index.html
+/files/project_files/*
+!/files/project_files/index.html
+/files/tender_files/*
+!/files/tender_files/index.html
+!/files/tender_files/.htaccess
+/files/timeline_files/*
+!/files/timeline_files/index.html
+
+# Large local archives
+/port_of_duqum.zip
+*.zip

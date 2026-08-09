@@ -340,7 +340,7 @@ if (!function_exists('get_converted_amount')) {
         }
 
         $conversion_rate = get_setting("conversion_rate");
-        $conversion_rate = @unserialize($conversion_rate);
+        $conversion_rate = @safe_unserialize($conversion_rate);
         if (!($conversion_rate && is_array($conversion_rate) && count($conversion_rate))) {
             //no settings found
             return $value;

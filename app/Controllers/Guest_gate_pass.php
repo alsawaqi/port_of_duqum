@@ -104,99 +104,86 @@ class Guest_gate_pass extends App_Controller
             [$email]
         )->getRow();
 
-        if ($existing_user && strtolower((string)($existing_user->user_type ?? "")) !== "staff") {
+        // Public registration must never attach itself to, revive, or modify an
+        // existing identity. In particular, a deleted/internal staff address
+        // cannot be converted into an active gate-pass login.
+        if ($existing_user) {
             echo json_encode([
                 "success" => false,
-                "message" => app_lang("gate_pass_email_non_staff"),
-                "errors" => ["email" => app_lang("gate_pass_email_non_staff")]
+                "message" => "An account already exists for this email. Sign in or use password recovery.",
+                "errors" => ["email" => "An account already exists for this email."]
             ]);
             return;
         }
 
-        if (!$existing_user) {
-            if ($password === "") {
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("password_is_required"),
-                    "errors" => ["password" => app_lang("password_is_required")]
-                ]);
-                return;
-            }
-
-            if ($password_confirm === "") {
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("password_confirm_required"),
-                    "errors" => ["password_confirm" => app_lang("password_confirm_required")]
-                ]);
-                return;
-            }
-
-            if ($password !== $password_confirm) {
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("passwords_do_not_match"),
-                    "errors" => ["password_confirm" => app_lang("passwords_do_not_match")]
-                ]);
-                return;
-            }
+        if ($password === "") {
+            echo json_encode([
+                "success" => false,
+                "message" => app_lang("password_is_required"),
+                "errors" => ["password" => app_lang("password_is_required")]
+            ]);
+            return;
         }
 
-        if (get_setting("re_captcha_secret_key")) {
-            $ReCAPTCHA = new ReCAPTCHA();
-            $ReCAPTCHA->validate_recaptcha(true);
+        if ($password_confirm === "") {
+            echo json_encode([
+                "success" => false,
+                "message" => app_lang("password_confirm_required"),
+                "errors" => ["password_confirm" => app_lang("password_confirm_required")]
+            ]);
+            return;
         }
+
+        if ($password !== $password_confirm) {
+            echo json_encode([
+                "success" => false,
+                "message" => app_lang("passwords_do_not_match"),
+                "errors" => ["password_confirm" => app_lang("passwords_do_not_match")]
+            ]);
+            return;
+        }
+
+        $policyErrors = $this->Users_model->password_policy_errors($password);
+        if ($policyErrors) {
+            $message = implode(" ", $policyErrors);
+            echo json_encode([
+                "success" => false,
+                "message" => esc($message),
+                "errors" => ["password" => esc($message)],
+            ]);
+            return;
+        }
+
+        $ReCAPTCHA = new ReCAPTCHA();
+        $ReCAPTCHA->validate_recaptcha(true);
 
         $this->db->transBegin();
 
         try {
-            $user_id = 0;
-            if ($existing_user) {
-                $user_id = (int)$existing_user->id;
+            $user_data = [
+                "first_name" => $this->request->getPost("first_name"),
+                "last_name"  => $this->request->getPost("last_name"),
+                "email"      => $email,
+                "password"   => password_hash($password, PASSWORD_DEFAULT),
+                "phone" => $phone,
+                "alternative_phone" => $emergencyNumber,
+                "job_title" => "Gate Pass Visitor",
+                // Legacy schema compatibility; Security_Controller treats a
+                // role-less requester pivot as a portal-only identity.
+                "user_type" => "staff",
+                "is_admin"  => 0,
+                "role_id"   => 0,
+                "status" => "active",
+                "disable_login" => 0,
+                "language" => "",
+                "deleted" => 0
+            ];
 
-                // revive soft-deleted user if needed
-                if ((int)($existing_user->deleted ?? 0) === 1) {
-                    $ok = $this->db->table("users")
-                        ->where("id", $user_id)
-                        ->update(clean_data([
-                            "deleted" => 0,
-                            "status" => ($portal_status === "suspended") ? "inactive" : "active",
-                            "disable_login" => ($portal_status === "suspended") ? 1 : 0
-                        ]));
-                    if (!$ok) {
-                        $err = $this->db->error();
-                        throw new \RuntimeException("Failed to restore existing user: " . ($err["message"] ?: "unknown"));
-                    }
-                }
-            } else {
-                // Insert user
-                $user_data = [
-                    "first_name" => $this->request->getPost("first_name"),
-                    "last_name"  => $this->request->getPost("last_name"),
-                    "email"      => $email,
-                    "password"   => password_hash($password, PASSWORD_DEFAULT),
-
-                    "phone" => $phone,
-                    "alternative_phone" => $emergencyNumber,
-
-                    "job_title" => "Gate Pass Visitor",
-                    "user_type" => "staff",
-                    "is_admin"  => 0,
-                    "role_id"   => 0,
-
-                    "status" => ($portal_status === "suspended") ? "inactive" : "active",
-                    "disable_login" => ($portal_status === "suspended") ? 1 : 0,
-                    "language" => "",
-                    "deleted" => 0
-                ];
-
-                $ok = $this->db->table("users")->insert(clean_data($user_data));
-                if (!$ok) {
-                    $err = $this->db->error();
-                    throw new \RuntimeException("User insert error: " . ($err["message"] ?: "unknown"));
-                }
-                $user_id = (int)$this->db->insertID();
+            $ok = $this->db->table("users")->insert(clean_data($user_data));
+            if (!$ok) {
+                throw new \RuntimeException("Unable to create the gate-pass identity.");
             }
+            $user_id = (int)$this->db->insertID();
 
             $existing_pivot_by_user = $this->db->query(
                 "SELECT id, username FROM $gp_users_table WHERE user_id=? LIMIT 1",
@@ -262,7 +249,10 @@ class Guest_gate_pass extends App_Controller
             ]);
         } catch (\Throwable $e) {
             $this->db->transRollback();
-            echo json_encode(["success" => false, "message" => $e->getMessage()]);
+            log_message("error", "Guest gate-pass registration failed: {exception}", [
+                "exception" => $e,
+            ]);
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
         }
     }
 

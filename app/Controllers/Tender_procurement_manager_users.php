@@ -115,7 +115,7 @@ class Tender_procurement_manager_users extends Security_Controller
 
         $perms = [];
         if ($row && !empty($row->permissions)) {
-            $tmp = @unserialize($row->permissions);
+            $tmp = @safe_unserialize($row->permissions);
             if (is_array($tmp)) {
                 $perms = $tmp;
             }

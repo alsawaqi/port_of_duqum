@@ -160,7 +160,7 @@ class Messages extends Security_Controller {
             $subject = $data->reply_subject;
         }
 
-        if ($data->files && is_array(unserialize($data->files)) && count(unserialize($data->files))) {
+        if ($data->files && is_array(safe_unserialize($data->files)) && count(safe_unserialize($data->files))) {
             $attachment_icon = "<i data-feather='paperclip' class='icon-14 mr15'></i>";
         }
 

@@ -55,23 +55,17 @@ class Outlook_imap {
     }
 
     //authorize connection
-    public function authorize() {
-        $url = "$this->login_url/authorize?";
+    public function authorize(string $state) {
         $auth_array = array(
             "client_id" => $this->client_id,
             "response_type" => "code",
             "redirect_uri" => $this->redirect_uri,
             "response_mode" => "query",
-            "scope" => "offline_access%20user.read%20IMAP.AccessAsUser.All%20Mail.ReadWrite",
+            "scope" => "offline_access user.read IMAP.AccessAsUser.All Mail.ReadWrite",
+            "state" => $state,
         );
 
-        foreach ($auth_array as $key => $value) {
-            $url .= "$key=$value";
-
-            if ($key !== "scope") {
-                $url .= "&";
-            }
-        }
+        $url = "$this->login_url/authorize?" . http_build_query($auth_array, '', '&', PHP_QUERY_RFC3986);
 
         app_redirect($url, true);
     }

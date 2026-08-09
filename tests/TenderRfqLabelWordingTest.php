@@ -22,6 +22,7 @@ $assertNotContains = function (string $needle, string $haystack, string $message
 };
 
 $files = [
+    "app/Views/tender_procurement_manager_inbox/details.php",
     "app/Views/tender_procurement_inbox/form.php",
     "app/Views/vendor_portal/tenders/details.php",
     "app/Views/vendor_portal/tenders/view_modal.php",
@@ -30,10 +31,18 @@ $files = [
 
 foreach ($files as $file) {
     $content = $read($file);
-    $assertContains("Reference Number", $content, "$file should show Reference Number instead of RFQ No");
-    $assertContains("Request Date", $content, "$file should show Request Date instead of RFQ Date");
-    $assertNotContains("RFQ No", $content, "$file should not show the old RFQ No label");
-    $assertNotContains("RFQ Date", $content, "$file should not show the old RFQ Date label");
+    $assertContains("Tender Details", $content, "$file should use the Tender Details heading");
+    $assertContains("PR No (Optional)", $content, "$file should identify PR No as optional");
+    $assertContains("Estimated Material/Service Required On", $content, "$file should use the approved material/service date label");
+    $assertNotContains("Reference Number", $content, "$file should not show the removed Reference Number field");
+    $assertNotContains("Request Date", $content, "$file should not show the removed Request Date field");
+    $assertNotContains("RFQ / RFP Details", $content, "$file should not show the old RFQ/RFP Details heading");
+    $assertNotContains("RFQ Details", $content, "$file should not show the old RFQ Details heading");
+    $assertNotContains("RFQ / RFP Header", $content, "$file should not show the old RFQ/RFP Header heading");
 }
+
+$procurementForm = $read("app/Views/tender_procurement_inbox/form.php");
+$assertNotContains('name="rfq_no"', $procurementForm, "procurement form should not post the removed reference number");
+$assertNotContains('name="rfq_date"', $procurementForm, "procurement form should not post the removed request date");
 
 echo "OK" . PHP_EOL;

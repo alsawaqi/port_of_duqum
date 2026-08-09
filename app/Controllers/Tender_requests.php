@@ -71,6 +71,9 @@ class Tender_requests extends Security_Controller
         $id = (int) $this->request->getPost('id');
         $this->access_only_tender('requests', $id ? 'update' : 'create');
 
+        if ($id) {
+            $this->require_tender_request_scope($id, 'requests');
+        }
         $model_info = $this->Tender_requests_model->get_one($id);
 
         $db = db_connect();
@@ -93,6 +96,14 @@ class Tender_requests extends Security_Controller
 
         $requester_display = $this->_selected_user_option($requester_user_id);
         $requester_assignment = $this->_get_requester_assignment($requester_user_id);
+
+        if (!$this->login_user->is_admin) {
+            $company_dropdown = ['' => '- '.app_lang('select').' -'];
+            if ($requester_assignment) {
+                $company_dropdown[(int) $requester_assignment->company_id]
+                    = (string) ($requester_assignment->company_name ?? '');
+            }
+        }
 
         $requester_context_locked = false;
 
@@ -382,6 +393,9 @@ class Tender_requests extends Security_Controller
                 'message' => 'Tender request not found.',
             ]);
         }
+        if ($existing) {
+            $this->require_tender_request_scope($id, 'requests');
+        }
 
         if ($existing && !$this->login_user->is_admin && (int) $existing->requester_id !== (int) $this->login_user->id) {
             app_redirect('forbidden');
@@ -436,6 +450,7 @@ class Tender_requests extends Security_Controller
                 'message' => 'Company and Department are required.',
             ]);
         }
+        $this->require_tender_company_access((int) $company_id, 'requests');
 
         $department_manager_user_id = (int) $this->request->getPost('department_manager_user_id');
         if (!$this->_is_valid_department_manager($department_manager_user_id, (int) $company_id, (int) $department_id)) {
@@ -591,7 +606,7 @@ class Tender_requests extends Security_Controller
         $this->access_only_tender('requests', 'update');
 
         $id = (int) $this->request->getPost('id');
-        $info = $this->Tender_requests_model->get_one($id);
+        $info = $this->require_tender_request_scope($id, 'requests');
 
         if (!$info || !$info->id || (int) ($info->deleted ?? 0) === 1) {
             return $this->response->setJSON([
@@ -681,7 +696,9 @@ class Tender_requests extends Security_Controller
         $result = [];
 
         foreach ($list_data as $data) {
-            $result[] = $this->_make_row($data);
+            if ($this->can_access_tender_company((int) ($data->company_id ?? 0), 'requests')) {
+                $result[] = $this->_make_row($data);
+            }
         }
 
         return $this->response->setJSON(['data' => $result]);
@@ -738,6 +755,7 @@ class Tender_requests extends Security_Controller
         if (!$company_id) {
             return $this->response->setJSON([]);
         }
+        $this->require_tender_company_access($company_id, 'requests');
 
         $db = db_connect();
         $departments = $db->prefixTable('departments');
@@ -856,6 +874,7 @@ class Tender_requests extends Security_Controller
         if (!$company_id || !$department_id) {
             return $this->response->setJSON([]);
         }
+        $this->require_tender_company_access($company_id, 'requests');
 
         $tdu = $this->db->prefixTable('tender_department_manager_users');
         $users = $this->db->prefixTable('users');
@@ -919,6 +938,7 @@ class Tender_requests extends Security_Controller
         if (!$company_id) {
             return $this->response->setJSON([]);
         }
+        $this->require_tender_company_access($company_id, 'requests');
 
         $tcu = $this->db->prefixTable('tender_committee_users');
         $users = $this->db->prefixTable('users');
@@ -1088,6 +1108,9 @@ class Tender_requests extends Security_Controller
 
         $company_id = (int) $this->request->getGet('company_id');
         $department_id = (int) $this->request->getGet('department_id');
+        if ($company_id) {
+            $this->require_tender_company_access($company_id, 'requests');
+        }
 
         $manager = $this->_get_department_manager_assignment($company_id, $department_id);
 
@@ -1111,6 +1134,7 @@ class Tender_requests extends Security_Controller
         if (!$company_id) {
             return $this->response->setJSON([]);
         }
+        $this->require_tender_company_access($company_id, 'requests');
 
         $ttu = $this->db->prefixTable('tender_technical_users');
         $users = $this->db->prefixTable('users');
@@ -1166,6 +1190,7 @@ class Tender_requests extends Security_Controller
         if (!$company_id) {
             return $this->response->setJSON([]);
         }
+        $this->require_tender_company_access($company_id, 'requests');
 
         $tcu = $this->db->prefixTable('tender_commercial_users');
         $users = $this->db->prefixTable('users');

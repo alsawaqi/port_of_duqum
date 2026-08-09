@@ -282,7 +282,7 @@ class Tickets_model extends Crud_model {
 
         foreach ($ticket_comments as $comment_info) {
             if ($comment_info->files && $comment_info->files != "a:0:{}") {
-                $files = unserialize($comment_info->files);
+                $files = safe_unserialize($comment_info->files);
                 foreach ($files as $file) {
                     delete_app_files($comment_file_path, array($file));
                 }

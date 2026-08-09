@@ -205,18 +205,19 @@ $dtValue = function ($value) {
 
         <hr>
         <h5 class="mb15">Milestones</h5>
+        <div class="alert alert-light">Friday and Saturday cannot be selected for tender milestones.</div>
 
         <div class="row">
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Tender Release Date</label>
-                    <input type="datetime-local" name="release_at" class="form-control" value="<?php echo esc($dtValue($tender->release_at ?? "")); ?>">
+                    <input type="datetime-local" name="release_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->release_at ?? "")); ?>">
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Last Date of Document Purchase</label>
-                    <input type="datetime-local" name="document_purchase_deadline" class="form-control" value="<?php echo esc($dtValue($tender->document_purchase_deadline ?? "")); ?>">
+                    <input type="datetime-local" name="document_purchase_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->document_purchase_deadline ?? "")); ?>">
                 </div>
             </div>
         </div>
@@ -225,14 +226,14 @@ $dtValue = function ($value) {
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Site Visit Date / Deadline</label>
-                    <input type="datetime-local" name="site_visit_at" class="form-control" value="<?php echo esc($dtValue($tender->site_visit_at ?? "")); ?>">
+                    <input type="datetime-local" name="site_visit_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->site_visit_at ?? "")); ?>">
                     <small class="text-muted">When set or changed, a site visit notice is logged for vendors in the tender communication history.</small>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Clarification Submission Deadline</label>
-                    <input type="datetime-local" name="clarification_deadline" class="form-control" value="<?php echo esc($dtValue($tender->clarification_deadline ?? "")); ?>">
+                    <input type="datetime-local" name="clarification_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->clarification_deadline ?? "")); ?>">
                 </div>
             </div>
         </div>
@@ -241,13 +242,13 @@ $dtValue = function ($value) {
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Tender Submission Deadline</label>
-                    <input type="datetime-local" name="closing_at" class="form-control" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>">
+                    <input type="datetime-local" name="closing_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>">
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Bid Opening Date</label>
-                    <input type="datetime-local" name="bid_opening_at" class="form-control" value="<?php echo esc($dtValue($tender->bid_opening_at ?? "")); ?>">
+                    <input type="datetime-local" name="bid_opening_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->bid_opening_at ?? "")); ?>">
                 </div>
             </div>
         </div>
@@ -256,13 +257,13 @@ $dtValue = function ($value) {
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Technical Evaluation Deadline</label>
-                    <input type="datetime-local" name="technical_eval_deadline" class="form-control" value="<?php echo esc($dtValue($tender->technical_eval_deadline ?? "")); ?>">
+                    <input type="datetime-local" name="technical_eval_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->technical_eval_deadline ?? "")); ?>">
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="form-group">
                     <label>Commercial Evaluation Deadline</label>
-                    <input type="datetime-local" name="commercial_eval_deadline" class="form-control" value="<?php echo esc($dtValue($tender->commercial_eval_deadline ?? "")); ?>">
+                    <input type="datetime-local" name="commercial_eval_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->commercial_eval_deadline ?? "")); ?>">
                 </div>
             </div>
         </div>
@@ -361,7 +362,13 @@ $dtValue = function ($value) {
                     <label>Target By</label>
                     <?php echo form_dropdown(
                         "target_mode",
-                        ["specialty" => "Vendor Specialty", "group" => "Vendor Group"],
+                        [
+                            "specialty" => "Vendor Specialty",
+                            "group" => "Vendor Group",
+                            "specific_vendors" => "Specific Vendors",
+                            "group_and_specific_vendors" => "Vendor Group + Specific Vendors",
+                            "grade" => "Vendor Grade",
+                        ],
                         $selected_target_mode ?? "specialty",
                         "class='form-control select2' id='target_mode'"
                     ); ?>
@@ -402,6 +409,48 @@ $dtValue = function ($value) {
                         "class='form-control select2' id='vendor_group_id'"
                     ); ?>
                 </div>
+            </div>
+        </div>
+
+        <div class="row" id="target-by-grade-wrap" style="display:none;">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Vendor Grade</label>
+                    <?php echo form_dropdown(
+                        "vendor_grade_id",
+                        $vendor_grades_dropdown ?? ["" => "- Select vendor grade -"],
+                        (int) ($selected_vendor_grade_id ?? 0),
+                        "class='form-control select2' id='vendor_grade_id'"
+                    ); ?>
+                </div>
+            </div>
+        </div>
+
+        <div id="target-by-specific-vendors-wrap" style="display:none;">
+            <div class="form-group">
+                <label>Specific Vendors</label>
+                <div id="selected-vendor-tags" class="list-group mb10">
+                    <?php foreach (($selected_specific_vendors ?? []) as $vendor) { ?>
+                        <div class="list-group-item d-flex justify-content-between align-items-center tender-selected-vendor-tag" data-vendor-id="<?php echo (int) $vendor->id; ?>">
+                            <input type="hidden" name="specific_vendor_ids[]" value="<?php echo (int) $vendor->id; ?>">
+                            <span>
+                                <strong><?php echo esc($vendor->vendor_name ?? "Vendor #" . (int) $vendor->id); ?></strong>
+                                <?php if (!empty($vendor->cr_number)) { ?><small class="d-block text-muted">CR <?php echo esc($vendor->cr_number); ?></small><?php } ?>
+                            </span>
+                            <button type="button" class="btn btn-default btn-sm tender-remove-selected-vendor" aria-label="Remove vendor">&times;</button>
+                        </div>
+                    <?php } ?>
+                </div>
+                <div class="input-group mb10">
+                    <input type="search" id="vendor_picker_search" class="form-control" placeholder="Search approved vendors by name, email, or CR">
+                    <button type="button" class="btn btn-default" id="vendor_picker_search_btn">
+                        <i data-feather="search" class="icon-14"></i> Search
+                    </button>
+                </div>
+                <div id="vendor_picker_results" class="list-group" style="max-height:260px; overflow-y:auto;">
+                    <div class="list-group-item text-muted">Search for approved vendors to add.</div>
+                </div>
+                <small class="form-text text-muted">In combined mode, specific vendors are added to all approved vendors in the selected group.</small>
             </div>
         </div>
 
@@ -487,7 +536,7 @@ $dtValue = function ($value) {
                             <th>File</th>
                             <th>Size</th>
                             <th>Limited</th>
-                            <th></th>
+                            <th style="width:260px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -499,17 +548,30 @@ $dtValue = function ($value) {
                                 <td><?php echo esc($doc->size_bytes ? convert_file_size($doc->size_bytes) : "-"); ?></td>
                                 <td><?php echo ((int) $doc->time_limited) ? ("Yes (" . (int) $doc->expires_in_hours . "h)") : "No"; ?></td>
                                 <td class="text-end">
-                                    <?php
-                                    echo js_anchor(
-                                        "<i data-feather='x' class='icon-16'></i>",
-                                        [
-                                            "title" => app_lang("delete"),
-                                            "class" => "delete-doc",
-                                            "data-id" => $doc->id,
-                                            "data-action-url" => get_uri("tender_procurement_inbox/delete_document"),
-                                        ]
-                                    );
-                                    ?>
+                                    <div class="d-flex justify-content-end flex-wrap gap-1">
+                                        <?php echo js_anchor(
+                                            "<i data-feather='eye' class='icon-14'></i> Preview",
+                                            [
+                                                "title" => "Preview Document",
+                                                "class" => "btn btn-primary btn-sm",
+                                                "data-toggle" => "app-modal",
+                                                "data-sidebar" => "0",
+                                                "data-url" => get_uri("tender_procurement_inbox/preview_tender_document/" . (int) $doc->id),
+                                            ]
+                                        ); ?>
+                                        <a href="<?php echo get_uri("tender_procurement_inbox/download_tender_document/" . (int) $doc->id); ?>" class="btn btn-default btn-sm">
+                                            <i data-feather="download" class="icon-14"></i> Download
+                                        </a>
+                                        <?php echo js_anchor(
+                                            "<i data-feather='x' class='icon-14'></i> Delete",
+                                            [
+                                                "title" => app_lang("delete"),
+                                                "class" => "btn btn-default btn-sm delete-doc",
+                                                "data-id" => $doc->id,
+                                                "data-action-url" => get_uri("tender_procurement_inbox/delete_document"),
+                                            ]
+                                        ); ?>
+                                    </div>
                                 </td>
                             </tr>
                         <?php } ?>
@@ -626,8 +688,111 @@ $(document).ready(function () {
     function toggleTargetMode() {
         var mode = $("#target_mode").val();
         $("#target-by-specialty-wrap").toggle(mode === "specialty");
-        $("#target-by-group-wrap").toggle(mode === "group");
+        $("#target-by-group-wrap").toggle(mode === "group" || mode === "group_and_specific_vendors");
+        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors" || mode === "group_and_specific_vendors");
+        $("#target-by-grade-wrap").toggle(mode === "grade");
     }
+
+    var vendorSearchTimer = null;
+
+    function htmlEscape(value) {
+        return $("<div>").text(value || "").html();
+    }
+
+    function selectedVendorIds() {
+        return $("#selected-vendor-tags .tender-selected-vendor-tag").map(function () {
+            return String($(this).data("vendor-id"));
+        }).get();
+    }
+
+    function addSelectedVendor(vendor) {
+        if (!vendor || !vendor.id || $.inArray(String(vendor.id), selectedVendorIds()) !== -1) {
+            return;
+        }
+
+        var meta = [];
+        if (vendor.cr_number) meta.push("CR " + vendor.cr_number);
+        if (vendor.group) meta.push(vendor.group);
+        if (vendor.grade && vendor.grade !== "-") meta.push(vendor.grade);
+
+        $("#selected-vendor-tags").append(
+            '<div class="list-group-item d-flex justify-content-between align-items-center tender-selected-vendor-tag" data-vendor-id="' + parseInt(vendor.id, 10) + '">' +
+                '<input type="hidden" name="specific_vendor_ids[]" value="' + parseInt(vendor.id, 10) + '">' +
+                '<span><strong>' + htmlEscape(vendor.name) + '</strong>' +
+                    (meta.length ? '<small class="d-block text-muted">' + htmlEscape(meta.join(" / ")) + '</small>' : '') +
+                '</span>' +
+                '<button type="button" class="btn btn-default btn-sm tender-remove-selected-vendor" aria-label="Remove vendor">&times;</button>' +
+            '</div>'
+        );
+    }
+
+    function renderVendorSearchResults(vendors) {
+        var selected = selectedVendorIds();
+        if (!vendors || !vendors.length) {
+            $("#vendor_picker_results").html('<div class="list-group-item text-muted">No approved vendors found.</div>');
+            return;
+        }
+
+        var html = "";
+        $.each(vendors, function (index, vendor) {
+            var alreadySelected = $.inArray(String(vendor.id), selected) !== -1;
+            var meta = [];
+            if (vendor.email) meta.push(vendor.email);
+            if (vendor.cr_number) meta.push("CR " + vendor.cr_number);
+            if (vendor.group) meta.push(vendor.group);
+            if (vendor.grade && vendor.grade !== "-") meta.push(vendor.grade);
+
+            html += '<div class="list-group-item d-flex justify-content-between align-items-center">' +
+                '<span><strong>' + htmlEscape(vendor.name) + '</strong><small class="d-block text-muted">' + htmlEscape(meta.join(" / ") || "Approved vendor") + '</small></span>' +
+                '<button type="button" class="btn btn-sm ' + (alreadySelected ? 'btn-success' : 'btn-primary') + ' tender-add-vendor-from-search" ' +
+                    'data-vendor-id="' + parseInt(vendor.id, 10) + '" data-vendor-name="' + htmlEscape(vendor.name) + '" ' +
+                    'data-vendor-cr-number="' + htmlEscape(vendor.cr_number || "") + '" data-vendor-group="' + htmlEscape(vendor.group || "") + '" ' +
+                    'data-vendor-grade="' + htmlEscape(vendor.grade || "") + '"' + (alreadySelected ? ' disabled' : '') + '>' +
+                    (alreadySelected ? 'Added' : 'Add') +
+                '</button></div>';
+        });
+        $("#vendor_picker_results").html(html);
+    }
+
+    function searchVendors() {
+        var query = $.trim($("#vendor_picker_search").val() || "");
+        $("#vendor_picker_results").html('<div class="list-group-item text-muted">Searching...</div>');
+        $.getJSON("<?php echo get_uri('tender_procurement_inbox/search_vendors'); ?>", {q: query}, function (res) {
+            renderVendorSearchResults((res && res.vendors) || []);
+        }).fail(function () {
+            $("#vendor_picker_results").html('<div class="list-group-item text-danger">Unable to load vendors. Please try again.</div>');
+        });
+    }
+
+    $("#vendor_picker_search_btn").on("click", searchVendors);
+    $("#vendor_picker_search").on("keydown", function (event) {
+        if (event.keyCode === 13) {
+            event.preventDefault();
+            searchVendors();
+            return;
+        }
+    }).on("keyup", function (event) {
+        if (event.keyCode === 13) {
+            return;
+        }
+        clearTimeout(vendorSearchTimer);
+        vendorSearchTimer = setTimeout(searchVendors, 350);
+    });
+
+    $(document).on("click", ".tender-add-vendor-from-search", function () {
+        addSelectedVendor({
+            id: $(this).data("vendor-id"),
+            name: $(this).data("vendor-name"),
+            cr_number: $(this).data("vendor-cr-number"),
+            group: $(this).data("vendor-group"),
+            grade: $(this).data("vendor-grade")
+        });
+        $(this).removeClass("btn-primary").addClass("btn-success").text("Added").prop("disabled", true);
+    });
+
+    $(document).on("click", ".tender-remove-selected-vendor", function () {
+        $(this).closest(".tender-selected-vendor-tag").remove();
+    });
 
     function loadSubcategories() {
         var categoryId = $("#vendor_category_id").val();
@@ -669,7 +834,43 @@ $(document).ready(function () {
         openTenderDocumentChooser();
     });
 
+    function tenderWorkdayNumber(value) {
+        var parts = String(value || "").split("T")[0].split("-");
+        if (parts.length !== 3) {
+            return null;
+        }
+        return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12).getDay();
+    }
+
+    function validateTenderWorkdays(showMessage) {
+        var valid = true;
+        $(".tender-workday-datetime").each(function () {
+            var day = tenderWorkdayNumber($(this).val());
+            var invalid = day === 5 || day === 6;
+            $(this).closest(".form-group").toggleClass("has-error", invalid);
+            valid = valid && !invalid;
+        });
+        if (!valid && showMessage !== false) {
+            appAlert.error("Tender milestones cannot be scheduled on Friday or Saturday.", {duration: 3500});
+        }
+        return valid;
+    }
+
+    $(".tender-workday-datetime").on("change", function () {
+        var day = tenderWorkdayNumber($(this).val());
+        if (day === 5 || day === 6) {
+            $(this).val("");
+            $(this).closest(".form-group").addClass("has-error");
+            appAlert.error("Friday and Saturday cannot be selected for tender milestones.", {duration: 3500});
+        } else {
+            $(this).closest(".form-group").removeClass("has-error");
+        }
+    });
+
     $("#tender-procurement-form").appForm({
+        beforeAjaxSubmit: function () {
+            return validateTenderWorkdays(true);
+        },
         onSuccess: function () {
             $("#tender-procurement-inbox-table").appTable({reload: true});
         }

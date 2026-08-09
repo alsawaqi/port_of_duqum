@@ -44,21 +44,11 @@
                 }
 <?php } ?>
 
-            //get the checksum hash 
-            var data = {};
-            $("#paytm-online-payment-form input").each(function () {
-                if ($(this).attr("name") !== "CHECKSUMHASH") { //we shouldn't include this to get chacksum hash
-                    data[$(this).attr("name")] = $(this).val();
-                }
-            });
-
 <?php $checksum_hash_url = isset($contact_user_id) ? 'pay_invoice/get_paytm_checksum_hash' : 'invoice_payments/get_paytm_checksum_hash'; ?>
 
-            var verificationDataArray = {
+            var paymentRequest = {
                 invoice_id: "<?php echo $invoice_info->id; ?>",
-                contact_user_id: "<?php echo isset($contact_user_id) ? $contact_user_id : $login_user->id; ?>",
-                client_id: "<?php echo $invoice_info->client_id; ?>",
-                payment_method_id: "<?php echo get_array_value($payment_method, "id"); ?>",
+                payment_amount: $("#paytm-payment-amount-field").val(),
                 verification_code: "<?php echo isset($verification_code) ? $verification_code : ""; ?>"
             };
 
@@ -66,11 +56,13 @@
                 url: "<?php echo get_uri($checksum_hash_url); ?>",
                 type: 'POST',
                 dataType: 'json',
-                data: {input_data: data, verification_data: JSON.stringify(verificationDataArray)},
+                data: {payment_request: paymentRequest},
                 success: function (result) {
-                    if (result.success) {
+                    if (result.success && result.input_data) {
+                        Object.keys(result.input_data).forEach(function (name) {
+                            $("#paytm-online-payment-form input[name='" + name + "']").val(result.input_data[name]);
+                        });
                         $('#paytm-checksum-hash').val(result.checksum_hash);
-                        $('#paytm-callback-url').val("<?php echo get_uri("paytm_redirect/index"); ?>/" + result.payment_verification_code);
 
                         setTimeout(function () {
                             $("#paytm-online-payment-form").trigger("submit");

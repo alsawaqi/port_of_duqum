@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Tender_bid_item_prices_model extends Crud_model
 {
     protected $table = null;
@@ -20,29 +22,12 @@ class Tender_bid_item_prices_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("tender_bid_item_prices");
-
-        if (!$this->_table_exists($table)) {
-            $this->db->query(
-                "CREATE TABLE `$table` (
-                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `tender_bid_id` BIGINT UNSIGNED NOT NULL,
-                    `tender_id` BIGINT UNSIGNED NOT NULL,
-                    `vendor_id` BIGINT UNSIGNED NOT NULL,
-                    `tender_rfq_item_id` BIGINT UNSIGNED NOT NULL,
-                    `qty` DECIMAL(18,3) DEFAULT NULL,
-                    `unit_price` DECIMAL(18,3) NOT NULL,
-                    `line_total` DECIMAL(18,3) DEFAULT NULL,
-                    `created_at` DATETIME DEFAULT NULL,
-                    `updated_at` DATETIME DEFAULT NULL,
-                    `deleted` TINYINT(1) NOT NULL DEFAULT 0,
-                    PRIMARY KEY (`id`),
-                    KEY `idx_tender_bid_item_prices_bid` (`tender_bid_id`),
-                    KEY `idx_tender_bid_item_prices_tender_vendor` (`tender_id`, `vendor_id`),
-                    KEY `idx_tender_bid_item_prices_rfq_item` (`tender_rfq_item_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-            );
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_bid_item_prices" => [
+                "id", "tender_bid_id", "tender_id", "vendor_id", "tender_rfq_item_id",
+                "qty", "unit_price", "line_total", "created_at", "updated_at", "deleted",
+            ],
+        ], "tender bid item pricing");
 
         self::$schema_checked = true;
     }
@@ -69,14 +54,14 @@ class Tender_bid_item_prices_model extends Crud_model
             if (!$item_id || $raw_price === "") {
                 return [
                     "success" => false,
-                    "message" => "Please enter a unit price for every RFQ/RFP item.",
+                    "message" => "Please enter a unit price for every tender item.",
                 ];
             }
 
             if (!is_numeric($raw_price) || (float) $raw_price < 0) {
                 return [
                     "success" => false,
-                    "message" => "RFQ/RFP item prices must be valid positive numbers.",
+                    "message" => "Tender item prices must be valid positive numbers.",
                 ];
             }
 
@@ -181,7 +166,7 @@ class Tender_bid_item_prices_model extends Crud_model
                 $rfq_items.description,
                 $rfq_items.uom,
                 $rfq_items.qty,
-                $rfq_items.brand,
+                $rfq_items.brand AS part_no,
                 $prices.unit_price AS vendor_unit_price,
                 $prices.line_total
              FROM $rfq_items
@@ -196,9 +181,4 @@ class Tender_bid_item_prices_model extends Crud_model
         )->getResult();
     }
 
-    private function _table_exists(string $table): bool
-    {
-        $row = $this->db->query("SHOW TABLES LIKE " . $this->db->escape($table))->getRow();
-        return (bool) $row;
-    }
 }

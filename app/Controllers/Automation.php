@@ -34,7 +34,7 @@ class Automation extends Security_Controller {
         $model_info->related_to = $model_info->related_to ? $model_info->related_to : $this->request->getPost('related_to');
 
         if ($model_info->conditions) {
-            $conditions = unserialize($model_info->conditions);
+            $conditions = safe_unserialize($model_info->conditions);
             $model_info->field_name_dropdown = $this->_get_condition_field_name_dropdown($model_info->event_name);
 
             $model_info->conditions = array_map(function ($row) use ($model_info) {
@@ -43,7 +43,7 @@ class Automation extends Security_Controller {
         }
 
         if ($model_info->actions) {
-            $actions = unserialize($model_info->actions);
+            $actions = safe_unserialize($model_info->actions);
             $model_info->action_dropdown = $this->_get_action_dropdown($model_info->event_name);
 
             $model_info->actions = array_map(function ($row) use ($model_info) {

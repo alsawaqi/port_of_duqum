@@ -812,7 +812,7 @@ class Leads extends Security_Controller {
             $profile_image = serialize(move_temp_file("avatar.png", get_setting("profile_image_path"), "", $profile_image));
 
             //delete old file
-            delete_app_files(get_setting("profile_image_path"), array(@unserialize($lead_info->image)));
+            delete_app_files(get_setting("profile_image_path"), array(@safe_unserialize($lead_info->image)));
 
             $image_data = array("image" => $profile_image);
             $this->Users_model->ci_save($image_data, $user_id);
@@ -834,7 +834,7 @@ class Leads extends Security_Controller {
 
                 //delete old file
                 if ($lead_info->image) {
-                    delete_app_files(get_setting("profile_image_path"), array(@unserialize($lead_info->image)));
+                    delete_app_files(get_setting("profile_image_path"), array(@safe_unserialize($lead_info->image)));
                 }
 
 
@@ -1198,7 +1198,21 @@ class Leads extends Security_Controller {
                         'email-' . $contact->id => "required|valid_email"
                     ));
 
-                    $user_password = $this->request->getPost('login_password-' . $contact->id);
+                    $user_password = (string) $this->request->getPost(
+                        'login_password-' . $contact->id
+                    );
+                    if ($user_password !== "") {
+                        $policyErrors = $this->Users_model->password_policy_errors(
+                            $user_password
+                        );
+                        if ($policyErrors) {
+                            echo json_encode([
+                                "success" => false,
+                                "message" => esc(implode(" ", $policyErrors)),
+                            ]);
+                            return;
+                        }
+                    }
 
                     $contact_data = array(
                         "first_name" => $this->request->getPost('first_name-' . $contact->id),
@@ -1237,7 +1251,7 @@ class Leads extends Security_Controller {
                             $parser_data["USER_FIRST_NAME"] = $user_data["first_name"];
                             $parser_data["USER_LAST_NAME"] = $user_data["last_name"];
                             $parser_data["USER_LOGIN_EMAIL"] = $user_data["email"];
-                            $parser_data["USER_LOGIN_PASSWORD"] = $user_password;
+                            $parser_data["USER_LOGIN_PASSWORD"] = app_lang("password_not_sent_by_email");
                             $parser_data["DASHBOARD_URL"] = base_url();
                             $parser_data["LOGO_URL"] = get_logo_url();
 

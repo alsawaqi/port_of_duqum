@@ -68,7 +68,7 @@ class Payment_methods_model extends Crud_model {
 
     private function _merge_online_settings_with_default($info) {
         $settings = $this->get_settings($info->type);
-        $settings_data = $info->settings ? @unserialize($info->settings) : array();
+        $settings_data = $info->settings ? @safe_unserialize($info->settings) : array();
 
         if (!is_array($settings_data)) {
             $settings_data = array();

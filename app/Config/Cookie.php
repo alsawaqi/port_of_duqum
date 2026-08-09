@@ -7,6 +7,24 @@ use DateTimeInterface;
 
 class Cookie extends BaseConfig
 {
+    public function __construct()
+    {
+        parent::__construct();
+
+        if (ENVIRONMENT === 'production') {
+            // Environment overrides may make development convenient, but they
+            // must never weaken authentication cookies on the live service.
+            $this->secure = true;
+            $this->httponly = true;
+            $this->path = '/';
+            $this->domain = '';
+
+            if (!in_array(strtolower($this->samesite), ['lax', 'strict'], true)) {
+                $this->samesite = 'Lax';
+            }
+        }
+    }
+
     /**
      * --------------------------------------------------------------------------
      * Cookie Prefix
@@ -54,7 +72,7 @@ class Cookie extends BaseConfig
      *
      * Cookie will only be set if a secure HTTPS connection exists.
      */
-    public bool $secure = false;
+    public bool $secure = ENVIRONMENT === 'production';
 
     /**
      * --------------------------------------------------------------------------

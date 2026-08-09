@@ -2,7 +2,7 @@
 <div class="modal-body clearfix">
     <div class="container-fluid">
         <input type="hidden" name="id" value="<?php echo $model_info->id; ?>" />
-        <input type="hidden" name="data" value='<?php echo json_encode(unserialize($model_info->data)); ?>' />
+        <input type="hidden" name="data" value='<?php echo json_encode(safe_unserialize($model_info->data)); ?>' />
         <div class="form-group">
             <div class="row">
                 <label for="title" class=" col-md-3"><?php echo app_lang('title'); ?></label>

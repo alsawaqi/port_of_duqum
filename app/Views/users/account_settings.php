@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <div class="tab-content">
     <?php
     $url = "team_members";
@@ -19,6 +20,25 @@
             <input type="hidden" name="last_name" value="<?php echo $user_info->last_name; ?>" />
 
             <?php if (($user_info->user_type == "staff" && (($user_info->id == $login_user->id) || $login_user->is_admin)) || ($user_info->user_type == "client" ))  { ?>
+                <?php if ((int) $user_info->id === (int) $login_user->id) { ?>
+                    <div class="form-group">
+                        <div class="row">
+                            <label for="current_password" class="col-md-2">Current password</label>
+                            <div class="col-md-10">
+                                <?php
+                                echo form_password(array(
+                                    "id" => "current_password",
+                                    "name" => "current_password",
+                                    "class" => "form-control",
+                                    "placeholder" => "Current password",
+                                    "autocomplete" => "current-password",
+                                ));
+                                ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php } ?>
+
                 <div class="form-group">
                     <div class="row">
                         <label for="email" class=" col-md-2"><?php echo app_lang('email'); ?></label>
@@ -51,11 +71,15 @@
                                 "name" => "password",
                                 "class" => "form-control",
                                 "placeholder" => app_lang('password'),
-                                "autocomplete" => "off",
-                                "data-rule-minlength" => 6,
-                                "data-msg-minlength" => app_lang("enter_minimum_6_characters"),
+                                "autocomplete" => "new-password",
+                                "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                                "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
                             ));
                             ?>
+                            <small class="text-muted">
+                                Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                                characters with uppercase, lowercase, number, and special character.
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -69,7 +93,7 @@
                                 "name" => "retype_password",
                                 "class" => "form-control",
                                 "placeholder" => app_lang('retype_password'),
-                                "autocomplete" => "off",
+                                "autocomplete" => "new-password",
                                 "data-rule-equalTo" => "#password",
                                 "data-msg-equalTo" => app_lang("enter_same_value")
                             ));
@@ -202,8 +226,12 @@
             var password = $("#password").val();
             if (password) {
                 $("#resend_login_details_section").removeClass("hide");
+                $("#retype_password").attr("data-rule-required", true);
+                $("#current_password").attr("data-rule-required", true);
             } else {
                 $("#resend_login_details_section").addClass("hide");
+                $("#retype_password").removeAttr("data-rule-required");
+                $("#current_password").removeAttr("data-rule-required");
             }
         });
     });

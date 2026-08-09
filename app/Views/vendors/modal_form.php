@@ -58,6 +58,28 @@
 
         <div class="form-group">
             <div class="row">
+                <label for="cr_number" class=" col-md-3">
+                    <?php echo app_lang('cr_number'); ?>
+                    <?php if (empty($model_info->id)) : ?><span class="text-danger">*</span><?php endif; ?>
+                </label>
+                <div class=" col-md-9">
+                    <?php
+                    echo form_input(array(
+                        "id" => "cr_number",
+                        "name" => "cr_number",
+                        "value" => $model_info->cr_number ?? "",
+                        "class" => "form-control",
+                        "placeholder" => app_lang('cr_number'),
+                        "data-rule-required" => empty($model_info->id) ? "true" : null,
+                        "data-msg-required" => app_lang('field_required')
+                    ));
+                    ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="row">
                 <label for="email" class=" col-md-3"><?php echo app_lang('email'); ?></label>
                 <div class=" col-md-9">
                     <?php
@@ -215,6 +237,7 @@
         </div>
 
 
+        <?php if (empty($model_info->id)) : ?>
         <h5 class="mb10"><?php echo app_lang("login_user"); ?></h5>
 
         <div class="form-group">
@@ -274,9 +297,11 @@
                         "autocomplete" => "new-password"
                     ));
                     ?>
+                    <small class="text-muted"><?php echo app_lang("vendor_admin_password_reuse_hint"); ?></small>
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
     </div>
 </div>

@@ -3,10 +3,20 @@
 namespace Config;
 
 use CodeIgniter\Config\BaseConfig;
-use CodeIgniter\Log\Handlers\FileHandler;
 
 class Logger extends BaseConfig
 {
+    public function __construct()
+    {
+        parent::__construct();
+
+        if (ENVIRONMENT === 'production') {
+            // Production records operational failures, never verbose request
+            // context or debug data.
+            $this->threshold = [1, 2, 3, 4];
+        }
+    }
+
     /**
      * --------------------------------------------------------------------------
      * Error Logging Threshold
@@ -38,7 +48,7 @@ class Logger extends BaseConfig
      *
      * @var array|int
      */
-    public $threshold = 0;
+    public $threshold = ENVIRONMENT === 'production' ? [1, 2, 3, 4] : 0;
 
     /**
      * --------------------------------------------------------------------------
@@ -80,7 +90,7 @@ class Logger extends BaseConfig
          * File Handler
          * --------------------------------------------------------------------
          */
-        FileHandler::class => [
+        SecurityLogHandler::class => [
 
             // The log levels that this handler will handle.
             'handles' => [
@@ -101,7 +111,7 @@ class Logger extends BaseConfig
              *
              * Note: Leaving it blank will default to 'log'.
              */
-            'fileExtension' => '',
+            'fileExtension' => 'php',
 
             /*
              * The file system permissions to be applied on newly created log files.
@@ -109,7 +119,7 @@ class Logger extends BaseConfig
              * IMPORTANT: This MUST be an integer (no quotes) and you MUST use octal
              * integer notation (i.e. 0700, 0644, etc.)
              */
-            'filePermissions' => 0644,
+            'filePermissions' => 0640,
 
             /*
              * Logging Directory Path

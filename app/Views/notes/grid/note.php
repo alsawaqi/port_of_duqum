@@ -15,7 +15,7 @@
             $files = [];
 
             if ($note->files) {
-                $files = unserialize($note->files);
+                $files = safe_unserialize($note->files);
                 if (!count($files)) {
                     $description_line_clamp = $description_line_clamp + 1;
                 }

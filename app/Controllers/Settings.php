@@ -65,7 +65,7 @@ class Settings extends Security_Controller {
 
         //save signin page background
         $files_data = move_files_from_temp_dir_to_permanent_dir(get_setting("system_file_path"), "system");
-        $unserialize_files_data = unserialize($files_data);
+        $unserialize_files_data = safe_unserialize($files_data);
         $sigin_page_background = get_array_value($unserialize_files_data, 0);
         if ($sigin_page_background) {
             delete_app_files(get_setting("system_file_path"), get_system_files_setting_value("signin_page_background"));
@@ -341,7 +341,7 @@ class Settings extends Security_Controller {
 
         //save invoice pdf background image
         $files_data = move_files_from_temp_dir_to_permanent_dir(get_setting("timeline_file_path"), "invoice");
-        $unserialize_files_data = unserialize($files_data);
+        $unserialize_files_data = safe_unserialize($files_data);
         $invoice_pdf_background_image = get_array_value($unserialize_files_data, 0);
         if ($invoice_pdf_background_image) {
             delete_app_files(get_setting("timeline_file_path"), get_system_files_setting_value("invoice_pdf_background_image"));
@@ -961,7 +961,7 @@ class Settings extends Security_Controller {
         //check available menus
         $footer_menus_data = "";
 
-        $footer_menus = unserialize(get_setting("footer_menus"));
+        $footer_menus = safe_unserialize(get_setting("footer_menus"));
         if ($footer_menus && is_array($footer_menus)) {
             foreach ($footer_menus as $footer) {
                 $footer_menus_data .= $this->_make_footer_menu_item_data($footer->menu_name, $footer->url);
@@ -1031,7 +1031,7 @@ class Settings extends Security_Controller {
         //check available menus
         $top_menus_data = "";
 
-        $top_menus = unserialize(get_setting("top_menus"));
+        $top_menus = safe_unserialize(get_setting("top_menus"));
 
         if ($top_menus && is_array($top_menus)) {
             foreach ($top_menus as $menu) {
@@ -1492,7 +1492,7 @@ class Settings extends Security_Controller {
 
         //save banner image
         $files_data = move_files_from_temp_dir_to_permanent_dir(get_setting("timeline_file_path"), "store");
-        $unserialize_files_data = unserialize($files_data);
+        $unserialize_files_data = safe_unserialize($files_data);
         $banner_image_on_public_store = get_array_value($unserialize_files_data, 0);
         if ($banner_image_on_public_store) {
             delete_app_files(get_setting("timeline_file_path"), get_system_files_setting_value("banner_image_on_public_store"));
@@ -1664,7 +1664,7 @@ class Settings extends Security_Controller {
 
         $settings_array = [];
         if ($existing_value) {
-            $settings_array = unserialize($existing_value);
+            $settings_array = safe_unserialize($existing_value);
             if (!is_array($settings_array)) {
                 $settings_array = [];
             }

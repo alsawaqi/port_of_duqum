@@ -64,12 +64,12 @@ class Company extends Security_Controller {
 
             $target_path = get_setting("system_file_path");
             $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "company_$save_id");
-            $logo = unserialize($files_data);
+            $logo = safe_unserialize($files_data);
 
             if ($logo) {
                 //delete old file
                 if ($company_info->logo) {
-                    $files = unserialize($company_info->logo);
+                    $files = safe_unserialize($company_info->logo);
                     foreach ($files as $file) {
                         delete_app_files(get_setting("system_file_path"), array($file));
                     }

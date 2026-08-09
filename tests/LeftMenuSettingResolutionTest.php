@@ -11,6 +11,7 @@ function get_array_value($data, $key)
     return is_array($data) && array_key_exists($key, $data) ? $data[$key] : null;
 }
 
+require_once __DIR__ . "/../app/Helpers/safe_serialization_helper.php";
 require_once __DIR__ . "/../app/Libraries/Left_menu.php";
 
 $assertSame = static function ($expected, $actual, string $message): void {

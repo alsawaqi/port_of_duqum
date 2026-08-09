@@ -53,7 +53,7 @@ $custom_filters = get_setting("user_" . $user_id . "_filters"); // it won't work
 if (!$custom_filters) {
     $custom_filters = "a:0:{}";
 }
-$custom_filters = unserialize($custom_filters);
+$custom_filters = safe_unserialize($custom_filters);
 
 ?>
 

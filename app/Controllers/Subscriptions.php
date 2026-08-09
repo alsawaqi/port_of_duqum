@@ -144,7 +144,7 @@ class Subscriptions extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "subscription");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $subscription_data = array(
             "title" => $this->request->getPost('title'),
@@ -305,7 +305,7 @@ class Subscriptions extends Security_Controller {
             //delete the files
             $file_path = get_setting("timeline_file_path");
             if ($subscription_info->files) {
-                $files = unserialize($subscription_info->files);
+                $files = safe_unserialize($subscription_info->files);
 
                 foreach ($files as $file) {
                     delete_app_files($file_path, array($file));
@@ -879,7 +879,7 @@ class Subscriptions extends Security_Controller {
         if ($id) {
             validate_numeric_value($id);
             $subscription_info = $this->Subscriptions_model->get_one($id);
-            $files = unserialize($subscription_info->files);
+            $files = safe_unserialize($subscription_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

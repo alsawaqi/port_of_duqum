@@ -53,7 +53,7 @@ $section_fields = [
                     value="<?php echo esc($bid->total_amount ?? ($saved_item_total > 0 ? number_format($saved_item_total, 3, ".", "") : "")); ?>"
                     <?php echo $rfq_items ? "readonly" : ""; ?> />
                 <?php if ($rfq_items) { ?>
-                    <small class="text-muted">Calculated from RFQ/RFP item prices.</small>
+                    <small class="text-muted">Calculated from tender item prices.</small>
                 <?php } ?>
             </div>
         </div>
@@ -69,7 +69,7 @@ $section_fields = [
 
     <?php if ($rfq_items) { ?>
         <hr>
-        <h5 class="mb10">RFQ / RFP Item Pricing</h5>
+        <h5 class="mb10">Tender Item Pricing</h5>
         <div class="table-responsive">
             <table class="table table-bordered table-striped mb10">
                 <thead>
@@ -78,7 +78,7 @@ $section_fields = [
                         <th>Description</th>
                         <th>UOM</th>
                         <th>Qty</th>
-                        <th>Brand</th>
+                        <th>Part No (Optional)</th>
                         <th style="width: 150px;">Unit Price</th>
                         <th style="width: 150px;">Line Total</th>
                     </tr>
@@ -96,7 +96,7 @@ $section_fields = [
                             <td><?php echo esc($item->description ?? "-"); ?></td>
                             <td><?php echo esc($item->uom ?? "-"); ?></td>
                             <td><?php echo $item->qty !== null ? number_format((float) $item->qty, 3) : "-"; ?></td>
-                            <td><?php echo esc($item->brand ?? "-"); ?></td>
+                            <td><?php echo esc($item->part_no ?? ($item->brand ?? "-")); ?></td>
                             <td>
                                 <input
                                     type="number"

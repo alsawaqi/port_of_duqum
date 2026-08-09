@@ -129,7 +129,7 @@ class Announcements extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "announcement");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $share_with = $this->request->getPost('share_with');
         validate_share_with_value($share_with);

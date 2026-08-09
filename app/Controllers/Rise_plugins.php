@@ -2,9 +2,16 @@
 
 namespace App\Controllers;
 
+use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Rise;
+
 class Rise_plugins extends Security_Controller {
 
     function __construct() {
+        if (ENVIRONMENT === 'production' && !Rise::PRODUCTION_RUNTIME_CODE_MANAGEMENT_ENABLED) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
         parent::__construct();
         $this->access_only_admin();
     }
@@ -130,7 +137,7 @@ class Rise_plugins extends Security_Controller {
 
     private function get_plugins_array($include_directories = false) {
         $plugins = get_setting("plugins");
-        $plugins = @unserialize($plugins);
+        $plugins = @safe_unserialize($plugins);
         if (!($plugins && is_array($plugins))) {
             $plugins = array();
         }

@@ -2,6 +2,9 @@
 
 namespace App\Controllers;
 
+use App\Libraries\TenderOpeningCodeVaultException;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 use App\Models\Tender_bids_model;
 use App\Models\Tender_bid_documents_model;
 use App\Models\Tender_bid_openings_model;
@@ -34,7 +37,6 @@ class Tender_committee_opening_inbox extends Security_Controller
     function list_data()
     {
         $this->access_only_tender("committee", "view");
-        $this->Tenders_model->auto_progress_workflow();
 
         $rows = $this->Tender_bids_model->get_tenders_ready_for_3key_opening((int) $this->login_user->id);
         $result = [];
@@ -81,7 +83,6 @@ class Tender_committee_opening_inbox extends Security_Controller
     function details($id = 0)
     {
         $this->access_only_tender("committee", "view");
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender_id = (int) $id;
         if (!$tender_id) {
@@ -115,7 +116,6 @@ class Tender_committee_opening_inbox extends Security_Controller
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
         $this->access_only_tender("committee", "view");
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender_id = (int) $this->request->getPost("id");
         $stage = $this->_normalize_opening_stage($this->request->getPost("stage"));
@@ -138,6 +138,32 @@ class Tender_committee_opening_inbox extends Security_Controller
         ];
 
         $role = $this->_get_current_committee_role($tender_id);
+        $my_code = null;
+        $code_unavailable = false;
+        if (
+            $session
+            && (string) ($session->status ?? "") === "codes_generated"
+            && (!$role || (int) ($confirm_map[$role] ?? 0) < 1)
+        ) {
+            if (!$role) {
+                $code_unavailable = true;
+            } else {
+                try {
+                    $my_code = $this->Tender_bid_openings_model->getRoleCodeForDisplay(
+                        (int) $session->id,
+                        (int) $this->login_user->id,
+                        $role
+                    );
+                } catch (\Throwable $e) {
+                    $code_unavailable = true;
+                    log_message("warning", "Assigned tender opening code could not be displayed.");
+                }
+            }
+        }
+
+        $this->response
+            ->setHeader("Cache-Control", "private, no-store")
+            ->setHeader("Pragma", "no-cache");
 
         return $this->template->view("tender_committee_opening_inbox/modal_form", [
             "tender" => $tender,
@@ -147,6 +173,8 @@ class Tender_committee_opening_inbox extends Security_Controller
             "bid_summary" => $this->Tender_bid_openings_model->get_bid_summary_for_opening($tender_id),
             "signature_rows" => $session ? $this->Tender_bid_openings_model->get_signature_rows((int) $session->id) : [],
             "my_role" => $role,
+            "my_code" => $my_code,
+            "code_unavailable" => $code_unavailable,
             "opening_stage" => $stage,
             "opening_title" => "Bid Opening",
         ]);
@@ -164,7 +192,6 @@ class Tender_committee_opening_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $this->Tenders_model->auto_progress_workflow();
         $tender_id = (int) $this->request->getPost("tender_id");
         $stage = $this->_normalize_opening_stage($this->request->getPost("opening_stage"));
 
@@ -177,7 +204,34 @@ class Tender_committee_opening_inbox extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "This tender is not currently in the requested 3-key stage."]);
         }
 
-        $id = $this->Tender_bid_openings_model->create_new_session($tender_id, (int) $this->login_user->id, $stage);
+        try {
+            $id = $this->Tender_bid_openings_model->create_new_session(
+                $tender_id,
+                (int) $this->login_user->id,
+                $stage
+            );
+        } catch (\DomainException $e) {
+            log_message("notice", "Tender opening code regeneration was refused by session state.");
+            return $this->response
+                ->setStatusCode(409)
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Opening codes cannot be regenerated after a confirmation attempt or after bids are unlocked.",
+                ]);
+        } catch (TenderOpeningCodeVaultException $e) {
+            log_message("critical", "Tender opening code protection is unavailable.");
+            return $this->response
+                ->setStatusCode(503)
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Secure bid opening is temporarily unavailable. Contact the system administrator.",
+                ]);
+        } catch (\Throwable $e) {
+            log_message("error", "Tender opening codes could not be generated.");
+            return $this->response
+                ->setStatusCode(500)
+                ->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
+        }
 
         return $this->response->setJSON([
             "success" => true,
@@ -191,9 +245,7 @@ class Tender_committee_opening_inbox extends Security_Controller
         $this->validate_submitted_data([
             "tender_id" => "required|numeric",
             "opening_stage" => "required",
-            "chairman_code" => "required",
-            "secretary_code" => "required",
-            "member_code" => "required"
+            "opening_code" => "required|numeric|exact_length[6]",
         ]);
         $this->access_only_tender("committee", "update");
 
@@ -201,7 +253,6 @@ class Tender_committee_opening_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $this->Tenders_model->auto_progress_workflow();
         $tender_id = (int) $this->request->getPost("tender_id");
         $stage = $this->_normalize_opening_stage($this->request->getPost("opening_stage"));
         $role = $this->_get_current_committee_role($tender_id);
@@ -220,34 +271,54 @@ class Tender_committee_opening_inbox extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "No active 3-key session found."]);
         }
 
-        if ($this->Tender_bid_openings_model->user_already_confirmed((int) $session->id, (int) $this->login_user->id)) {
-            return $this->response->setJSON(["success" => false, "message" => "You already confirmed this opening session."]);
+        try {
+            $result = $this->Tender_bid_openings_model->confirmRoleCode(
+                (int) $session->id,
+                (int) $this->login_user->id,
+                $role,
+                (string) $this->request->getPost("opening_code")
+            );
+        } catch (TenderOpeningCodeVaultException $e) {
+            log_message("critical", "Tender opening code protection is unavailable.");
+            return $this->response
+                ->setStatusCode(503)
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Secure bid opening is temporarily unavailable. Contact the system administrator.",
+                ]);
+        } catch (\Throwable $e) {
+            log_message("error", "Tender opening confirmation could not be processed.");
+            return $this->response
+                ->setStatusCode(500)
+                ->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
         }
 
-        $valid =
-            trim((string) $this->request->getPost("chairman_code")) === (string) $session->chairman_code &&
-            trim((string) $this->request->getPost("secretary_code")) === (string) $session->secretary_code &&
-            trim((string) $this->request->getPost("member_code")) === (string) $session->member_code;
-
-        $this->Tender_bid_openings_model->save_confirmation(
-            (int) $session->id,
-            (int) $this->login_user->id,
-            $role,
-            trim((string) $this->request->getPost("chairman_code")),
-            trim((string) $this->request->getPost("secretary_code")),
-            trim((string) $this->request->getPost("member_code")),
-            $valid
-        );
-
-        if (!$valid) {
-            return $this->response->setJSON(["success" => false, "message" => "Invalid codes."]);
+        if (($result["status"] ?? "") === "rate_limited") {
+            $retry_after = max(1, (int) ($result["retry_after_seconds"] ?? 900));
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader("Retry-After", (string) $retry_after)
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Too many unsuccessful confirmations. Try again later.",
+                ]);
         }
 
-        $map = $this->Tender_bid_openings_model->get_confirmation_map((int) $session->id);
+        if (in_array((string) ($result["status"] ?? ""), ["invalid", "expired", "unavailable"], true)) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "The opening code is invalid or expired.",
+            ]);
+        }
 
-        if ($map["chairman"] >= 1 && $map["secretary"] >= 1 && $map["itc_member"] >= 1) {
-            $this->Tender_bid_openings_model->unlock_session((int) $session->id);
+        if (($result["status"] ?? "") === "already_confirmed") {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "You or this committee role already confirmed this opening session.",
+            ]);
+        }
 
+        if (!empty($result["unlocked"])) {
             return $this->response->setJSON([
                 "success" => true,
                 "message" => "Bids unlocked successfully. Committee members can now review the full bid package and sign the opening form.",
@@ -257,7 +328,7 @@ class Tender_committee_opening_inbox extends Security_Controller
 
         return $this->response->setJSON([
             "success" => true,
-            "message" => "Your confirmation was saved. Waiting for other committee keys."
+            "message" => "Your assigned role code was confirmed. Waiting for the other committee roles."
         ]);
     }
 
@@ -301,27 +372,52 @@ class Tender_committee_opening_inbox extends Security_Controller
         if ($signature_name === "") {
             $signature_name = $this->login_user->email ?? ("User #" . (int) $this->login_user->id);
         }
-        $signature_image_path = $this->_save_signature_image(
-            (string) $this->request->getPost("signature"),
+        $previous_signature_path = $this->_get_existing_signature_image_path(
             (int) $session->id,
             (int) $this->login_user->id
         );
+        try {
+            $signature_image = $this->_save_signature_image(
+                (string) $this->request->getPost("signature"),
+                (int) $session->id
+            );
+        } catch (UploadSecurityException $e) {
+            log_message("notice", "Tender opening signature image rejected.");
+            return $this->_sign_opening_response(false, "The drawn signature could not be accepted.", $tender_id);
+        }
 
-        if (!$signature_image_path) {
+        if (!$signature_image) {
             return $this->_sign_opening_response(false, "Draw your digital signature before signing the opening form.", $tender_id);
         }
 
-        $saved = $this->Tender_bid_openings_model->save_signature(
-            (int) $session->id,
-            (int) $this->login_user->id,
-            $role,
-            $statement,
-            $signature_name,
-            $signature_image_path
-        );
+        try {
+            $saved = $this->Tender_bid_openings_model->save_signature(
+                (int) $session->id,
+                (int) $this->login_user->id,
+                $role,
+                $statement,
+                $signature_name,
+                $signature_image["relative_path"]
+            );
+        } catch (\Throwable $e) {
+            $this->_remove_signature_file($signature_image["path"]);
+            log_message("error", "Tender opening signature could not be recorded.");
+            return $this->_sign_opening_response(false, app_lang("error_occurred"), $tender_id);
+        }
 
         if (!$saved) {
+            $this->_remove_signature_file($signature_image["path"]);
             return $this->_sign_opening_response(false, "Confirm the 3-key codes before signing the opening form.", $tender_id);
+        }
+
+        if ($previous_signature_path !== "" && $previous_signature_path !== $signature_image["relative_path"]) {
+            $previous_full_path = (new Upload_security())->resolveStoredFile(
+                $previous_signature_path,
+                "tender_opening_signatures/opening_" . (int) $session->id
+            );
+            if ($previous_full_path) {
+                @unlink($previous_full_path);
+            }
         }
 
         $complete = $this->Tender_bid_openings_model->all_required_signatures_completed((int) $session->id);
@@ -363,32 +459,156 @@ class Tender_committee_opening_inbox extends Security_Controller
             "opening_audit" => [],
             "opening_session" => $session,
             "signature_rows" => $this->Tender_bid_openings_model->get_signature_rows((int) $session->id),
+            "signature_image_route" => "tender_committee_opening_inbox/signature_image",
+            "manual_form_download_url" => get_uri("tender_committee_opening_inbox/download_manual_bid_opening_form/" . $tender_id),
             "back_url" => get_uri("tender_committee_opening_inbox/details/" . $tender_id),
             "back_label" => "Back to Bid Opening Review",
         ]);
     }
 
-    private function _save_signature_image(string $signature_data, int $opening_id, int $user_id): ?string
+    function signature_image($id = 0)
     {
-        if (strpos($signature_data, "data:image/png;base64,") !== 0) {
+        $this->access_only_tender("committee", "view");
+        $context = $this->_get_signature_image_context((int) $id);
+        if (!$context || !$this->_get_committee_stage_tender((int) $context->tender_id, "technical")) {
+            show_404();
+        }
+
+        $session = $this->Tender_bid_openings_model->get_active_session((int) $context->tender_id, "technical");
+        if (!$session || (int) $session->id !== (int) $context->opening_id || !in_array((string) $session->status, ["unlocked", "signed"], true)) {
+            app_redirect("forbidden");
+        }
+
+        $full_path = (new Upload_security())->resolveStoredFile(
+            (string) $context->signature_image_path,
+            "tender_opening_signatures/opening_" . (int) $context->opening_id
+        );
+        $info = $full_path ? @getimagesize($full_path) : false;
+        if (!$full_path || !is_array($info) || (int) ($info[2] ?? 0) !== IMAGETYPE_PNG) {
+            show_404();
+        }
+
+        return $this->response
+            ->download($full_path, null)
+            ->setFileName("signature.png")
+            ->setContentType("image/png")
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
+            ->inline();
+    }
+
+    function download_manual_bid_opening_form($id = 0)
+    {
+        $this->access_only_tender("committee", "view");
+        $tender_id = (int) $id;
+        if (!$tender_id || !$this->_get_committee_stage_tender($tender_id, "technical")) {
+            show_404();
+        }
+
+        $session = $this->Tender_bid_openings_model->get_active_session($tender_id, "technical");
+        if (!$session || (string) $session->status !== "manual_accepted" || empty($session->manual_form_path)) {
+            show_404();
+        }
+        $full_path = (new Upload_security())->resolveStoredFile(
+            (string) $session->manual_form_path,
+            "tender_opening_forms/tender_" . $tender_id
+        );
+        if (!$full_path) {
+            show_404();
+        }
+
+        $name = str_replace(["\r", "\n", chr(34)], "", (string) ($session->manual_form_original_name ?: basename($full_path)));
+        return $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store");
+    }
+
+    private function _save_signature_image(string $signature_data, int $opening_id): ?array
+    {
+        $data_prefix = "data:image/png;base64,";
+        if (strpos($signature_data, $data_prefix) !== 0) {
             return null;
         }
 
-        $binary = base64_decode(substr($signature_data, strlen("data:image/png;base64,")), true);
+        $encoded = substr($signature_data, strlen($data_prefix));
+        $maximum = (new Upload_security())->maximumBytes(Upload_security::CONTEXT_SIGNATURE_IMAGE);
+        $maximum_encoded = 4 * (int) ceil($maximum / 3) + 4;
+        if ($encoded === "" || strlen($encoded) > $maximum_encoded) {
+            return null;
+        }
+
+        $binary = base64_decode($encoded, true);
         if (!$binary) {
             return null;
         }
 
         $relative_dir = "tender_opening_signatures/opening_" . $opening_id . "/";
-        $upload_dir = WRITEPATH . "uploads/" . $relative_dir;
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
+        $stored = (new Upload_security())->storeUntrustedBytes(
+            $binary,
+            "signature.png",
+            WRITEPATH . "uploads/" . $relative_dir,
+            Upload_security::CONTEXT_SIGNATURE_IMAGE,
+            "signature_",
+            ["png"]
+        );
+
+        return $stored + ["relative_path" => $relative_dir . $stored["stored_name"]];
+    }
+
+    private function _get_existing_signature_image_path(int $opening_id, int $user_id): string
+    {
+        $db = db_connect();
+        $entries = $db->prefixTable("tender_bid_opening_entries");
+        $row = $db->query(
+            "SELECT signature_image_path
+             FROM $entries
+             WHERE tender_bid_opening_id = ?
+               AND user_id = ?
+               AND deleted = 0
+               AND is_valid = 1
+             LIMIT 1",
+            [$opening_id, $user_id]
+        )->getRow();
+
+        return (string) ($row->signature_image_path ?? "");
+    }
+
+    private function _get_signature_image_context(int $entry_id)
+    {
+        if (!$entry_id) {
+            return null;
         }
 
-        $filename = "signature_user_" . $user_id . "_" . time() . ".png";
-        file_put_contents($upload_dir . $filename, $binary);
+        $db = db_connect();
+        $entries = $db->prefixTable("tender_bid_opening_entries");
+        $openings = $db->prefixTable("tender_bid_openings");
+        return $db->query(
+            "SELECT
+                $entries.id,
+                $entries.signature_image_path,
+                $openings.id AS opening_id,
+                $openings.tender_id
+             FROM $entries
+             INNER JOIN $openings
+                ON $openings.id = $entries.tender_bid_opening_id
+               AND $openings.deleted = 0
+             WHERE $entries.id = ?
+               AND $entries.deleted = 0
+               AND $entries.is_valid = 1
+               AND $entries.signed_at IS NOT NULL
+               AND $entries.signature_image_path IS NOT NULL
+             LIMIT 1",
+            [$entry_id]
+        )->getRow();
+    }
 
-        return $relative_dir . $filename;
+    private function _remove_signature_file($path): void
+    {
+        if (is_string($path) && is_file($path)) {
+            @unlink($path);
+        }
     }
 
     private function _sign_opening_response(bool $success, string $message, int $tender_id, array $extra = [])

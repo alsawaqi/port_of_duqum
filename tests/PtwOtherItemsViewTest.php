@@ -35,6 +35,11 @@ function form_close(): string
     return "</form>";
 }
 
+function view(string $name, array $data = []): string
+{
+    return "";
+}
+
 function ptw_is_other_requirement_definition($definition): bool
 {
     return strtolower((string)($definition->label ?? "")) === "other";

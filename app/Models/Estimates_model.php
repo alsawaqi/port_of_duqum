@@ -171,11 +171,9 @@ class Estimates_model extends Crud_model {
     //save initial number of estimate
     function save_initial_number_of_estimate($value) {
         $value = $this->_get_clean_value($value);
-        $estimates_table = $this->db->prefixTable('estimates');
 
-        $sql = "ALTER TABLE $estimates_table AUTO_INCREMENT=$value;";
-
-        return $this->db->query($sql);
+        // Settings are application data; primary-key allocation remains database-managed.
+        return is_numeric($value) && (int) $value > 0;
     }
 
     function estimate_sent_statistics($options = array()) {

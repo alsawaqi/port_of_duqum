@@ -65,7 +65,11 @@
                 <main class="pod-auth-form-panel">
                     <div class="form-signin pod-auth-card">
                         <?php
-                        if (isset($form_type) && $form_type == "request_reset_password") {
+                        if (isset($form_type) && $form_type == "vendor_selection") {
+                            echo view("signin/vendor_selection");
+                        } else if (isset($form_type) && $form_type == "mfa_challenge") {
+                            echo view("signin/mfa_challenge_form");
+                        } else if (isset($form_type) && $form_type == "request_reset_password") {
                             echo view("signin/reset_password_form");
                         } else if (isset($form_type) && $form_type == "new_password") {
                             echo view('signin/new_password_form');

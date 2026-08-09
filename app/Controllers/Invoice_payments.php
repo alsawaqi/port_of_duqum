@@ -359,13 +359,24 @@ class Invoice_payments extends Security_Controller {
     }
 
     function get_paytm_checksum_hash() {
-        $paytm = new Paytm();
-        $payment_data = $paytm->get_paytm_checksum_hash($this->request->getPost("input_data"), $this->request->getPost("verification_data"));
-
-        if ($payment_data) {
-            echo json_encode(array("success" => true, "checksum_hash" => get_array_value($payment_data, "checksum_hash"), "payment_verification_code" => get_array_value($payment_data, "payment_verification_code")));
-        } else {
-            echo json_encode(array("success" => false, "message" => app_lang("paytm_checksum_hash_error_message")));
+        $this->access_only_clients();
+        try {
+            $requestData = $this->request->getPost('payment_request');
+            if (!is_array($requestData)) {
+                throw new \InvalidArgumentException('Invalid invoice payment request.');
+            }
+            $paymentData = (new Paytm())->get_paytm_checksum_hash($requestData, (int)$this->login_user->id);
+            echo json_encode([
+                'success' => true,
+                'checksum_hash' => $paymentData['checksum_hash'],
+                'payment_verification_code' => $paymentData['payment_verification_code'],
+                'input_data' => $paymentData['input_data'],
+            ]);
+        } catch (\Throwable $exception) {
+            log_message('warning', 'PAYTM CHECKOUT CREATION REJECTED: {class}', [
+                'class' => get_class($exception),
+            ]);
+            echo json_encode(['success' => false, 'message' => app_lang('error_occurred')]);
         }
     }
 
@@ -379,8 +390,9 @@ class Invoice_payments extends Security_Controller {
             } else {
                 echo json_encode(array('success' => false, 'message' => app_lang('error_occurred')));
             }
-        } catch (\Exception $ex) {
-            echo json_encode(array("success" => false, "message" => $ex->getMessage()));
+        } catch (\Throwable $ex) {
+            log_message('warning', 'STRIPE INVOICE CHECKOUT REJECTED: {class}', ['class' => get_class($ex)]);
+            echo json_encode(array("success" => false, "message" => app_lang('error_occurred')));
         }
     }
 
@@ -394,8 +406,9 @@ class Invoice_payments extends Security_Controller {
             } else {
                 echo json_encode(array('success' => false, 'message' => app_lang('error_occurred')));
             }
-        } catch (\Exception $ex) {
-            echo json_encode(array("success" => false, "message" => $ex->getMessage()));
+        } catch (\Throwable $ex) {
+            log_message('warning', 'PAYPAL INVOICE CHECKOUT REJECTED: {class}', ['class' => get_class($ex)]);
+            echo json_encode(array("success" => false, "message" => app_lang('error_occurred')));
         }
     }
 

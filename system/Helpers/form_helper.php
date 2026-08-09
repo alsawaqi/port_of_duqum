@@ -232,8 +232,8 @@ if (! function_exists('form_textarea')) {
         }
 
         return '<textarea ' . rtrim(parse_form_attributes($data, $defaults)) . stringify_attributes($extra) . '>'
-            . htmlspecialchars($val)
-            . "</textarea>\n";
+                . htmlspecialchars($val)
+                . "</textarea>\n";
     }
 }
 
@@ -290,12 +290,17 @@ if (! function_exists('form_dropdown')) {
 
         // If no selected state was submitted we will attempt to set it automatically
         if ($selected === []) {
+            $superglobals = service('superglobals');
             if (is_array($data)) {
-                if (isset($data['name'], $_POST[$data['name']])) {
-                    $selected = [$_POST[$data['name']]];
+                $postValue = $superglobals->post($data['name'] ?? '');
+                if (isset($data['name']) && $postValue !== null) {
+                    $selected = [$postValue];
                 }
-            } elseif (isset($_POST[$data])) {
-                $selected = [$_POST[$data]];
+            } else {
+                $postValue = $superglobals->post($data);
+                if ($postValue !== null) {
+                    $selected = [$postValue];
+                }
             }
         }
 
@@ -350,7 +355,7 @@ if (! function_exists('form_checkbox')) {
     {
         $defaults = [
             'type'  => 'checkbox',
-            'name'  => (! is_array($data) ? $data : ''),
+            'name'  => is_array($data) ? '' : $data,
             'value' => $value,
         ];
 
@@ -436,8 +441,8 @@ if (! function_exists('form_button')) {
         }
 
         return '<button ' . parse_form_attributes($data, $defaults) . stringify_attributes($extra) . '>'
-            . $content
-            . "</button>\n";
+                . $content
+                . "</button>\n";
     }
 }
 
@@ -739,7 +744,7 @@ if (! function_exists('validation_show_error')) {
         $config = config(Validation::class);
         $view   = service('renderer');
 
-        $errors = array_filter(validation_errors(), static fn($key): bool => preg_match(
+        $errors = array_filter(validation_errors(), static fn ($key): bool => preg_match(
             '/^' . str_replace(['\.\*', '\*\.'], ['\..+', '.+\.'], preg_quote($field, '/')) . '$/',
             $key,
         ) === 1, ARRAY_FILTER_USE_KEY);

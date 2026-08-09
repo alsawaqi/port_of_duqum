@@ -18,7 +18,7 @@
                 <div class="mt20">
                     <?php
                     if ($announcement->files) {
-                        $files = unserialize($announcement->files);
+                        $files = safe_unserialize($announcement->files);
                         $total_files = count($files);
                         echo view("includes/timeline_preview", array("files" => $files));
 

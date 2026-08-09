@@ -16,14 +16,12 @@ function decrypt_e($crypt, $ky) {
 
 function generateSalt_e($length) {
     $random = "";
-    srand((double) microtime() * 1000000);
-
     $data = "AbcDE123IJKLMN67QRSTUVWXYZ";
     $data .= "aBCdefghijklmn123opq45rs67tuv89wxyz";
     $data .= "0FGH45OP89";
 
     for ($i = 0; $i < $length; $i++) {
-        $random .= substr($data, (rand() % (strlen($data))), 1);
+        $random .= $data[random_int(0, strlen($data) - 1)];
     }
 
     return $random;
@@ -71,7 +69,7 @@ function verifychecksum_e($arrayList, $key, $checksumvalue) {
     $website_hash .= $salt;
 
     $validFlag = "FALSE";
-    if ($website_hash == $paytm_hash) {
+    if (is_string($paytm_hash) && hash_equals($website_hash, $paytm_hash)) {
         $validFlag = "TRUE";
     } else {
         $validFlag = "FALSE";
@@ -89,7 +87,7 @@ function verifychecksum_eFromStr($str, $key, $checksumvalue) {
     $website_hash .= $salt;
 
     $validFlag = "FALSE";
-    if ($website_hash == $paytm_hash) {
+    if (is_string($paytm_hash) && hash_equals($website_hash, $paytm_hash)) {
         $validFlag = "TRUE";
     } else {
         $validFlag = "FALSE";

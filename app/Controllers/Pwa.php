@@ -22,7 +22,7 @@ class Pwa extends App_Controller {
 
     if ($pwa_icon) {
       try {
-        $pwa_icon = unserialize($pwa_icon);
+        $pwa_icon = safe_unserialize($pwa_icon);
         if (is_array($pwa_icon)) {
           $icon_name = get_array_value($pwa_icon, "file_name");
         }

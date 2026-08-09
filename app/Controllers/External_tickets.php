@@ -32,6 +32,15 @@ class External_tickets extends App_Controller {
             show_404();
         }
 
+        $ip_hash = hash('sha256', (string) $this->request->getIPAddress());
+        $throttler = service('throttler');
+        if (!$throttler->check('external_ticket_' . $ip_hash, 5, 600)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader('Retry-After', (string) max(1, $throttler->getTokenTime()))
+                ->setJSON(array('success' => false, 'message' => 'Too many requests. Please try again later.'));
+        }
+
         $this->validate_submitted_data(array(
             "title" => "required",
             "description" => "required",

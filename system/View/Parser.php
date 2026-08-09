@@ -20,9 +20,6 @@ use Psr\Log\LoggerInterface;
 /**
  * Class for parsing pseudo-vars
  *
- * @phpstan-type parser_callable (callable(mixed): mixed)
- * @phpstan-type parser_callable_string (callable(mixed): mixed)&string
- *
  * @see \CodeIgniter\View\ParserTest
  */
 class Parser extends View
@@ -63,8 +60,7 @@ class Parser extends View
     /**
      * Stores any plugins registered at run-time.
      *
-     * @var         array<string, callable|list<string>|string>
-     * @phpstan-var array<string, array<parser_callable_string>|parser_callable_string|parser_callable>
+     * @var array<string, (callable(mixed...): mixed)|((callable(mixed...): mixed)&string)|list<(callable(mixed...): mixed)&string>>
      */
     protected $plugins = [];
 
@@ -117,10 +113,14 @@ class Parser extends View
         $cacheName = $options['cache_name'] ?? str_replace('.php', '', $view);
 
         // Was it cached?
-        if (isset($options['cache']) && ($output = cache($cacheName))) {
-            $this->logPerformance($start, microtime(true), $view);
+        if (isset($options['cache'])) {
+            $output = cache($cacheName);
 
-            return $output;
+            if (is_string($output) && $output !== '') {
+                $this->logPerformance($start, microtime(true), $view);
+
+                return $output;
+            }
         }
 
         $file = $this->viewPath . $view;
@@ -198,10 +198,9 @@ class Parser extends View
      * so that the variable is correctly handled within the
      * parsing itself, and contexts (including raw) are respected.
      *
-     * @param         array<string, mixed>                      $data
-     * @param         non-empty-string|null                     $context The context to escape it for.
-     *                                                                   If 'raw', no escaping will happen.
-     * @phpstan-param null|'html'|'js'|'css'|'url'|'attr'|'raw' $context
+     * @param array<string, mixed>                      $data
+     * @param 'attr'|'css'|'html'|'js'|'raw'|'url'|null $context The context to escape it for.
+     *                                                           If 'raw', no escaping will happen.
      */
     public function setData(array $data = [], ?string $context = null): RendererInterface
     {
@@ -722,6 +721,8 @@ class Parser extends View
     /**
      * Makes a new plugin available during the parsing of the template.
      *
+     * @param (callable(array<int|string, string>): string)|(callable(string, array<int|string, string>): string) $callback
+     *
      * @return $this
      */
     public function addPlugin(string $alias, callable $callback, bool $isPair = false)
@@ -747,7 +748,7 @@ class Parser extends View
      * Converts an object to an array, respecting any
      * toArray() methods on an object.
      *
-     * @param array<string, mixed>|bool|float|int|object|string|null $value
+     * @param mixed $value
      *
      * @return array<string, mixed>|bool|float|int|string|null
      */

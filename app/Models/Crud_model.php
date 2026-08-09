@@ -25,7 +25,6 @@ class Crud_model extends Model {
     function __construct($table = null, $db = null) {
         $this->Activity_logs_model = model("App\Models\Activity_logs_model");
         $this->db = $db ? $db : db_connect('default');
-        $this->db->query("SET sql_mode = ''");
         $this->use_table($table);
     }
 

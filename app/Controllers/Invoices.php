@@ -236,7 +236,7 @@ class Invoices extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "invoice");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $estimate_id = $this->request->getPost('estimate_id');
 
@@ -478,7 +478,7 @@ class Invoices extends Security_Controller {
             //delete the files
             $file_path = get_setting("timeline_file_path");
             if ($invoice_info->files) {
-                $files = unserialize($invoice_info->files);
+                $files = safe_unserialize($invoice_info->files);
 
                 foreach ($files as $file) {
                     delete_app_files($file_path, array($file));
@@ -1329,7 +1329,10 @@ class Invoices extends Security_Controller {
         //add public pay invoice url 
         if (get_setting("client_can_pay_invoice_without_login") && strpos($message, "PUBLIC_PAY_INVOICE_URL")) {
 
-            $code = make_random_string();
+            // New public invoice capabilities use at least 190 bits of CSPRNG
+            // entropy. Ten-character legacy links remain readable only for
+            // backward compatibility and can be retired after their audit.
+            $code = make_random_string(32);
 
             $verification_data = array(
                 "type" => "invoice_payment",
@@ -1473,7 +1476,7 @@ class Invoices extends Security_Controller {
 
             //delete attachments
             if ($files_data) {
-                $files = unserialize($files_data);
+                $files = safe_unserialize($files_data);
                 foreach ($files as $file) {
                     delete_app_files($target_path, array($file));
                 }
@@ -1655,7 +1658,7 @@ class Invoices extends Security_Controller {
         if ($id) {
             validate_numeric_value($id);
             $invoice_info = $this->Invoices_model->get_one($id);
-            $files = unserialize($invoice_info->files);
+            $files = safe_unserialize($invoice_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

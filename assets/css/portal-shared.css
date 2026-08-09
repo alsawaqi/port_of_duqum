@@ -674,7 +674,7 @@
    PTW, and Vendor screens so these rules stay scoped to the operational areas.
 */
 :root {
-    --ta-font: Outfit, "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --ta-font: "Open Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
     --ta-page: #f9fafb;
     --ta-surface: #ffffff;
     --ta-surface-soft: #fcfcfd;

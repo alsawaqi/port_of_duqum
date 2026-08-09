@@ -100,6 +100,11 @@ class Store extends Security_Controller {
     }
 
     function item_view() {
+        // Store supports anonymous browsing, but its authenticated item view
+        // includes internal custom-field context. Keep portal-only identities
+        // out even if a future constructor change weakens the global boundary.
+        $this->access_only_non_external_portal_identity();
+
         $this->validate_submitted_data(array(
             "id" => "required|numeric"
         ));
@@ -649,8 +654,20 @@ class Store extends Security_Controller {
 
     private function create_new_client() {
         $this->validate_submitted_data(array(
-            "email" => "valid_email"
+            "email" => "required|valid_email",
+            "password" => "required",
+            "retype_password" => "required|matches[password]"
         ));
+
+        $password = (string) $this->request->getPost('password');
+        $policyErrors = $this->Users_model->password_policy_errors($password);
+        if ($policyErrors) {
+            echo json_encode([
+                "success" => false,
+                "message" => esc(implode(" ", $policyErrors)),
+            ]);
+            return false;
+        }
 
         //match with the existing email
         $email = trim($this->request->getPost('email'));
@@ -690,8 +707,6 @@ class Store extends Security_Controller {
         //client created, now create the client contact
         $first_name = $this->request->getPost('first_name');
         $last_name = $this->request->getPost('last_name');
-        $password = $this->request->getPost('password');
-        $password = clean_data($password);
 
         $client_contact_data = array(
             "first_name" => $first_name,
@@ -723,7 +738,7 @@ class Store extends Security_Controller {
 
         $parser_data["DASHBOARD_URL"] = base_url();
         $parser_data["CONTACT_LOGIN_EMAIL"] = get_array_value($client_contact_data, "email");
-        $parser_data["CONTACT_LOGIN_PASSWORD"] = $password;
+        $parser_data["CONTACT_LOGIN_PASSWORD"] = app_lang("password_not_sent_by_email");
         $parser_data["LOGO_URL"] = get_logo_url();
 
         $message = $this->parser->setData($parser_data)->renderString($email_template->message);

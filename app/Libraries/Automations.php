@@ -58,12 +58,12 @@ class Automations {
         foreach ($automations as $automation) {
             if (!$automation->actions) continue; //don't have any actions, nothing to do.
 
-            $actions = unserialize($automation->actions);
+            $actions = safe_unserialize($automation->actions);
 
             if (!count($actions)) continue;
 
             if ($automation->conditions) {
-                $conditions = unserialize($automation->conditions);
+                $conditions = safe_unserialize($automation->conditions);
                 if (is_array($matching_data) && $this->_does_the_conditions_match($matching_data, $conditions, $automation->matching_type)) {
                     $all_actions = array_merge($all_actions, $actions);
                 }

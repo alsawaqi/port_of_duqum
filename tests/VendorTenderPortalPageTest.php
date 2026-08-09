@@ -36,7 +36,12 @@ $assertContains("vpt-table-wrap", $index, "tender tab should wrap the table like
 $assertTrue(is_file($detailsPath), "full tender detail view should exist");
 $assertContains("vendor-tender-detail-page", $details, "detail page should have its own professional page layout");
 $assertContains("Tender Documents", $details, "detail page should show tender documents");
-$assertContains("RFQ / RFP Details", $details, "detail page should show RFQ/RFP details");
+$assertContains("Tender Details", $details, "detail page should use the approved Tender Details heading");
+$assertContains("PR No (Optional)", $details, "detail page should identify PR No as optional");
+$assertContains("Estimated Material/Service Required On", $details, "detail page should use the approved material/service date label");
+$assertNotContains("RFQ / RFP Details", $details, "detail page should not show the old RFQ/RFP Details heading");
+$assertNotContains("Reference Number", $details, "detail page should not show the removed Reference Number field");
+$assertNotContains("Request Date", $details, "detail page should not show the removed Request Date field");
 $assertContains("Bid Submission", $details, "detail page should include inline bid submission");
 $assertContains("form_open_multipart(get_uri(\"vendor_portal/save_bid\")", $details, "detail page should submit bids through the existing upload endpoint");
 $assertContains("vendor-clarification-form", $details, "detail page should keep clarification workflow available");

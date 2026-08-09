@@ -10,6 +10,8 @@ use App\Models\Tender_documents_model;
 use App\Models\Tender_evaluation_attachments_model;
 use App\Models\Tender_evaluations_model;
 use App\Models\Tenders_model;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 class Tender_commercial_inbox extends Security_Controller
 {
@@ -47,8 +49,6 @@ class Tender_commercial_inbox extends Security_Controller
     {
         $this->access_only_tender("commercial_eval", "view");
 
-        $this->Tenders_model->auto_progress_workflow();
-
         $list = $this->Tender_bids_model->get_unlocked_tenders_for_commercial_user((int) $this->login_user->id);
 
         $result = [];
@@ -67,8 +67,6 @@ class Tender_commercial_inbox extends Security_Controller
         if (!$tender_id) {
             show_404();
         }
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user($tender_id, (int) $this->login_user->id);
         if (!$tender) {
@@ -129,8 +127,6 @@ class Tender_commercial_inbox extends Security_Controller
         $tender_id = (int) $this->request->getPost("tender_id");
         $bid_id = (int) $this->request->getPost("bid_id");
         $user_id = (int) $this->login_user->id;
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user($tender_id, $user_id);
         if (!$tender) {
@@ -195,8 +191,6 @@ class Tender_commercial_inbox extends Security_Controller
         $tender_id = (int) $this->request->getPost("tender_id");
         $bid_id = (int) $this->request->getPost("bid_id");
         $evaluator_id = (int) $this->login_user->id;
-
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user($tender_id, $evaluator_id);
         if (!$tender) {
@@ -343,7 +337,15 @@ class Tender_commercial_inbox extends Security_Controller
             ]);
         }
 
-        $this->_save_commercial_finding_files($evaluation_id, $tender_id, $bid_id);
+        try {
+            $this->_save_commercial_finding_files($evaluation_id, $tender_id, $bid_id);
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Commercial finding attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
         $this->_record_evaluation_history($db, $tender, $fresh_bid, $evaluation_id, "commercial", $late_review, $decision, $commercial_score, $evaluation_comment, $now);
 
         $overview_after = $this->Tender_bids_model->get_tender_bids_overview_for_commercial_user($tender_id, $evaluator_id);
@@ -521,8 +523,6 @@ class Tender_commercial_inbox extends Security_Controller
         $message = trim((string) $this->request->getPost("message"));
         $subject = trim((string) $this->request->getPost("subject"));
 
-        $this->Tenders_model->auto_progress_workflow();
-
         $tender = $this->Tender_bids_model->get_unlocked_tender_for_commercial_user($tender_id, $user_id);
         if (!$tender) {
             return $this->response->setJSON([
@@ -569,7 +569,15 @@ class Tender_commercial_inbox extends Security_Controller
             ]);
         }
 
-        $this->_save_clarification_files((int) $saved, $tender_id, $bid ? (int) ($bid->vendor_id ?? 0) : null);
+        try {
+            $this->_save_clarification_files((int) $saved, $tender_id, $bid ? (int) ($bid->vendor_id ?? 0) : null);
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Commercial clarification attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
 
         return $this->response->setJSON([
             "success" => true,
@@ -638,8 +646,8 @@ class Tender_commercial_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_upload_path((string)$attachment->path, 'tender_evaluation_findings');
+        if (!$full_path) {
             show_404();
         }
 
@@ -668,8 +676,8 @@ class Tender_commercial_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_upload_path((string)$attachment->path, 'tender_clarifications');
+        if (!$full_path) {
             show_404();
         }
 
@@ -679,7 +687,6 @@ class Tender_commercial_inbox extends Security_Controller
     private function _get_accessible_tender_document_context(int $id): array
     {
         $this->access_only_tender("commercial_eval", "view");
-        $this->Tenders_model->auto_progress_workflow();
 
         if (!$id) {
             show_404();
@@ -695,8 +702,8 @@ class Tender_commercial_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = getcwd() . "/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_source_path($doc);
+        if (!$full_path) {
             show_404();
         }
 
@@ -706,7 +713,6 @@ class Tender_commercial_inbox extends Security_Controller
     private function _get_accessible_bid_document_context(int $id): array
     {
         $this->access_only_tender("commercial_eval", "view");
-        $this->Tenders_model->auto_progress_workflow();
 
         if (!$id) {
             show_404();
@@ -741,12 +747,34 @@ class Tender_commercial_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_upload_path((string)$doc->path, 'tender_bids');
+        if (!$full_path) {
             show_404();
         }
 
         return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _resolve_tender_upload_path(string $relative, string $prefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $prefix = trim($prefix, '/') . '/';
+        if (!str_starts_with($relative, $prefix)) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($prefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $root = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        return str_starts_with(strtolower(str_replace('\\', '/', $candidate)), $root) ? $candidate : null;
+    }
+
+    private function _resolve_tender_source_path($doc): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', (string)($doc->path ?? '')), '/');
+        return (new Upload_security())->resolveStoredFile($relative, 'tender_documents');
     }
 
     private function _make_file_preview_data($doc, string $file_url): array
@@ -765,22 +793,22 @@ class Tender_commercial_inbox extends Security_Controller
 
     private function _serve_document_file($doc, string $full_path, bool $download)
     {
-        $mime = !empty($doc->mime_type ?? "")
-            ? (string) $doc->mime_type
-            : (function_exists("mime_content_type") ? mime_content_type($full_path) : "application/octet-stream");
-        $name = $doc->original_name ?: basename($full_path);
-        $inline = !$download && (
-            strpos($mime, "image/") === 0
-            || strpos($mime, "video/") === 0
-            || strpos($mime, "audio/") === 0
-            || $mime === "application/pdf"
-            || strpos($mime, "text/") === 0
-        );
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = strtolower((string) ($mime ?: "application/octet-stream"));
+        $name = str_replace(["\r", "\n", '"'], "", (string) ($doc->original_name ?: basename($full_path)));
+        $inline_mimes = [
+            "application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp",
+            "video/mp4", "video/webm", "video/ogg", "audio/mpeg", "audio/ogg", "audio/wav", "text/plain",
+        ];
+        $inline = !$download && in_array($mime, $inline_mimes, true);
 
-        return $this->response
-            ->setHeader("Content-Type", $mime)
-            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
-            ->setBody(file_get_contents($full_path));
+        $response = $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setContentType($mime, "")
+            ->setHeader("X-Content-Type-Options", "nosniff");
+
+        return $inline ? $response->inline() : $response;
     }
 
     private function _save_commercial_finding_files(int $evaluation_id, int $tender_id, int $bid_id): void
@@ -798,31 +826,28 @@ class Tender_commercial_inbox extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_evaluation_findings/tender_" . $tender_id . "/evaluation_" . $evaluation_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $saved_files = [];
+        $security = new Upload_security();
         foreach ($files as $file) {
             if (!$file || !$file->isValid() || $file->hasMoved()) {
                 continue;
             }
 
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("cef_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
+            $stored = $security->storeUploadedFile(
+                $file,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'cef_'
+            );
+            $new_name = $stored['stored_name'];
 
             $saved_files[] = [
                 "disk" => "local",
                 "path" => "tender_evaluation_findings/tender_" . $tender_id . "/evaluation_" . $evaluation_id . "/" . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
+                "original_name" => $stored['original_name'],
+                "mime_type" => $stored['detected_mime'],
+                "size_bytes" => $stored['size_bytes'],
             ];
         }
 
@@ -844,31 +869,28 @@ class Tender_commercial_inbox extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $saved_files = [];
+        $security = new Upload_security();
         foreach ($files as $file) {
             if (!$file || !$file->isValid() || $file->hasMoved()) {
                 continue;
             }
 
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("tc_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
+            $stored = $security->storeUploadedFile(
+                $file,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'tc_'
+            );
+            $new_name = $stored['stored_name'];
 
             $saved_files[] = [
                 "disk" => "local",
                 "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
+                "original_name" => $stored['original_name'],
+                "mime_type" => $stored['detected_mime'],
+                "size_bytes" => $stored['size_bytes'],
             ];
         }
 

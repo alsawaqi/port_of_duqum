@@ -846,8 +846,7 @@ class Forge
      * @param array|string          $processedFields Processed column definitions
      *                                               or column names to DROP
      *
-     * @return         false|list<string>|string|null                            SQL string
-     * @phpstan-return ($alterType is 'DROP' ? string : list<string>|false|null)
+     * @return ($alterType is 'DROP' ? string : false|list<string>|null)
      */
     protected function _alterTable(string $alterType, string $table, $processedFields)
     {
@@ -1210,6 +1209,10 @@ class Forge
      */
     protected function _processForeignKeys(string $table, bool $asQuery = false): array
     {
+        if ($this->foreignKeys === []) {
+            return [''];
+        }
+
         $errorNames = [];
 
         foreach ($this->foreignKeys as $fkeyInfo) {
@@ -1226,40 +1229,43 @@ class Forge
             throw new DatabaseException(lang('Database.fieldNotExists', $errorNames));
         }
 
-        $sqls = [''];
+        $sqls     = [''];
+        $isOci8   = $this->db->DBDriver === 'OCI8';
+        $dbPrefix = $this->db->DBPrefix;
+        $fkSuffix = $isOci8 ? '_fk' : '_foreign';
+
+        $prefixSql = $asQuery
+            ? 'ALTER TABLE ' . $this->db->escapeIdentifiers($dbPrefix . $table) . ' ADD '
+            : ",\n\t";
 
         foreach ($this->foreignKeys as $index => $fkey) {
-            if ($asQuery === false) {
-                $index = 0;
-            } else {
-                $sqls[$index] = '';
-            }
-
-            $nameIndex = $fkey['fkName'] !== '' ?
-            $fkey['fkName'] :
-            $table . '_' . implode('_', $fkey['field']) . ($this->db->DBDriver === 'OCI8' ? '_fk' : '_foreign');
-
-            $nameIndexFilled      = $this->db->escapeIdentifiers($nameIndex);
-            $foreignKeyFilled     = implode(', ', $this->db->escapeIdentifiers($fkey['field']));
-            $referenceTableFilled = $this->db->escapeIdentifiers($this->db->DBPrefix . $fkey['referenceTable']);
-            $referenceFieldFilled = implode(', ', $this->db->escapeIdentifiers($fkey['referenceField']));
+            $idx = $asQuery ? $index : 0;
 
             if ($asQuery) {
-                $sqls[$index] .= 'ALTER TABLE ' . $this->db->escapeIdentifiers($this->db->DBPrefix . $table) . ' ADD ';
-            } else {
-                $sqls[$index] .= ",\n\t";
+                $sqls[$idx] = '';
             }
 
-            $formatSql = 'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)';
-            $sqls[$index] .= sprintf($formatSql, $nameIndexFilled, $foreignKeyFilled, $referenceTableFilled, $referenceFieldFilled);
+            $nameIndex = $fkey['fkName'] !== ''
+                ? $fkey['fkName']
+                : $table . '_' . implode('_', $fkey['field']) . $fkSuffix;
+
+            $sql = $prefixSql . sprintf(
+                'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)',
+                $this->db->escapeIdentifiers($nameIndex),
+                implode(', ', $this->db->escapeIdentifiers($fkey['field'])),
+                $this->db->escapeIdentifiers($dbPrefix . $fkey['referenceTable']),
+                implode(', ', $this->db->escapeIdentifiers($fkey['referenceField'])),
+            );
 
             if ($fkey['onDelete'] !== false && in_array($fkey['onDelete'], $this->fkAllowActions, true)) {
-                $sqls[$index] .= ' ON DELETE ' . $fkey['onDelete'];
+                $sql .= ' ON DELETE ' . $fkey['onDelete'];
             }
 
-            if ($this->db->DBDriver !== 'OCI8' && $fkey['onUpdate'] !== false && in_array($fkey['onUpdate'], $this->fkAllowActions, true)) {
-                $sqls[$index] .= ' ON UPDATE ' . $fkey['onUpdate'];
+            if (! $isOci8 && $fkey['onUpdate'] !== false && in_array($fkey['onUpdate'], $this->fkAllowActions, true)) {
+                $sql .= ' ON UPDATE ' . $fkey['onUpdate'];
             }
+
+            $sqls[$idx] .= $sql;
         }
 
         return $sqls;

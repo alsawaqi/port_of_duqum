@@ -1,3 +1,7 @@
+<?php
+$vendor_memberships = $vendor_memberships ?? [];
+$active_cr = trim((string) ($vendor_info->cr_number ?? ""));
+?>
 <div id="page-content" class="page-wrapper clearfix pod-page-shell pod-vendor-page pod-vendor-portal-page">
     <?php
     echo view("includes/pod_page_header", [
@@ -15,6 +19,17 @@
             <div>
                 <h2 class="pod-vendor-card-title">Vendor Workspace</h2>
                 <p class="pod-vendor-card-subtitle">Switch between profile sections and keep vendor information ready for review.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge bg-light text-dark border px-3 py-2">
+                    <?php echo esc($vendor_info->vendor_name ?? "Vendor"); ?>
+                    &nbsp;&middot;&nbsp; CR: <?php echo esc($active_cr !== "" ? $active_cr : "Not provided"); ?>
+                </span>
+                <?php if (count($vendor_memberships) > 1) { ?>
+                    <a href="<?php echo get_uri("signin/vendor_selection"); ?>" class="btn btn-outline-primary btn-sm">
+                        <i data-feather="repeat" class="icon-14"></i> Switch CR
+                    </a>
+                <?php } ?>
             </div>
         </div>
 

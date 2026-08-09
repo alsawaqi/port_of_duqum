@@ -9,7 +9,7 @@
                 <?php
                 if (get_setting("enable_top_menu")) {
 
-                    $top_menus = unserialize(get_setting("top_menus"));
+                    $top_menus = safe_unserialize(get_setting("top_menus"));
                     if ($top_menus && is_array($top_menus)) {
                         foreach ($top_menus as $menu) {
                              echo " <li class='nav-item'>" . anchor($menu->url, $menu->menu_name, array("class" => "nav-link")) . " </li>";

@@ -60,10 +60,19 @@ class Ptw_terminal_inbox extends Security_Controller
     {
         $this->_ensure_terminal_access();
 
-        $list = $this->Ptw_applications_model->get_details([
+        $options = [
             "stage" => "terminal",
             "statuses" => ["submitted", "in_review", "revise"]
-        ])->getResult();
+        ];
+        if (!$this->login_user->is_admin) {
+            $company_ids = $this->Ptw_terminal_users_model->get_active_company_ids($this->login_user->id);
+            if (!$company_ids) {
+                return $this->response->setJSON(["data" => []]);
+            }
+            $options["company_ids"] = $company_ids;
+        }
+
+        $list = $this->Ptw_applications_model->get_details($options)->getResult();
 
         $result = [];
         foreach ($list as $row) {
@@ -423,22 +432,15 @@ class Ptw_terminal_inbox extends Security_Controller
             return true;
         }
 
-        // NOTE: Current PTW table stores company_name text (not company_id).
-        // So we match assignment company name with application company_name.
-        $app_company = strtolower(trim((string)($application->company_name ?? "")));
-        if ($app_company === "") {
+        $company_id = (int)($application->company_id ?? 0);
+        if ($company_id < 1) {
             return false;
         }
 
-        $assignments = $this->Ptw_terminal_users_model->get_user_assignments($this->login_user->id)->getResult();
-        foreach ($assignments as $a) {
-            $assigned_company = strtolower(trim((string)($a->company_name ?? "")));
-            if ($assigned_company !== "" && $assigned_company === $app_company) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->Ptw_terminal_users_model->has_active_company_assignment(
+            $this->login_user->id,
+            $company_id
+        );
     }
 
     private function _format_ptw_status($status)

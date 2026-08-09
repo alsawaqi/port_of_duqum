@@ -2,6 +2,10 @@
 
 namespace App\Controllers;
 
+use App\Libraries\Gate_pass_scan_authorizer;
+use App\Libraries\Gate_pass_scan_recorder;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 use App\Models\Gate_pass_requests_model;
 use App\Models\Gate_pass_security_users_model;
 use App\Models\Gate_pass_request_approvals_model;
@@ -26,6 +30,8 @@ class Gate_pass_security_inbox extends Security_Controller
     protected $Gate_pass_request_vehicles_model;
     protected $Gate_pass_scan_log_model;
     protected $Gate_pass_blocked_visitors_model;
+    private Gate_pass_scan_authorizer $Gate_pass_scan_authorizer;
+    private Gate_pass_scan_recorder $Gate_pass_scan_recorder;
 
     public function __construct()
     {
@@ -41,6 +47,8 @@ class Gate_pass_security_inbox extends Security_Controller
         $this->Gate_pass_request_vehicles_model = new Gate_pass_request_vehicles_model();
         $this->Gate_pass_scan_log_model = new Gate_pass_scan_log_model();
         $this->Gate_pass_blocked_visitors_model = new Gate_pass_blocked_visitors_model();
+        $this->Gate_pass_scan_authorizer = new Gate_pass_scan_authorizer();
+        $this->Gate_pass_scan_recorder = new Gate_pass_scan_recorder($this->db);
 
         if (!$this->login_user->is_admin && !$this->Gate_pass_security_users_model->is_security_user($this->login_user->id)) {
             app_redirect("forbidden");
@@ -79,6 +87,7 @@ class Gate_pass_security_inbox extends Security_Controller
 
     public function export_list_csv()
     {
+        helper('csv_security');
         $options = [
             "stage" => "security",
             "exclude_statuses" => ["returned"],
@@ -104,13 +113,13 @@ class Gate_pass_security_inbox extends Security_Controller
         $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
 
         $fh = fopen("php://temp", "r+");
-        fputcsv($fh, ["reference", "created_at", "company", "department", "requester", "phone", "status", "stage", "visit_from", "visit_to"]);
+        fputcsv($fh, csv_safe_row(["reference", "created_at", "company", "department", "requester", "phone", "status", "stage", "visit_from", "visit_to"]));
         foreach ($list as $r) {
             $requester_name = trim(($r->requester_first_name ?? "") . " " . ($r->requester_last_name ?? ""));
             if ($requester_name === "") {
                 $requester_name = $r->requester_name ?? "";
             }
-            fputcsv($fh, [
+            fputcsv($fh, csv_safe_row([
                 $r->reference ?? "",
                 gate_pass_request_created_at_pick($r) ?? "",
                 $r->company_name ?? "",
@@ -121,7 +130,7 @@ class Gate_pass_security_inbox extends Security_Controller
                 $r->stage ?? "",
                 $r->visit_from ?? "",
                 $r->visit_to ?? "",
-            ]);
+            ]));
         }
         rewind($fh);
         $body = stream_get_contents($fh);
@@ -140,6 +149,16 @@ class Gate_pass_security_inbox extends Security_Controller
 
 public function lookup_by_qr()
 {
+    $user_id = (int)($this->login_user->id ?? 0);
+    $lookup_throttler = service("throttler");
+    $lookup_key = "gate_pass_qr_lookup_{$user_id}_" . hash("sha256", (string)$this->request->getIPAddress());
+    if (!$lookup_throttler->check($lookup_key, 60, 60)) {
+        return $this->response
+            ->setStatusCode(429)
+            ->setHeader("Retry-After", (string)max(1, $lookup_throttler->getTokenTime()))
+            ->setJSON(["success" => false, "message" => "Too many QR lookups. Please wait and try again."]);
+    }
+
     $this->validate_submitted_data([
         "qr_text" => "required"
     ]);
@@ -165,7 +184,7 @@ public function lookup_by_qr()
         return $this->response->setJSON(["success" => false, "message" => "Request not found."]);
     }
 
-    if (!$this->_can_act_on_request($request)) {
+    if (!$this->_can_scan_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
@@ -223,10 +242,13 @@ public function lookup_by_qr()
         ];
     }
 
+    $scan_nonce = $this->Gate_pass_scan_authorizer->issue((int)$gate_pass->id, $user_id);
+
     return $this->response->setJSON([
         "success" => true,
         "data" => [
             "gate_pass_id" => (int)$gate_pass->id,
+            "scan_nonce" => $scan_nonce,
             "request_id" => (int)$request->id,
             "gate_pass_no" => $gate_pass->gate_pass_no,
             "reference" => $request->reference,
@@ -315,7 +337,7 @@ public function vehicles_list_data($request_id = 0)
     $request_id = (int)$request_id;
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
 
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["data" => []]);
     }
 
@@ -376,13 +398,19 @@ public function vehicle_modal_form()
     $id = (int)$this->request->getPost("id");
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
-    if (!$request || !$this->_can_act_on_request($request)) {
+    if (!$request || !$this->_can_review_request($request)) {
         app_redirect("forbidden");
     }
 
     $model_info = $id
-        ? $this->Gate_pass_request_vehicles_model->get_details(["id" => $id])->getRow()
+        ? $this->Gate_pass_request_vehicles_model->get_details([
+            "id" => $id,
+            "gate_pass_request_id" => $request_id,
+        ])->getRow()
         : null;
+    if ($id && !$model_info) {
+        app_redirect("forbidden");
+    }
 
     return $this->template->view("gate_pass_security_inbox/vehicle_modal_form", [
         "model_info" => $model_info,
@@ -401,7 +429,7 @@ public function save_vehicle()
     $request_id = (int)$this->request->getPost("gate_pass_request_id");
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
-    if (!$request || !$this->_can_act_on_request($request)) {
+    if (!$request || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
@@ -425,7 +453,16 @@ public function save_vehicle()
         ]);
     }
 
-    $existing = $id ? $this->Gate_pass_request_vehicles_model->get_details(["id" => $id])->getRow() : null;
+    $existing = $id ? $this->Gate_pass_request_vehicles_model->get_details([
+        "id" => $id,
+        "gate_pass_request_id" => $request_id,
+    ])->getRow() : null;
+    if ($id && !$existing) {
+        return $this->response->setStatusCode(403)->setJSON([
+            "success" => false,
+            "message" => app_lang("forbidden"),
+        ]);
+    }
 
     $data = array_merge([
         "gate_pass_request_id" => $request_id,
@@ -437,14 +474,23 @@ public function save_vehicle()
 
     $upload_dir_rel = "gate_pass_vehicles/request_" . $request_id . "/";
     $upload_dir = WRITEPATH . "uploads/" . $upload_dir_rel;
-    if (!is_dir($upload_dir)) {
-        mkdir($upload_dir, 0775, true);
-    }
     $mulFile = $this->request->getFile("mulkiyah_attachment_path");
     if ($mulFile && $mulFile->isValid() && !$mulFile->hasMoved()) {
-        $new_name = "mulkiyah_" . uniqid("", true) . "." . $mulFile->getExtension();
-        $mulFile->move($upload_dir, $new_name);
-        $data["mulkiyah_attachment_path"] = $upload_dir_rel . $new_name;
+        try {
+            $stored = (new Upload_security())->storeUploadedFile(
+                $mulFile,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'mulkiyah_'
+            );
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Security inbox vehicle attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
+        $data["mulkiyah_attachment_path"] = $upload_dir_rel . $stored['stored_name'];
     } elseif ($existing && !empty($existing->mulkiyah_attachment_path)) {
         $data["mulkiyah_attachment_path"] = $existing->mulkiyah_attachment_path;
     }
@@ -482,7 +528,7 @@ public function delete_vehicle()
     }
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => (int)$row->gate_pass_request_id])->getRow();
-    if (!$request || !$this->_can_act_on_request($request)) {
+    if (!$request || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
@@ -496,15 +542,15 @@ public function save_scan_action()
 {
     $this->validate_submitted_data([
         "gate_pass_id" => "required|numeric",
-        "action" => "required"
+        "scan_nonce" => "required|exact_length[64]|alpha_numeric",
+        "action" => "required|in_list[entry,exit,check]",
+        "note" => "permit_empty|max_length[1000]"
     ]);
 
     $gate_pass_id = (int)$this->request->getPost("gate_pass_id");
     $action = strtolower(trim((string)$this->request->getPost("action")));
-    if (!in_array($action, ["entry", "exit", "check"], true)) {
-        $action = "check";
-    }
     $note = trim((string)$this->request->getPost("note"));
+    $scan_nonce = (string)$this->request->getPost("scan_nonce");
 
     $gate_pass = $this->Gate_passes_model->get_one($gate_pass_id);
     if (!$gate_pass || (int)$gate_pass->deleted === 1) {
@@ -512,8 +558,24 @@ public function save_scan_action()
     }
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => (int)$gate_pass->gate_pass_request_id])->getRow();
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || !$this->_can_scan_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
+    }
+
+    $user_id = (int)$this->login_user->id;
+    $scan_throttler = service("throttler");
+    $scan_key = "gate_pass_scan_{$user_id}_{$gate_pass_id}";
+    if (!$scan_throttler->check($scan_key, 30, 60)) {
+        return $this->response
+            ->setStatusCode(429)
+            ->setHeader("Retry-After", (string)max(1, $scan_throttler->getTokenTime()))
+            ->setJSON(["success" => false, "message" => "Too many gate scan attempts. Please wait and scan the QR again."]);
+    }
+    if (!$this->Gate_pass_scan_authorizer->consume($gate_pass_id, $user_id, $scan_nonce)) {
+        return $this->response->setStatusCode(403)->setJSON([
+            "success" => false,
+            "message" => "The QR scan authorization is missing, expired, or already used. Scan the QR again.",
+        ]);
     }
 
     if (($request->stage ?? "") !== "issued") {
@@ -532,7 +594,6 @@ public function save_scan_action()
     }
 
     $request_id = (int)$request->id;
-    $recorded_at = get_current_utc_time();
 
     $visitor_rows = $this->Gate_pass_request_visitors_model
         ->get_details(["gate_pass_request_id" => $request_id])
@@ -570,64 +631,22 @@ public function save_scan_action()
         }
     }
 
-    $log_saved = true;
-    $saved_count = 0;
-    foreach ($visitor_ids_to_log as $visitor_id) {
-        $scan_log_data = [
-            "gate_pass_request_id" => $request_id,
-            "gate_pass_id" => $gate_pass_id,
-            "gate_pass_request_visitor_id" => $visitor_id,
-            "security_user_id" => $security_user_id,
-            "action" => $action,
-            "note" => $note !== "" ? $note : null,
-            "recorded_at" => $recorded_at,
-            "performed_by" => (int)$this->login_user->id,
-            "ip_address" => $this->request->getIPAddress(),
-            "user_agent" => substr($this->request->getUserAgent()->getAgentString(), 0, 500),
-            "created_at" => $recorded_at,
-        ];
+    $result = $this->Gate_pass_scan_recorder->record(
+        $gate_pass_id,
+        $request_id,
+        $visitor_ids_to_log,
+        $action,
+        $security_user_id,
+        $user_id,
+        $note,
+        (string)$this->request->getIPAddress(),
+        (string)$this->request->getUserAgent()->getAgentString()
+    );
+    $status_code = (int)($result['status_code'] ?? 500);
+    unset($result['status_code']);
 
-        $saved_id = $this->Gate_pass_scan_log_model->ci_save($scan_log_data);
-        $log_saved = $log_saved && (bool)$saved_id;
-        if ($saved_id) {
-            $saved_count++;
-        }
-    }
+    return $this->response->setStatusCode($status_code)->setJSON($result);
 
-    $meta = [];
-    if (!empty($gate_pass->meta)) {
-        $decoded = json_decode($gate_pass->meta, true);
-        if (is_array($decoded)) $meta = $decoded;
-    }
-
-    $meta["security"] = $meta["security"] ?? [];
-    $meta["security"]["scan_count"] = (int)($meta["security"]["scan_count"] ?? 0) + 1;
-    $meta["security"]["last_scan_at"] = $recorded_at;
-    $meta["security"]["last_scan_by"] = (int)$this->login_user->id;
-    $meta["security"]["last_scan_visitor_ids"] = array_values(array_filter($visitor_ids_to_log));
-
-    $meta["security"]["logs"] = $meta["security"]["logs"] ?? [];
-    $meta["security"]["logs"][] = [
-        "action" => $action,
-        "note" => $note,
-        "visitor_ids" => array_values(array_filter($visitor_ids_to_log)),
-        "by" => (int)$this->login_user->id,
-        "at" => $recorded_at,
-        "ip" => $this->request->getIPAddress()
-    ];
-
-    $gate_pass_update = [
-        "meta" => json_encode($meta),
-        "updated_at" => $recorded_at,
-    ];
-    $ok = $this->Gate_passes_model->ci_save($gate_pass_update, $gate_pass_id);
-
-    return $this->response->setJSON([
-        "success" => (bool)($log_saved && $ok),
-        "message" => ($log_saved && $ok)
-            ? app_lang("record_saved") . " (" . $saved_count . " visitor" . ($saved_count === 1 ? "" : "s") . ")"
-            : app_lang("error_occurred")
-    ]);
 }
 
 
@@ -641,7 +660,7 @@ public function request_edit_modal_form()
     $request_id = (int)$this->request->getPost("request_id");
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
 
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || !$this->_can_review_request($request)) {
         app_redirect("forbidden");
     }
 
@@ -663,7 +682,7 @@ public function save_request_patch()
     $request_id = (int)$this->request->getPost("request_id");
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
 
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
@@ -704,7 +723,7 @@ public function visitors_list_data($request_id = 0)
     $request_id = (int)$request_id;
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
 
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["data" => []]);
     }
 
@@ -867,13 +886,19 @@ public function visitor_modal_form()
     $id = (int)$this->request->getPost("id");
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
-    if (!$request || !$this->_can_act_on_request($request)) {
+    if (!$request || !$this->_can_review_request($request)) {
         app_redirect("forbidden");
     }
 
     $model_info = $id
-        ? $this->Gate_pass_request_visitors_model->get_details(["id" => $id])->getRow()
+        ? $this->Gate_pass_request_visitors_model->get_details([
+            "id" => $id,
+            "gate_pass_request_id" => $request_id,
+        ])->getRow()
         : null;
+    if ($id && !$model_info) {
+        app_redirect("forbidden");
+    }
 
     return $this->template->view("gate_pass_security_inbox/visitor_modal_form", [
         "model_info" => $model_info,
@@ -893,11 +918,22 @@ public function save_visitor()
     $request_id = (int)$this->request->getPost("gate_pass_request_id");
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
-    if (!$request || !$this->_can_act_on_request($request)) {
+    if (!$request || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
     $is_primary = $this->request->getPost("is_primary") ? 1 : 0;
+
+    $existing = $id ? $this->Gate_pass_request_visitors_model->get_details([
+        "id" => $id,
+        "gate_pass_request_id" => $request_id,
+    ])->getRow() : null;
+    if ($id && !$existing) {
+        return $this->response->setStatusCode(403)->setJSON([
+            "success" => false,
+            "message" => app_lang("forbidden"),
+        ]);
+    }
 
     $data = clean_data([
         "gate_pass_request_id" => $request_id,
@@ -944,7 +980,7 @@ public function delete_visitor()
     }
 
     $request = $this->Gate_pass_requests_model->get_details(["id" => (int)$row->gate_pass_request_id])->getRow();
-    if (!$request || !$this->_can_act_on_request($request)) {
+    if (!$request || !$this->_can_review_request($request)) {
         return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
     }
 
@@ -1032,7 +1068,7 @@ public function delete_visitor()
         if (!$request || $request->deleted) {
             app_redirect("forbidden");
         }
-        if (!$this->_can_act_on_request($request)) {
+        if (!$this->_can_review_request($request)) {
             app_redirect("forbidden");
         }
         if ($request->stage !== "security") {
@@ -1076,17 +1112,18 @@ public function delete_visitor()
             show_404();
         }
 
-        $relPath = $visitor->{$field};
-        $relPath = preg_replace("#\.\.+#", "", (string)$relPath);
-        $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
-            show_404();
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
+        if (!$request || (int)$request->deleted === 1 || !$this->_can_view_security_request($request)) {
+            app_redirect("forbidden");
         }
 
-        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
-        if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
-            app_redirect("forbidden");
+        $relPath = $visitor->{$field};
+        $fullPath = $this->_resolve_security_upload_path(
+            (string) $relPath,
+            "gate_pass_visitors/request_" . (int) $visitor->gate_pass_request_id
+        );
+        if (!$fullPath) {
+            show_404();
         }
 
         $mime = function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream";
@@ -1096,6 +1133,8 @@ public function delete_visitor()
 
         return $this->response
             ->setHeader("Content-Type", $mime)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($fullPath));
     }
@@ -1115,16 +1154,18 @@ public function delete_visitor()
         if (!$veh || $relPath === "") {
             show_404();
         }
-        $relPath = preg_replace("#\.\.+#", "", (string)$relPath);
-        $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
-            show_404();
-        }
 
         $request = $this->Gate_pass_requests_model->get_details(["id" => $veh->gate_pass_request_id])->getRow();
-        if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
+        if (!$request || (int)$request->deleted === 1 || !$this->_can_view_security_request($request)) {
             app_redirect("forbidden");
+        }
+
+        $fullPath = $this->_resolve_security_upload_path(
+            (string) $relPath,
+            "gate_pass_vehicles/request_" . (int) $veh->gate_pass_request_id
+        );
+        if (!$fullPath) {
+            show_404();
         }
 
         $mime = function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream";
@@ -1134,6 +1175,8 @@ public function delete_visitor()
 
         return $this->response
             ->setHeader("Content-Type", $mime)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($fullPath));
     }
@@ -1147,7 +1190,7 @@ public function delete_visitor()
         if (!$request || $request->deleted) {
             return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
         }
-        if (!$this->_can_act_on_request($request)) {
+        if (!$this->_can_view_security_request($request)) {
             app_redirect("forbidden");
         }
 
@@ -1168,7 +1211,7 @@ public function delete_visitor()
             return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
         }
 
-        if (!$this->_can_act_on_request($request)) {
+        if (!$this->_can_review_request($request)) {
             app_redirect("forbidden");
         }
 
@@ -1230,7 +1273,7 @@ public function delete_visitor()
             return;
         }
 
-        if (!$this->_can_act_on_request($request)) {
+        if (!$this->_can_review_request($request)) {
             echo json_encode(["success" => false, "message" => app_lang("forbidden")]);
             return;
         }
@@ -1451,6 +1494,55 @@ public function delete_visitor()
             }
         }
         return false;
+    }
+
+    private function _resolve_security_upload_path(string $relative, string $allowedPrefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $allowedPrefix = trim(str_replace('\\', '/', $allowedPrefix), '/') . '/';
+        if (!str_starts_with($relative, $allowedPrefix)) {
+            return null;
+        }
+
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($allowedPrefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+
+        $rootCheck = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+        return str_starts_with($candidateCheck, $rootCheck) ? $candidate : null;
+    }
+
+    private function _can_review_request($request): bool
+    {
+        if (!$request || !$this->_can_act_on_request($request)) {
+            return false;
+        }
+
+        return (string) ($request->stage ?? "") === "security"
+            && (string) ($request->status ?? "") !== "returned";
+    }
+
+    private function _can_view_security_request($request): bool
+    {
+        if (!$request || !$this->_can_act_on_request($request)) {
+            return false;
+        }
+
+        return in_array((string) ($request->stage ?? ""), ["security", "issued"], true)
+            && (string) ($request->status ?? "") !== "returned";
+    }
+
+    private function _can_scan_request($request): bool
+    {
+        if (!$request || !$this->_can_act_on_request($request)) {
+            return false;
+        }
+
+        return (string) ($request->stage ?? "") === "issued"
+            && in_array((string) ($request->status ?? ""), ["rop_approved", "issued"], true);
     }
 
 }

@@ -7,6 +7,17 @@ use CodeIgniter\Config\BaseConfig;
 class CURLRequest extends BaseConfig
 {
     /**
+     * Share connection and DNS caches only; request headers/options remain
+     * isolated because shareOptions below is disabled.
+     *
+     * @var list<int>
+     */
+    public array $shareConnectionOptions = [
+        CURL_LOCK_DATA_CONNECT,
+        CURL_LOCK_DATA_DNS,
+    ];
+
+    /**
      * --------------------------------------------------------------------------
      * CURLRequest Share Options
      * --------------------------------------------------------------------------

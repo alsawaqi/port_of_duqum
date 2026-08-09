@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Gate_pass_request_vehicles_model extends Crud_model
 {
     protected $table = null;
@@ -20,17 +22,11 @@ class Gate_pass_request_vehicles_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("gate_pass_request_vehicles");
-
-        if (!$this->db->fieldExists("is_international_plate", $table)) {
-            $this->db->query("ALTER TABLE `$table` ADD COLUMN `is_international_plate` TINYINT(1) NOT NULL DEFAULT 0 AFTER `plate_no`");
-        }
-        if (!$this->db->fieldExists("plate_country", $table)) {
-            $this->db->query("ALTER TABLE `$table` ADD COLUMN `plate_country` VARCHAR(120) DEFAULT NULL AFTER `is_international_plate`");
-        }
-        if (!$this->db->fieldExists("international_plate_no", $table)) {
-            $this->db->query("ALTER TABLE `$table` ADD COLUMN `international_plate_no` VARCHAR(120) DEFAULT NULL AFTER `plate_country`");
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "gate_pass_request_vehicles" => [
+                "is_international_plate", "plate_country", "international_plate_no",
+            ],
+        ], "international vehicle plates");
 
         self::$international_plate_schema_checked = true;
     }

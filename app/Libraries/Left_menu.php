@@ -418,6 +418,7 @@ class Left_menu
 
                 $ptw_master_submenu = array();
 
+                if ($ptw_view("applicant_users")) $ptw_master_submenu[] = array("name" => "ptw_applicant_users",      "url" => "ptw_applicant_users",                         "class" => "user-check");
                 if ($ptw_view("hsse_users"))      $ptw_master_submenu[] = array("name" => "ptw_hsse_users",           "url" => "ptw_hsse_users",                              "class" => "users");
                 if ($ptw_view("hmo_users"))       $ptw_master_submenu[] = array("name" => "ptw_hmo_users",            "url" => "ptw_hmo_users",                               "class" => "users");
                 if ($ptw_view("terminal_users"))  $ptw_master_submenu[] = array("name" => "ptw_terminal_users",       "url" => "ptw_terminal_users",                          "class" => "users");
@@ -1096,7 +1097,7 @@ class Left_menu
             }
         }
 
-        return $custom_left_menu ? json_decode(json_encode(@unserialize($custom_left_menu)), true) : array();
+        return $custom_left_menu ? json_decode(json_encode(@safe_unserialize($custom_left_menu)), true) : array();
     }
 
     private function _get_left_menu_from_setting($type)
@@ -1109,7 +1110,7 @@ class Left_menu
             $default_left_menu = get_setting("default_left_menu");
         }
 
-        $result = $default_left_menu ? json_decode(json_encode(@unserialize($default_left_menu)), true) : array();
+        $result = $default_left_menu ? json_decode(json_encode(@safe_unserialize($default_left_menu)), true) : array();
 
         if (!is_array($result)) {
             $result = array();
@@ -1189,6 +1190,50 @@ class Left_menu
 
     function rander_left_menu($is_preview = false, $type = "default")
     {
+        $isVendorPortalIdentity = !empty($this->ci->login_user->is_vendor_only_identity);
+        $isGatePassPortalIdentity = !empty($this->ci->login_user->is_gate_pass_only_identity);
+        $isPtwPortalIdentity = !empty($this->ci->login_user->is_ptw_applicant_only_identity);
+        $hasActiveVendorPortalAccess = !empty($this->ci->login_user->has_active_vendor_portal_access);
+        $hasActiveGatePassPortalAccess = !empty($this->ci->login_user->has_active_gate_pass_portal_access);
+        $hasActivePtwPortalAccess = !empty($this->ci->login_user->has_active_ptw_portal_access);
+
+        if (!$is_preview && ($isVendorPortalIdentity || $isGatePassPortalIdentity || $isPtwPortalIdentity)) {
+            // External portal memberships do not grant access to the internal
+            // staff menu. A single identity may legitimately belong to more
+            // than one external portal, so expose only those linked surfaces.
+            $sidebar_menu = [];
+            if ($hasActiveVendorPortalAccess) {
+                $sidebar_menu[] = [
+                    "name" => "vendor_portal",
+                    "url" => "vendor_portal",
+                    "class" => "briefcase",
+                ];
+            }
+            if ($hasActiveGatePassPortalAccess) {
+                $sidebar_menu[] = [
+                    "name" => "gate_pass_portal",
+                    "url" => "gate_pass_portal",
+                    "class" => "key",
+                ];
+            }
+            if ($hasActivePtwPortalAccess) {
+                $sidebar_menu[] = [
+                    "name" => "ptw_portal",
+                    "url" => "ptw_portal",
+                    "class" => "shield",
+                ];
+            }
+            $sidebar_menu[] = [
+                "name" => "change_password",
+                "url" => "portal_account/change_password",
+                "class" => "lock",
+            ];
+
+            return view("includes/left_menu", [
+                "sidebar_menu" => $this->_get_active_menu($sidebar_menu),
+            ]);
+        }
+
         $final_left_menu_items = array();
         $custom_left_menu_items = $this->_get_left_menu_from_setting_for_rander($is_preview, $type);
 

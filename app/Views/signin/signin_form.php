@@ -12,7 +12,7 @@ $signin_logo_url = base_url("assets/images/port-duqum-signin-logo.png");
         <div>
             <span class="pod-signin-kicker">Port of Duqm Portal</span>
             <h2><?php echo app_lang('signin'); ?></h2>
-            <p>Use your registered email or CR number to continue.</p>
+            <p>Use your registered email and password to continue.</p>
         </div>
     </div>
 
@@ -34,15 +34,16 @@ $signin_logo_url = base_url("assets/images/port-duqum-signin-logo.png");
     <?php echo form_open("signin/authenticate", array("id" => "signin-form", "class" => "general-form pod-signin-form", "role" => "form", "autocomplete" => "on")); ?>
 
     <div class="form-group">
-        <label class="pod-auth-label" for="email"><?php echo app_lang('email_or_cr_number'); ?></label>
+        <label class="pod-auth-label" for="email"><?php echo app_lang('email'); ?></label>
         <div class="pod-input-wrap">
             <i data-feather="mail" class="pod-input-icon icon-18"></i>
             <?php
             echo form_input(array(
+                "type" => "email",
                 "id" => "email",
                 "name" => "email",
                 "class" => "form-control pod-auth-input",
-                "placeholder" => app_lang('email_or_cr_number'),
+                "placeholder" => app_lang('email'),
                 "autofocus" => true,
                 "autocomplete" => "username",
                 "data-rule-required" => true,

@@ -65,6 +65,7 @@ class Gate_pass_rop_inbox extends Security_Controller
 
     public function export_list_csv()
     {
+        helper('csv_security');
         $options = $this->_get_filter_options();
 
         $list = $this->Gate_pass_requests_model->get_details($options)->getResult();
@@ -74,13 +75,13 @@ class Gate_pass_rop_inbox extends Security_Controller
         $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
 
         $fh = fopen("php://temp", "r+");
-        fputcsv($fh, ["reference", "created_at", "company", "department", "requester", "phone", "status", "stage", "visit_from", "visit_to"]);
+        fputcsv($fh, csv_safe_row(["reference", "created_at", "company", "department", "requester", "phone", "status", "stage", "visit_from", "visit_to"]));
         foreach ($list as $r) {
             $requester_name = trim(($r->requester_first_name ?? "") . " " . ($r->requester_last_name ?? ""));
             if ($requester_name === "") {
                 $requester_name = $r->requester_name ?? "";
             }
-            fputcsv($fh, [
+            fputcsv($fh, csv_safe_row([
                 $r->reference ?? "",
                 gate_pass_request_created_at_pick($r) ?? "",
                 $r->company_name ?? "",
@@ -91,7 +92,7 @@ class Gate_pass_rop_inbox extends Security_Controller
                 $r->stage ?? "",
                 $r->visit_from ?? "",
                 $r->visit_to ?? "",
-            ]);
+            ]));
         }
         rewind($fh);
         $body = stream_get_contents($fh);
@@ -414,6 +415,27 @@ class Gate_pass_rop_inbox extends Security_Controller
             return;
         }
 
+        // Serialize the final ROP decision for this request. Without a row
+        // lock, two concurrent approvals can both observe stage=rop and issue
+        // duplicate passes before either request transition becomes visible.
+        $db = db_connect();
+        $requests_table = $db->prefixTable("gate_pass_requests");
+        $db->transBegin();
+        $request = $db->query(
+            "SELECT * FROM `{$requests_table}` WHERE id=? AND deleted=0 FOR UPDATE",
+            [$request_id]
+        )->getRow();
+        if (
+            !$request
+            || !$this->_can_act_on_request($request)
+            || (string)($request->stage ?? "") !== "rop"
+            || (string)($request->status ?? "") === "returned"
+        ) {
+            $db->transRollback();
+            echo json_encode(["success" => false, "message" => app_lang("invalid_request")]);
+            return;
+        }
+
         $approval_data = [
             "gate_pass_request_id" => $request_id,
             "stage" => "rop",
@@ -428,13 +450,18 @@ class Gate_pass_rop_inbox extends Security_Controller
 
         $save_id = $this->Gate_pass_request_approvals_model->ci_save($approval_data);
         if (!$save_id) {
+            $db->transRollback();
             echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
             return;
         }
 
         if ($decision === "approved") {
             $update = ["status" => "rop_approved", "stage" => "issued"];
-            $this->Gate_pass_requests_model->ci_save($update, $request_id);
+            if (!$this->Gate_pass_requests_model->ci_save($update, $request_id)) {
+                $db->transRollback();
+                echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+                return;
+            }
 
             // Create one QR/pass per visitor so group members can arrive independently.
             $request = $this->Gate_pass_requests_model->get_one($request_id);
@@ -454,7 +481,11 @@ class Gate_pass_rop_inbox extends Security_Controller
                 ];
 
                 if ($existing) {
-                    $this->Gate_passes_model->ci_save($validity_update, (int)$existing->id);
+                    if (!$this->Gate_passes_model->ci_save($validity_update, (int)$existing->id)) {
+                        $db->transRollback();
+                        echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+                        return;
+                    }
                     continue;
                 }
 
@@ -472,11 +503,30 @@ class Gate_pass_rop_inbox extends Security_Controller
                     "updated_at" => $now,
                     "deleted" => 0,
                 ];
-                $this->Gate_passes_model->ci_save($pass_data);
+                if (!$this->Gate_passes_model->ci_save($pass_data)) {
+                    $db->transRollback();
+                    echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+                    return;
+                }
             }
         } else {
             $update = ["status" => $decision];
-            $this->Gate_pass_requests_model->ci_save($update, $request_id);
+            if (!$this->Gate_pass_requests_model->ci_save($update, $request_id)) {
+                $db->transRollback();
+                echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+                return;
+            }
+        }
+
+        if ($db->transStatus() === false) {
+            $db->transRollback();
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            return;
+        }
+
+        if (!$db->transCommit()) {
+            echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+            return;
         }
 
         echo json_encode(["success" => true, "message" => app_lang("record_saved"), "id" => $request_id]);

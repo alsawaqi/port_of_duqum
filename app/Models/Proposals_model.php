@@ -186,13 +186,10 @@ class Proposals_model extends Crud_model {
 
     //save initial number of proposal
     function save_initial_number_of_proposal($value) {
-        $proposals_table = $this->db->prefixTable('proposals');
-
         $value = $this->_get_clean_value($value);
 
-        $sql = "ALTER TABLE $proposals_table AUTO_INCREMENT=$value;";
-
-        return $this->db->query($sql);
+        // Settings are application data; primary-key allocation remains database-managed.
+        return is_numeric($value) && (int) $value > 0;
     }
 
     function update_proposal_preview_activity($id) {

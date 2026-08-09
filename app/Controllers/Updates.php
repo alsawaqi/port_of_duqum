@@ -2,9 +2,16 @@
 
 namespace App\Controllers;
 
+use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Rise;
+
 class Updates extends Security_Controller {
 
     function __construct() {
+        if (ENVIRONMENT === 'production' && !Rise::PRODUCTION_RUNTIME_CODE_MANAGEMENT_ENABLED) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
         parent::__construct();
         $this->access_only_admin_or_settings_admin();
     }

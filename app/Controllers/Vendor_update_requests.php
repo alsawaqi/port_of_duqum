@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Controllers\Security_Controller;
 use App\Models\Vendor_update_requests_model;
 use App\Models\Vendors_model;
+use App\Libraries\Vendor_contact_access;
 use Config\Database;
 
 class Vendor_update_requests extends Security_Controller
@@ -12,6 +13,7 @@ class Vendor_update_requests extends Security_Controller
     protected $Vendor_update_requests_model;
     protected $Vendors_model;
     protected $db;
+    protected $Vendor_contact_access;
 
 
 
@@ -23,6 +25,7 @@ class Vendor_update_requests extends Security_Controller
 
         $this->Vendor_update_requests_model = new Vendor_update_requests_model();
         $this->Vendors_model = new Vendors_model();
+        $this->Vendor_contact_access = new Vendor_contact_access(db_connect());
         $this->db = Database::connect(); // ✅ REQUIRED
     }
 
@@ -339,6 +342,13 @@ class Vendor_update_requests extends Security_Controller
 
     function bulk_approve()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON(["success" => false, "message" => "This action requires a POST request."]);
+        }
+
         $this->access_only_vendor_update_requests_approve();
 
         $ids = $this->request->getPost("ids");
@@ -346,7 +356,11 @@ class Vendor_update_requests extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "No requests selected."]);
         }
 
-        $ids = array_values(array_filter(array_map("intval", $ids)));
+        $ids = array_values(array_unique(array_filter(
+            array_map("intval", $ids),
+            static fn(int $id): bool => $id > 0
+        )));
+        sort($ids, SORT_NUMERIC);
 
         $approved = 0;
         $skipped  = 0;
@@ -354,9 +368,9 @@ class Vendor_update_requests extends Security_Controller
         $this->db->transBegin();
         try {
             foreach ($ids as $id) {
-                $row = $this->Vendor_update_requests_model->get_one($id);
+                $row = $this->lockPendingRequest($id);
 
-                if (!$row || (int)$row->deleted === 1 || $row->status !== "pending") {
+                if (!$row || (string) ($row->status ?? "") !== "pending") {
                     $skipped++;
                     continue;
                 }
@@ -367,16 +381,13 @@ class Vendor_update_requests extends Security_Controller
                     continue;
                 }
 
-                $this->_apply_changes($changes, "approved");
+                $this->_apply_changes($changes, "approved", (int) $row->vendor_id);
 
-                // update request row itself
-                $this->db->table($this->db->prefixTable("vendor_update_requests"))
-                    ->where("id", $id)
-                    ->update([
-                        "status"      => "approved",
-                        "reviewed_by" => $this->login_user->id ?? null,
-                        "reviewed_at" => get_current_utc_time(),
-                    ]);
+                $this->finalizePendingRequest($id, [
+                    "status"      => "approved",
+                    "reviewed_by" => $this->login_user->id ?? null,
+                    "reviewed_at" => get_current_utc_time(),
+                ]);
 
                 $approved++;
             }
@@ -386,6 +397,7 @@ class Vendor_update_requests extends Security_Controller
             }
 
             $this->db->transCommit();
+
 
             return $this->response->setJSON([
                 "success" => true,
@@ -397,13 +409,20 @@ class Vendor_update_requests extends Security_Controller
 
             return $this->response->setJSON([
                 "success" => false,
-                "message" => "Bulk approve failed: " . $e->getMessage()
+                "message" => "Unable to approve the selected requests. Please try again."
             ]);
         }
     }
 
     function bulk_reject()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON(["success" => false, "message" => "This action requires a POST request."]);
+        }
+
         $this->access_only_vendor_update_requests_reject();
 
         $ids = $this->request->getPost("ids");
@@ -416,7 +435,11 @@ class Vendor_update_requests extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "Reject reason is required."]);
         }
 
-        $ids = array_values(array_filter(array_map("intval", $ids)));
+        $ids = array_values(array_unique(array_filter(
+            array_map("intval", $ids),
+            static fn(int $id): bool => $id > 0
+        )));
+        sort($ids, SORT_NUMERIC);
 
         $rejected = 0;
         $skipped  = 0;
@@ -424,9 +447,9 @@ class Vendor_update_requests extends Security_Controller
         $this->db->transBegin();
         try {
             foreach ($ids as $id) {
-                $row = $this->Vendor_update_requests_model->get_one($id);
+                $row = $this->lockPendingRequest($id);
 
-                if (!$row || (int)$row->deleted === 1 || $row->status !== "pending") {
+                if (!$row || (string) ($row->status ?? "") !== "pending") {
                     $skipped++;
                     continue;
                 }
@@ -437,19 +460,17 @@ class Vendor_update_requests extends Security_Controller
                     continue;
                 }
 
-                $this->_apply_changes($changes, "rejected"); // no if(...)
+                $this->_apply_changes($changes, "rejected", (int) $row->vendor_id); // no if(...)
 
 
 
 
-                $this->db->table($this->db->prefixTable("vendor_update_requests"))
-                    ->where("id", $id)
-                    ->update([
-                        "status"         => "rejected",
-                        "review_comment" => $reason,
-                        "reviewed_by"    => $this->login_user->id ?? null,
-                        "reviewed_at"    => get_current_utc_time(),
-                    ]);
+                $this->finalizePendingRequest($id, [
+                    "status"         => "rejected",
+                    "review_comment" => $reason,
+                    "reviewed_by"    => $this->login_user->id ?? null,
+                    "reviewed_at"    => get_current_utc_time(),
+                ]);
 
                 $rejected++;
             }
@@ -470,7 +491,7 @@ class Vendor_update_requests extends Security_Controller
 
             return $this->response->setJSON([
                 "success" => false,
-                "message" => "Bulk reject failed: " . $e->getMessage()
+                "message" => "Unable to reject the selected requests. Please try again."
             ]);
         }
     }
@@ -675,12 +696,18 @@ class Vendor_update_requests extends Security_Controller
 
 
     public
-    function approve($id = null)
+    function approve()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON(["success" => false, "message" => "This action requires a POST request."]);
+        }
+
         $this->access_only_vendor_update_requests_approve();
 
-        $id = $id ?? $this->request->getPost("id");
-        $id = (int) $id;
+        $id = (int) $this->request->getPost("id");
 
         if (!$id) {
             return $this->response->setJSON([
@@ -689,54 +716,42 @@ class Vendor_update_requests extends Security_Controller
             ]);
         }
 
-        // Fetch request (direct query so we can reliably detect missing rows)
-        $vurTable = $this->db->prefixTable("vendor_update_requests");
-        $request = $this->db->table($vurTable)
-            ->where("id", $id)
-            ->where("deleted", 0)
-            ->get()
-            ->getRow();
-
-        if (!$request) {
-            return $this->response->setJSON([
-                "success" => false,
-                "message" => "Request not found."
-            ]);
-        }
-
-        if ($request->status !== "pending") {
-            return $this->response->setJSON([
-                "success" => false,
-                "message" => "Only pending requests can be approved."
-            ]);
-        }
-
-        $changes = json_decode($request->changes ?? "{}", true);
-        if (!is_array($changes) || !count($changes)) {
-            return $this->response->setJSON([
-                "success" => false,
-                "message" => "Invalid changes payload."
-            ]);
-        }
-
         $this->db->transBegin();
-
         try {
-            $this->_apply_changes($changes, "approved");
+            $request = $this->lockPendingRequest($id);
 
-            $ok = $this->db->table($vurTable)
-                ->where("id", $id)
-                ->update([
-                    "status" => "approved",
-                    "reviewed_by" => $this->login_user->id,
-                    "reviewed_at" => date("Y-m-d H:i:s"),
-                    "updated_at" => date("Y-m-d H:i:s")
+            if (!$request) {
+                $this->db->transRollback();
+                return $this->response->setJSON([
+                    "success" => false,
+                    "message" => "Request not found."
                 ]);
-
-            if (!$ok) {
-                $err = $this->db->error();
-                throw new \Exception("Failed to update request row: " . ($err["message"] ?? "unknown"));
             }
+
+            if ((string) ($request->status ?? "") !== "pending") {
+                $this->db->transRollback();
+                return $this->response->setJSON([
+                    "success" => false,
+                    "message" => "Only pending requests can be approved."
+                ]);
+            }
+
+            $changes = json_decode($request->changes ?? "{}", true);
+            if (!is_array($changes) || !count($changes)) {
+                $this->db->transRollback();
+                return $this->response->setJSON([
+                    "success" => false,
+                    "message" => "Invalid changes payload."
+                ]);
+            }
+
+            $this->_apply_changes($changes, "approved", (int) $request->vendor_id);
+
+            $this->finalizePendingRequest($id, [
+                "status" => "approved",
+                "reviewed_by" => $this->login_user->id,
+                "reviewed_at" => date("Y-m-d H:i:s"),
+            ]);
 
             if ($this->db->transStatus() === false) {
                 $err = $this->db->error();
@@ -755,13 +770,20 @@ class Vendor_update_requests extends Security_Controller
 
             return $this->response->setJSON([
                 "success" => false,
-                "message" => "Approve failed: " . $e->getMessage()
+                "message" => "Unable to approve this request. Please try again."
             ]);
         }
     }
 
     function reject()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON(["success" => false, "message" => "This action requires a POST request."]);
+        }
+
         $this->access_only_vendor_update_requests_reject();
         $this->validate_submitted_data([
             "id"     => "required|numeric",
@@ -771,45 +793,35 @@ class Vendor_update_requests extends Security_Controller
         $id     = (int) $this->request->getPost("id");
         $reason = trim((string)$this->request->getPost("reason"));
 
-        $vurTable = $this->db->prefixTable("vendor_update_requests");
-
-        $row = $this->db->table($vurTable)
-            ->where("id", $id)
-            ->where("deleted", 0)
-            ->get()
-            ->getRow();
-
-        if (!$row) {
-            return $this->response->setJSON(["success" => false, "message" => "Request not found."]);
-        }
-
-        // (Optional but recommended) prevent rejecting non-pending requests
-        if ($row->status !== "pending") {
-            return $this->response->setJSON(["success" => false, "message" => "Only pending requests can be rejected."]);
-        }
-
-        $changes = json_decode($row->changes, true);
-        if (!is_array($changes)) {
-            return $this->response->setJSON(["success" => false, "message" => "Invalid changes JSON on this request."]);
-        }
-
         $this->db->transBegin();
-
         try {
-            // If you want rejection to also revert/remove the target data, keep this:
-            $this->_apply_changes($changes, "rejected");
+            $row = $this->lockPendingRequest($id);
 
-            $ok = $this->db->table($vurTable)->where("id", $id)->update([
+            if (!$row) {
+                $this->db->transRollback();
+                return $this->response->setJSON(["success" => false, "message" => "Request not found."]);
+            }
+
+            if ((string) ($row->status ?? "") !== "pending") {
+                $this->db->transRollback();
+                return $this->response->setJSON(["success" => false, "message" => "Only pending requests can be rejected."]);
+            }
+
+            $changes = json_decode($row->changes, true);
+            if (!is_array($changes)) {
+                $this->db->transRollback();
+                return $this->response->setJSON(["success" => false, "message" => "Invalid changes JSON on this request."]);
+            }
+
+            // If you want rejection to also revert/remove the target data, keep this:
+            $this->_apply_changes($changes, "rejected", (int) $row->vendor_id);
+
+            $this->finalizePendingRequest($id, [
                 "status"         => "rejected",
                 "reviewed_by"    => $this->login_user->id,
                 "reviewed_at"    => date("Y-m-d H:i:s"),
                 "review_comment" => $reason
             ]);
-
-            if (!$ok) {
-                $error = $this->db->error();
-                throw new \RuntimeException("VUR update failed: " . ($error["message"] ?? "unknown"));
-            }
 
             if ($this->db->transStatus() === false) {
                 $error = $this->db->error();
@@ -828,7 +840,7 @@ class Vendor_update_requests extends Security_Controller
 
             return $this->response->setJSON([
                 "success" => false,
-                "message" => $e->getMessage()
+                "message" => "Unable to reject this request. Please try again."
             ]);
         }
     }
@@ -852,6 +864,13 @@ class Vendor_update_requests extends Security_Controller
 
     public function review()
     {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON(["success" => false, "message" => "This action requires a POST request."]);
+        }
+
         $this->access_only_vendor_update_requests_review();
 
         $this->validate_submitted_data([
@@ -906,7 +925,8 @@ class Vendor_update_requests extends Security_Controller
 
     public function view_document($vurId)
     {
-        // admin-only already enforced in your controller
+        $this->access_only_vendor_update_requests_view();
+        $this->access_only_vendor_update_requests_by_vendor_view();
 
         $vurId = (int) $vurId;
 
@@ -915,72 +935,108 @@ class Vendor_update_requests extends Security_Controller
             return $this->response->setStatusCode(404, "Not found");
         }
 
-        $changes = json_decode($vur->changes ?? "{}", true);
-        $after = $changes["after"] ?? [];
-        if (!is_array($after)) $after = [];
-
-        // 1) best: path stored in VUR changes
-        $relPath = $after["path"] ?? null;
-
-        // 2) fallback: if no path in changes, load the document row by record_id
-        if (!$relPath && !empty($changes["record_id"]) && !empty($changes["table"])) {
-            $table = strtolower((string)$changes["table"]);
-            if (str_contains($table, "vendor_documents")) {
-                $docId = (int)$changes["record_id"];
-                $docRow = $this->db->table($this->db->prefixTable("vendor_documents"))
-                    ->where("id", $docId)
-                    ->where("deleted", 0)
-                    ->get()
-                    ->getRow();
-                if ($docRow) {
-                    $relPath = $docRow->path;
-                    $after["original_name"] = $after["original_name"] ?? $docRow->original_name;
-                    $after["mime_type"] = $after["mime_type"] ?? $docRow->mime_type;
-                }
-            }
-        }
-
-        if (!$relPath) {
-            return $this->response->setStatusCode(404, "No document in this request");
-        }
-
-        // sanitize (prevent ../)
-        $relPath = str_replace("\\", "/", $relPath);
-        $relPath = preg_replace("#\.\.+#", "", $relPath);
-        $relPath = ltrim($relPath, "/");
-
-        $baseCandidates = [
-            WRITEPATH . "uploads/",
-            FCPATH . "uploads/",
-            FCPATH
-        ];
-
-        $fullPath = null;
-        foreach ($baseCandidates as $base) {
-            $try = rtrim($base, "/\\") . "/" . $relPath;
-            if (is_file($try)) {
-                $fullPath = $try;
-                break;
-            }
-        }
-
-        if (!$fullPath) {
-            return $this->response->setStatusCode(404, "File missing on server: " . $relPath);
-        }
-
-        $downloadName = $after["original_name"] ?? basename($fullPath);
-        $mime = $after["mime_type"] ?? (function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream");
-
-        // inline for images/pdf
-        $inline = (str_starts_with($mime, "image/") || $mime === "application/pdf");
-
-        return $this->response
-            ->setHeader("Content-Type", $mime)
-            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($downloadName) . '"')
-            ->setBody(file_get_contents($fullPath));
+        return $this->streamVendorRequestDocument($vur);
     }
 
 
+
+
+    private function streamVendorRequestDocument(object $request)
+    {
+        $changes = json_decode($request->changes ?? "{}", true);
+        if (!is_array($changes)
+            || strtolower(trim((string) ($changes["table"] ?? ""))) !== "vendor_documents"
+            || (int) ($changes["record_id"] ?? 0) < 1) {
+            return $this->response->setStatusCode(404, "No document in this request");
+        }
+
+        // The canonical row is authoritative. Bind it to the request's CR and
+        // never trust a path embedded in the approval-request JSON.
+        $document = $this->db->table($this->db->prefixTable("vendor_documents"))
+            ->where("id", (int) $changes["record_id"])
+            ->where("vendor_id", (int) $request->vendor_id)
+            ->where("deleted", 0)
+            ->get()
+            ->getRow();
+        if (!$document || empty($document->path)) {
+            return $this->response->setStatusCode(404, "No document in this request");
+        }
+
+        $base = realpath(WRITEPATH . "uploads/vendor_documents");
+        $relative = ltrim(str_replace("\\", "/", (string) $document->path), "/");
+        $fullPath = realpath(WRITEPATH . "uploads/" . $relative);
+        $basePrefix = $base ? rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR : "";
+        if (!$base || !$fullPath || !is_file($fullPath) || strpos($fullPath, $basePrefix) !== 0) {
+            return $this->response->setStatusCode(404, "File missing");
+        }
+
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($fullPath) ?: "application/octet-stream";
+        if (!in_array($mime, ["image/jpeg", "image/png", "application/pdf"], true)) {
+            return $this->response->setStatusCode(404, "Unsupported document");
+        }
+
+        $originalName = (string) ($document->original_name ?: basename($fullPath));
+        $downloadName = preg_replace('/[\x00-\x1F\x7F"\\\\\/]+/', "_", basename($originalName));
+        $downloadName = $downloadName ?: "vendor-document";
+
+        return $this->response
+            ->setHeader("Content-Type", $mime)
+            ->setHeader(
+                "Content-Disposition",
+                'inline; filename="' . $downloadName . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName)
+            )
+            ->setHeader("Cache-Control", "private, no-store, max-age=0")
+            ->setHeader("Pragma", "no-cache")
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setBody(file_get_contents($fullPath));
+    }
+
+    /**
+     * Lock one request before making a decision. The caller must already have
+     * an open transaction and must recheck the pending status on this row.
+     */
+    private function lockPendingRequest(int $id): ?object
+    {
+        if ($id < 1) {
+            return null;
+        }
+
+        $table = $this->db->prefixTable("vendor_update_requests");
+        $row = $this->db->query(
+            "SELECT * FROM {$table}
+             WHERE id = ? AND deleted = 0
+             FOR UPDATE",
+            [$id]
+        )->getRow();
+
+        return $row ?: null;
+    }
+
+    /**
+     * Finalize only the pending row that is currently locked by the caller.
+     */
+    private function finalizePendingRequest(int $id, array $data): void
+    {
+        $data["updated_at"] = $data["updated_at"] ?? get_current_utc_time();
+
+        $ok = $this->db->table($this->db->prefixTable("vendor_update_requests"))
+            ->where("id", $id)
+            ->where("deleted", 0)
+            ->where("status", "pending")
+            ->update($data);
+
+        if ($ok && $this->db->affectedRows() === 1) {
+            return;
+        }
+
+        $error = $this->db->error();
+        log_message(
+            "error",
+            "VUR DECISION FINALIZE FAILED for request {$id}: "
+                . ($error["message"] ?? "pending request was not updated")
+        );
+        throw new \RuntimeException("Unable to finalize the pending vendor update request.");
+    }
 
 
     private function _filter_payload_for_table(string $table, array $payload): array
@@ -1001,13 +1057,13 @@ class Vendor_update_requests extends Security_Controller
         return array_intersect_key($payload, $allowed);
     }
 
-    private function _apply_changes(array $changes, string $decision): bool
+    private function _apply_changes(array $changes, string $decision, int $expectedVendorId): bool
     {
-        $tableRaw  = trim((string)($changes["table"] ?? ""));
+        $tableRaw  = strtolower(trim((string)($changes["table"] ?? "")));
         $action    = strtolower(trim((string)($changes["action"] ?? "")));
         $record_id = (int)($changes["record_id"] ?? 0);
 
-        if (!$tableRaw) {
+        if (!$tableRaw || $expectedVendorId < 1) {
             throw new \RuntimeException("Missing table in changes JSON.");
         }
         if (!$record_id) {
@@ -1017,10 +1073,60 @@ class Vendor_update_requests extends Security_Controller
         // prevent double prefix if table already contains prefix
         $prefix = method_exists($this->db, "getPrefix") ? $this->db->getPrefix() : "";
         if ($prefix && strpos($tableRaw, $prefix) === 0) {
-            $tableRaw = substr($tableRaw, strlen($prefix));
+            $tableRaw = strtolower(substr($tableRaw, strlen($prefix)));
         }
 
+        // Stored change JSON is data, never a free-form database instruction.
+        // Bind every module to one CR-owned table and its editable fields.
+        $policies = [
+            "bank" => [
+                "table" => "vendor_bank_accounts",
+                "fields" => ["bank_name", "bank_branch", "bank_account_no", "bank_swift_code", "iban", "letter_head_path", "status", "deleted"],
+            ],
+            "specialties" => [
+                "table" => "vendor_specialties",
+                "fields" => ["vendor_category_id", "vendor_sub_category_id", "specialty_type", "specialty_name", "specialty_description", "status", "deleted"],
+            ],
+            "branches" => [
+                "table" => "vendor_branches",
+                "fields" => ["name", "address", "country_id", "region_id", "city_id", "phone", "email", "is_main", "is_active", "status", "deleted"],
+            ],
+            "documents" => [
+                "table" => "vendor_documents",
+                "fields" => ["vendor_document_type_id", "issued_at", "expires_at", "status", "disk", "path", "original_name", "mime_type", "size_bytes", "uploaded_by", "deleted"],
+            ],
+            "credentials" => [
+                "table" => "vendor_credentials",
+                "fields" => ["type", "number", "issue_date", "expiry_date", "notes", "status", "deleted"],
+            ],
+            "contacts" => [
+                "table" => "vendor_contacts",
+                "fields" => ["user_id", "contacts_name", "phone", "fax", "designation", "email", "email_2", "mobile", "role", "is_primary", "is_active", "status", "created_at", "updated_at", "deleted"],
+            ],
+        ];
+
+        $module = strtolower(trim((string) ($changes["module"] ?? "")));
+        $policy = $policies[$module] ?? null;
+        if (!$policy || !hash_equals($policy["table"], $tableRaw)) {
+            throw new \RuntimeException("Unsupported vendor update target.");
+        }
+
+        if (!in_array($action, ["create", "insert", "update", "delete"], true)) {
+            throw new \RuntimeException("Unsupported action: {$action}");
+        }
+
+        $isVendorContact = strtolower($tableRaw) === "vendor_contacts";
         $table = $this->db->prefixTable($tableRaw);
+
+        // The request row's vendor_id is the CR authorization boundary. Lock
+        // the target so its ownership cannot change during this decision.
+        $ownedTarget = $this->db->query(
+            "SELECT id FROM {$table} WHERE id = ? AND vendor_id = ? FOR UPDATE",
+            [$record_id, $expectedVendorId]
+        )->getRow();
+        if (!$ownedTarget) {
+            throw new \RuntimeException("Vendor update target is outside the requested CR.");
+        }
 
         // normalize action names
         if ($action === "create") $action = "insert";
@@ -1033,6 +1139,10 @@ class Vendor_update_requests extends Security_Controller
 
         unset($before["id"]);
         unset($after["id"]);
+
+        $allowedFields = array_flip($policy["fields"]);
+        $before = array_intersect_key($before, $allowedFields);
+        $after = array_intersect_key($after, $allowedFields);
 
         $builder = $this->db->table($table);
 
@@ -1052,8 +1162,15 @@ class Vendor_update_requests extends Security_Controller
                 $payload = $this->_filter_payload_for_table($table, $payload);
 
                 if (count($payload)) {
-                    $ok = $builder->where("id", $record_id)->update($payload);
+                    $ok = $builder->where("id", $record_id)->where("vendor_id", $expectedVendorId)->update($payload);
                     if (!$ok) $throwDbError("APPROVE update failed");
+                }
+
+                if ($isVendorContact) {
+                    $this->Vendor_contact_access->approveContact(
+                        $record_id,
+                        (int) ($this->login_user->id ?? 0)
+                    );
                 }
             } elseif ($action === "delete") {
                 $payload = [
@@ -1064,8 +1181,12 @@ class Vendor_update_requests extends Security_Controller
                 $payload = $this->_filter_payload_for_table($table, $payload);
 
                 if (count($payload)) {
-                    $ok = $builder->where("id", $record_id)->update($payload);
+                    $ok = $builder->where("id", $record_id)->where("vendor_id", $expectedVendorId)->update($payload);
                     if (!$ok) $throwDbError("APPROVE delete-flag failed");
+                }
+
+                if ($isVendorContact) {
+                    $this->Vendor_contact_access->suspendContactMembership($record_id);
                 }
             } else {
                 throw new \RuntimeException("Unsupported action: {$action}");
@@ -1085,8 +1206,12 @@ class Vendor_update_requests extends Security_Controller
             $payload = $this->_filter_payload_for_table($table, $payload);
 
             if (count($payload)) {
-                $ok = $builder->where("id", $record_id)->update($payload);
+                $ok = $builder->where("id", $record_id)->where("vendor_id", $expectedVendorId)->update($payload);
                 if (!$ok) $throwDbError("REJECT insert failed");
+            }
+
+            if ($isVendorContact) {
+                $this->Vendor_contact_access->suspendContactMembership($record_id);
             }
         } elseif ($action === "update") {
             // Revert to BEFORE (includes original status/fields)
@@ -1096,8 +1221,12 @@ class Vendor_update_requests extends Security_Controller
             $payload = $this->_filter_payload_for_table($table, $payload);
 
             if (count($payload)) {
-                $ok = $builder->where("id", $record_id)->update($payload);
+                $ok = $builder->where("id", $record_id)->where("vendor_id", $expectedVendorId)->update($payload);
                 if (!$ok) $throwDbError("REJECT revert update failed");
+            }
+
+            if ($isVendorContact && empty($before["is_active"])) {
+                $this->Vendor_contact_access->suspendContactMembership($record_id);
             }
         } elseif ($action === "delete") {
             // Undo the delete (restore BEFORE if available)
@@ -1111,8 +1240,12 @@ class Vendor_update_requests extends Security_Controller
             $payload = $this->_filter_payload_for_table($table, $payload);
 
             if (count($payload)) {
-                $ok = $builder->where("id", $record_id)->update($payload);
+                $ok = $builder->where("id", $record_id)->where("vendor_id", $expectedVendorId)->update($payload);
                 if (!$ok) $throwDbError("REJECT undo-delete failed");
+            }
+
+            if ($isVendorContact && empty($before["is_active"])) {
+                $this->Vendor_contact_access->suspendContactMembership($record_id);
             }
         } else {
             throw new \RuntimeException("Unsupported action: {$action}");

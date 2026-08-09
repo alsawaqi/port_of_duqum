@@ -11,6 +11,8 @@ use App\Models\Tender_evaluation_attachments_model;
 use App\Models\Tender_evaluations_model;
 use App\Models\Tender_evaluation_scores_model;
 use App\Models\Tenders_model;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 class Tender_technical_inbox extends Security_Controller
 {
@@ -50,12 +52,13 @@ class Tender_technical_inbox extends Security_Controller
     {
         $this->access_only_tender("technical_eval", "view");
 
-        $this->Tenders_model->auto_progress_workflow();
-
         $list = $this->Tender_bids_model->get_closed_tenders_for_technical_user((int) $this->login_user->id);
 
         $result = [];
         foreach ($list as $row) {
+            if (!$this->can_access_tender_id((int) ($row->id ?? 0), "technical_eval")) {
+                continue;
+            }
             $result[] = $this->_make_row($row);
         }
 
@@ -70,8 +73,7 @@ class Tender_technical_inbox extends Security_Controller
         if (!$tender_id) {
             show_404();
         }
-
-        $this->Tenders_model->auto_progress_workflow();
+        $this->require_tender_scope($tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user($tender_id, (int) $this->login_user->id);
         if (!$tender) {
@@ -135,8 +137,7 @@ class Tender_technical_inbox extends Security_Controller
         $tender_id = (int) $this->request->getPost("tender_id");
         $bid_id = (int) $this->request->getPost("bid_id");
         $user_id = (int) $this->login_user->id;
-
-        $this->Tenders_model->auto_progress_workflow();
+        $this->require_tender_scope($tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user($tender_id, $user_id);
         if (!$tender) {
@@ -212,8 +213,7 @@ class Tender_technical_inbox extends Security_Controller
         $tender_id = (int) $this->request->getPost("tender_id");
         $bid_id = (int) $this->request->getPost("bid_id");
         $evaluator_id = (int) $this->login_user->id;
-
-        $this->Tenders_model->auto_progress_workflow();
+        $this->require_tender_scope($tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user($tender_id, $evaluator_id);
         if (!$tender) {
@@ -407,7 +407,15 @@ class Tender_technical_inbox extends Security_Controller
             ]);
         }
 
-        $this->_save_technical_finding_files($evaluation_id, $tender_id, $bid_id);
+        try {
+            $this->_save_technical_finding_files($evaluation_id, $tender_id, $bid_id);
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Technical finding attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
         $this->_record_evaluation_history($db, $tender, $fresh_bid, $evaluation_id, "technical", $late_review, $decision, round($total_score, 3), $evaluation_comment, $now);
 
         if ($db->transStatus() === false) {
@@ -419,7 +427,6 @@ class Tender_technical_inbox extends Security_Controller
         }
 
         $db->transCommit();
-        $this->Tenders_model->auto_progress_workflow();
 
         return $this->response->setJSON([
             "success" => true,
@@ -545,8 +552,7 @@ class Tender_technical_inbox extends Security_Controller
         $user_id = (int) $this->login_user->id;
         $message = trim((string) $this->request->getPost("message"));
         $subject = trim((string) $this->request->getPost("subject"));
-
-        $this->Tenders_model->auto_progress_workflow();
+        $this->require_tender_scope($tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user($tender_id, $user_id);
         if (!$tender) {
@@ -594,7 +600,15 @@ class Tender_technical_inbox extends Security_Controller
             ]);
         }
 
-        $this->_save_clarification_files((int) $saved, $tender_id, $bid ? (int) ($bid->vendor_id ?? 0) : null);
+        try {
+            $this->_save_clarification_files((int) $saved, $tender_id, $bid ? (int) ($bid->vendor_id ?? 0) : null);
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Technical clarification attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
 
         return $this->response->setJSON([
             "success" => true,
@@ -616,13 +630,38 @@ class Tender_technical_inbox extends Security_Controller
             show_404();
         }
 
+        $evaluation = $this->Tender_evaluations_model->get_one((int) ($attachment->tender_evaluation_id ?? 0));
+        if (
+            !$evaluation
+            || (int) ($evaluation->deleted ?? 0) === 1
+            || strtolower((string) ($evaluation->type ?? "")) !== "technical"
+            || (int) ($evaluation->tender_id ?? 0) !== (int) ($attachment->tender_id ?? 0)
+            || (int) ($evaluation->tender_bid_id ?? 0) !== (int) ($attachment->tender_bid_id ?? 0)
+        ) {
+            show_404();
+        }
+        $this->require_tender_scope((int) $attachment->tender_id, "technical_eval");
+
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user((int) $attachment->tender_id, (int) $this->login_user->id);
-        if (!$tender) {
+        $bid = $this->Tender_bids_model->get_tender_bid_for_technical_user(
+            (int) $attachment->tender_id,
+            (int) $attachment->tender_bid_id,
+            (int) $this->login_user->id
+        );
+        if (!$tender || !$bid) {
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $expected_path_prefix = "tender_evaluation_findings/tender_" . (int) $attachment->tender_id
+            . "/evaluation_" . (int) $attachment->tender_evaluation_id . "/";
+        if (!str_starts_with(
+            str_replace(chr(92), "/", ltrim((string) $attachment->path, "/")),
+            $expected_path_prefix
+        )) {
+            show_404();
+        }
+        $full_path = $this->_resolve_tender_upload_path((string)$attachment->path, 'tender_evaluation_findings');
+        if (!$full_path) {
             show_404();
         }
 
@@ -645,14 +684,32 @@ class Tender_technical_inbox extends Security_Controller
         ) {
             show_404();
         }
+        $this->require_tender_scope((int) $attachment->tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user((int) $attachment->tender_id, (int) $this->login_user->id);
-        if (!$tender) {
+        $bid = null;
+        if ((int) ($attachment->tender_bid_id ?? 0) > 0) {
+            $bid = $this->Tender_bids_model->get_tender_bid_for_technical_user(
+                (int) $attachment->tender_id,
+                (int) $attachment->tender_bid_id,
+                (int) $this->login_user->id
+            );
+        }
+        $expected_path_prefix = "tender_clarifications/tender_" . (int) $attachment->tender_id
+            . "/communication_" . (int) ($attachment->communication_id ?? 0) . "/";
+        if (
+            !$tender
+            || ((int) ($attachment->tender_bid_id ?? 0) > 0 && !$bid)
+            || !str_starts_with(
+                str_replace(chr(92), "/", ltrim((string) $attachment->path, "/")),
+                $expected_path_prefix
+            )
+        ) {
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_upload_path((string)$attachment->path, 'tender_clarifications');
+        if (!$full_path) {
             show_404();
         }
 
@@ -713,14 +770,15 @@ class Tender_technical_inbox extends Security_Controller
         if (!$doc || (int) ($doc->deleted ?? 0) === 1) {
             show_404();
         }
+        $this->require_tender_scope((int) $doc->tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user((int) $doc->tender_id, (int) $this->login_user->id);
         if (!$tender) {
             app_redirect("forbidden");
         }
 
-        $full_path = getcwd() . "/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $full_path = $this->_resolve_tender_source_path($doc);
+        if (!$full_path) {
             show_404();
         }
 
@@ -758,18 +816,49 @@ class Tender_technical_inbox extends Security_Controller
         if (!$bid) {
             show_404();
         }
+        $this->require_tender_scope((int) $bid->tender_id, "technical_eval");
 
         $tender = $this->Tender_bids_model->get_closed_tender_for_technical_user((int) $bid->tender_id, (int) $this->login_user->id);
         if (!$tender) {
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $expected_path_prefix = "tender_bids/tender_" . (int) $bid->tender_id
+            . "/vendor_" . (int) $bid->vendor_id . "/";
+        if (!str_starts_with(
+            str_replace(chr(92), "/", ltrim((string) $doc->path, "/")),
+            $expected_path_prefix
+        )) {
+            show_404();
+        }
+        $full_path = $this->_resolve_tender_upload_path((string)$doc->path, 'tender_bids');
+        if (!$full_path) {
             show_404();
         }
 
         return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _resolve_tender_upload_path(string $relative, string $prefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $prefix = trim($prefix, '/') . '/';
+        if (!str_starts_with($relative, $prefix)) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($prefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $root = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        return str_starts_with(strtolower(str_replace('\\', '/', $candidate)), $root) ? $candidate : null;
+    }
+
+    private function _resolve_tender_source_path($doc): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', (string)($doc->path ?? '')), '/');
+        return (new Upload_security())->resolveStoredFile($relative, 'tender_documents');
     }
 
     private function _make_file_preview_data($doc, string $file_url): array
@@ -788,22 +877,22 @@ class Tender_technical_inbox extends Security_Controller
 
     private function _serve_document_file($doc, string $full_path, bool $download)
     {
-        $mime = !empty($doc->mime_type ?? "")
-            ? (string) $doc->mime_type
-            : (function_exists("mime_content_type") ? mime_content_type($full_path) : "application/octet-stream");
-        $name = $doc->original_name ?: basename($full_path);
-        $inline = !$download && (
-            strpos($mime, "image/") === 0
-            || strpos($mime, "video/") === 0
-            || strpos($mime, "audio/") === 0
-            || $mime === "application/pdf"
-            || strpos($mime, "text/") === 0
-        );
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = strtolower((string) ($mime ?: "application/octet-stream"));
+        $name = str_replace(["\r", "\n", '"'], "", (string) ($doc->original_name ?: basename($full_path)));
+        $inline_mimes = [
+            "application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp",
+            "video/mp4", "video/webm", "video/ogg", "audio/mpeg", "audio/ogg", "audio/wav", "text/plain",
+        ];
+        $inline = !$download && in_array($mime, $inline_mimes, true);
 
-        return $this->response
-            ->setHeader("Content-Type", $mime)
-            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
-            ->setBody(file_get_contents($full_path));
+        $response = $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setContentType($mime, "")
+            ->setHeader("X-Content-Type-Options", "nosniff");
+
+        return $inline ? $response->inline() : $response;
     }
 
     private function _save_technical_finding_files(int $evaluation_id, int $tender_id, int $bid_id): void
@@ -821,31 +910,28 @@ class Tender_technical_inbox extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_evaluation_findings/tender_" . $tender_id . "/evaluation_" . $evaluation_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $saved_files = [];
+        $security = new Upload_security();
         foreach ($files as $file) {
             if (!$file || !$file->isValid() || $file->hasMoved()) {
                 continue;
             }
 
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("tef_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
+            $stored = $security->storeUploadedFile(
+                $file,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'tef_'
+            );
+            $new_name = $stored['stored_name'];
 
             $saved_files[] = [
                 "disk" => "local",
                 "path" => "tender_evaluation_findings/tender_" . $tender_id . "/evaluation_" . $evaluation_id . "/" . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
+                "original_name" => $stored['original_name'],
+                "mime_type" => $stored['detected_mime'],
+                "size_bytes" => $stored['size_bytes'],
             ];
         }
 
@@ -867,31 +953,28 @@ class Tender_technical_inbox extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $saved_files = [];
+        $security = new Upload_security();
         foreach ($files as $file) {
             if (!$file || !$file->isValid() || $file->hasMoved()) {
                 continue;
             }
 
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("tc_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
+            $stored = $security->storeUploadedFile(
+                $file,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'tc_'
+            );
+            $new_name = $stored['stored_name'];
 
             $saved_files[] = [
                 "disk" => "local",
                 "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
+                "original_name" => $stored['original_name'],
+                "mime_type" => $stored['detected_mime'],
+                "size_bytes" => $stored['size_bytes'],
             ];
         }
 

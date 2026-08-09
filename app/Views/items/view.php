@@ -3,7 +3,7 @@
 
         <?php
         if ($model_info->files) {
-            $files = @unserialize($model_info->files);
+            $files = @safe_unserialize($model_info->files);
             if (count($files)) {
                 if (!isset($login_user->id) || (isset($login_user->id) && !$login_user->is_admin)) {
                     ?>
@@ -43,7 +43,7 @@
 
         <?php
         if ($model_info->files) {
-            $files = @unserialize($model_info->files);
+            $files = @safe_unserialize($model_info->files);
             if (count($files)) {
                 if (isset($login_user->id) && $login_user->is_admin && get_setting("module_order")) {
                     ?>

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Gate_pass_blocked_visitors_model extends Crud_model
 {
     protected $table = null;
@@ -20,67 +22,21 @@ class Gate_pass_blocked_visitors_model extends Crud_model
             return;
         }
 
-        $blocked = $this->db->prefixTable("gate_pass_blocked_visitors");
-        $logs = $this->db->prefixTable("gate_pass_blocked_visitor_logs");
-
-        if (!$this->_table_exists($blocked)) {
-            $this->db->query(
-                "CREATE TABLE `$blocked` (
-                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `id_number` VARCHAR(120) NOT NULL,
-                    `normalized_id_number` VARCHAR(120) NOT NULL,
-                    `id_type` VARCHAR(80) DEFAULT NULL,
-                    `visitor_name` VARCHAR(255) DEFAULT NULL,
-                    `nationality` VARCHAR(120) DEFAULT NULL,
-                    `visitor_company` VARCHAR(255) DEFAULT NULL,
-                    `source_request_id` BIGINT UNSIGNED DEFAULT NULL,
-                    `source_visitor_id` BIGINT UNSIGNED DEFAULT NULL,
-                    `reason` TEXT DEFAULT NULL,
-                    `status` VARCHAR(20) NOT NULL DEFAULT 'blocked',
-                    `blocked_by` BIGINT UNSIGNED DEFAULT NULL,
-                    `blocked_at` DATETIME DEFAULT NULL,
-                    `unblocked_by` BIGINT UNSIGNED DEFAULT NULL,
-                    `unblocked_at` DATETIME DEFAULT NULL,
-                    `unblock_reason` TEXT DEFAULT NULL,
-                    `last_action_by` BIGINT UNSIGNED DEFAULT NULL,
-                    `last_action_at` DATETIME DEFAULT NULL,
-                    `created_at` DATETIME DEFAULT NULL,
-                    `updated_at` DATETIME DEFAULT NULL,
-                    `deleted` TINYINT(1) NOT NULL DEFAULT 0,
-                    PRIMARY KEY (`id`),
-                    UNIQUE KEY `gp_blocked_visitors_norm_unique` (`normalized_id_number`),
-                    KEY `gp_blocked_visitors_status_idx` (`status`),
-                    KEY `gp_blocked_visitors_last_action_idx` (`last_action_at`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-            );
-        }
-
-        if (!$this->_table_exists($logs)) {
-            $this->db->query(
-                "CREATE TABLE `$logs` (
-                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `blocked_visitor_id` BIGINT UNSIGNED NOT NULL,
-                    `action` VARCHAR(30) NOT NULL,
-                    `reason` TEXT DEFAULT NULL,
-                    `action_by` BIGINT UNSIGNED DEFAULT NULL,
-                    `action_at` DATETIME DEFAULT NULL,
-                    `ip_address` VARCHAR(80) DEFAULT NULL,
-                    `user_agent` VARCHAR(500) DEFAULT NULL,
-                    `deleted` TINYINT(1) NOT NULL DEFAULT 0,
-                    PRIMARY KEY (`id`),
-                    KEY `gp_blocked_visitor_logs_parent_idx` (`blocked_visitor_id`),
-                    KEY `gp_blocked_visitor_logs_action_idx` (`action_at`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-            );
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "gate_pass_blocked_visitors" => [
+                "id", "id_number", "normalized_id_number", "id_type", "visitor_name",
+                "nationality", "visitor_company", "source_request_id", "source_visitor_id",
+                "reason", "status", "blocked_by", "blocked_at", "unblocked_by",
+                "unblocked_at", "unblock_reason", "last_action_by", "last_action_at",
+                "created_at", "updated_at", "deleted",
+            ],
+            "gate_pass_blocked_visitor_logs" => [
+                "id", "blocked_visitor_id", "action", "reason", "action_by",
+                "action_at", "ip_address", "user_agent", "deleted",
+            ],
+        ], "gate-pass blocked visitor controls");
 
         self::$schema_checked = true;
-    }
-
-    private function _table_exists(string $table): bool
-    {
-        $row = $this->db->query("SHOW TABLES LIKE " . $this->db->escape($table))->getRow();
-        return (bool) $row;
     }
 
     public function normalize_id_number(?string $id_number): string

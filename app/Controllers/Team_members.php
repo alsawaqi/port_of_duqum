@@ -3,15 +3,18 @@
 namespace App\Controllers;
 
 use App\Libraries\Excel_import;
+use App\Models\Auth_security_model;
 
 class Team_members extends Security_Controller {
 
     use Excel_import;
 
     private $roles_id_by_title = array();
+    private Auth_security_model $Auth_security_model;
 
     function __construct() {
         parent::__construct();
+        $this->Auth_security_model = new Auth_security_model();
         $this->access_only_team_members();
     }
 
@@ -151,7 +154,8 @@ class Team_members extends Security_Controller {
             "first_name" => "required",
             "last_name" => "required",
             "job_title" => "required",
-            "role" => "required"
+            "role" => "required",
+            "password" => "required"
         ));
 
         $email = $this->request->getPost('email');
@@ -161,8 +165,15 @@ class Team_members extends Security_Controller {
             exit();
         }
 
-        $password = $this->request->getPost("password");
-        $password = clean_data($password);
+        $password = (string) $this->request->getPost("password");
+        $policyErrors = $this->Users_model->password_policy_errors($password);
+        if ($policyErrors) {
+            echo json_encode([
+                "success" => false,
+                "message" => esc(implode(" ", $policyErrors)),
+            ]);
+            return;
+        }
 
         $user_data = array(
             "email" => $email,
@@ -200,6 +211,13 @@ class Team_members extends Security_Controller {
         //add a new team member
         $user_id = $this->Users_model->ci_save($user_data);
         if ($user_id) {
+            $this->Auth_security_model->audit(
+                "password_initialized",
+                "success",
+                (int) $user_id,
+                $this->Auth_security_model->identity_hash((string) $email),
+                ["actor_user_id" => (int) $this->login_user->id]
+            );
             //user added, now add the job info for the user
             $job_data = array(
                 "user_id" => $user_id,
@@ -221,7 +239,8 @@ class Team_members extends Security_Controller {
                 $parser_data["USER_FIRST_NAME"] = $user_data["first_name"];
                 $parser_data["USER_LAST_NAME"] = $user_data["last_name"];
                 $parser_data["USER_LOGIN_EMAIL"] = $user_data["email"];
-                $parser_data["USER_LOGIN_PASSWORD"] = $password;
+                // Email is not an approved channel for reusable passwords.
+                $parser_data["USER_LOGIN_PASSWORD"] = app_lang("password_not_sent_by_email");
                 $parser_data["DASHBOARD_URL"] = base_url();
                 $parser_data["LOGO_URL"] = get_logo_url();
                 $parser_data["RECIPIENTS_EMAIL_ADDRESS"] = $user_data["email"];
@@ -816,7 +835,8 @@ class Team_members extends Security_Controller {
 
         $email = $this->request->getPost('email');
         $role = $this->request->getPost('role');
-        $password = $this->request->getPost("password");
+        $password = (string) $this->request->getPost("password");
+        $currentPassword = (string) $this->request->getPost("current_password");
 
         //Don't update email if user doesn't entered any new email
         if ($email && trim(strtolower($user_info->email)) != trim(strtolower($email)) && ($this->login_user->is_admin || $this->is_own_id($user_id))) {
@@ -860,10 +880,66 @@ class Team_members extends Security_Controller {
         //user can update own password 
         //admin can update any user's execpt any other admin user
 
-        if ($password) {
-            if ($this->is_own_id($user_id) || ($this->login_user->is_admin && !$user_info->is_admin)) {
-                $account_data['password'] = password_hash($password, PASSWORD_DEFAULT);
+        $passwordChanged = false;
+        if ($password
+            && ($this->is_own_id($user_id)
+                || ($this->login_user->is_admin && !$user_info->is_admin))) {
+            $this->validate_submitted_data([
+                "retype_password" => "required|matches[password]",
+            ]);
+            $policyErrors = $this->Users_model->password_policy_errors($password);
+            if ($policyErrors) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => esc(implode(" ", $policyErrors)),
+                ]);
+                return;
             }
+
+            if ($this->is_own_id($user_id)) {
+                $ipHash = $this->Auth_security_model->ip_hash(
+                    (string) $this->request->getIPAddress()
+                );
+                $throttler = service("throttler");
+                if (!$throttler->check(
+                    "staff_password_change_{$user_id}_{$ipHash}",
+                    5,
+                    300
+                )) {
+                    $this->response->setStatusCode(429);
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "Too many password attempts. Please wait and try again.",
+                    ]);
+                    return;
+                }
+                if ($currentPassword === ""
+                    || !$this->Users_model->verify_user_password($user_id, $currentPassword)) {
+                    $this->Auth_security_model->audit(
+                        "password_change_failed",
+                        "denied",
+                        (int) $user_id,
+                        "",
+                        ["reason" => "current_password_invalid"]
+                    );
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "The current password is not correct.",
+                    ]);
+                    return;
+                }
+                if (hash_equals($currentPassword, $password)) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "The new password must be different from the current password.",
+                    ]);
+                    return;
+                }
+                $throttler->remove("staff_password_change_{$user_id}_{$ipHash}");
+            }
+
+            $account_data['password'] = password_hash($password, PASSWORD_DEFAULT);
+            $passwordChanged = true;
         }
 
         if (!count($account_data)) {
@@ -872,6 +948,18 @@ class Team_members extends Security_Controller {
         }
 
         if ($this->Users_model->ci_save($account_data, $user_id)) {
+            if ($passwordChanged) {
+                if ($this->is_own_id($user_id)) {
+                    $this->session->regenerate(true);
+                }
+                $this->Auth_security_model->audit(
+                    "password_changed",
+                    "success",
+                    (int) $user_id,
+                    $this->Auth_security_model->identity_hash((string) $user_info->email),
+                    ["actor_user_id" => (int) $this->login_user->id]
+                );
+            }
             echo json_encode(array("success" => true, 'message' => app_lang('record_updated')));
         } else {
             echo json_encode(array("success" => false, 'message' => app_lang('error_occurred')));
@@ -892,7 +980,7 @@ class Team_members extends Security_Controller {
             $profile_image = serialize(move_temp_file("avatar.png", get_setting("profile_image_path"), "", $profile_image));
 
             //delete old file
-            delete_app_files(get_setting("profile_image_path"), array(@unserialize($user_info->image)));
+            delete_app_files(get_setting("profile_image_path"), array(@safe_unserialize($user_info->image)));
 
             $image_data = array("image" => $profile_image);
 
@@ -915,7 +1003,7 @@ class Team_members extends Security_Controller {
 
                 //delete old file
                 if ($user_info->image) {
-                    delete_app_files(get_setting("profile_image_path"), array(@unserialize($user_info->image)));
+                    delete_app_files(get_setting("profile_image_path"), array(@safe_unserialize($user_info->image)));
                 }
 
                 $image_data = array("image" => $profile_image);

@@ -332,10 +332,13 @@ $(document).ready(function () {
       var allowSubmit = true;
       $.ajax({
         url: "<?php echo get_uri('gate_pass_portal/check_blocked_visitor'); ?>",
-        type: "GET",
+        type: "POST",
         dataType: "json",
         async: false,
-        data: { id_number: idNumber },
+        data: {
+          id_number: idNumber,
+          gate_pass_request_id: $("input[name='gate_pass_request_id']").val()
+        },
         success: function (result) {
           if (result && result.blocked) {
             allowSubmit = window.confirm(result.message || <?php echo json_encode(app_lang("gate_pass_blocked_visitor_warning")); ?>);
@@ -348,7 +351,8 @@ $(document).ready(function () {
           }
         },
         error: function () {
-          allowSubmit = true;
+          allowSubmit = false;
+          appAlert.error(<?php echo json_encode(app_lang("error_occurred")); ?>);
         }
       });
 

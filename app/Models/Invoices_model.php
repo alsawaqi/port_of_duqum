@@ -532,12 +532,10 @@ class Invoices_model extends Crud_model {
 
     //save initial number of invoice
     function save_initial_number_of_invoice($value) {
-        $invoices_table = $this->db->prefixTable('invoices');
         $value = $this->_get_clean_value($value);
 
-        $sql = "ALTER TABLE $invoices_table AUTO_INCREMENT=$value;";
-
-        return $this->db->query($sql);
+        // Invoice references use the persisted setting; primary-key allocation remains database-managed.
+        return is_numeric($value) && (int) $value > 0;
     }
 
     function get_invoice_total_meta($invoice_id) {

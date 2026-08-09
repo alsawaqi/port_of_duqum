@@ -4,12 +4,14 @@
  |--------------------------------------------------------------------------
  | ERROR DISPLAY
  |--------------------------------------------------------------------------
- | In development, we want to show as many errors as possible to help
- | make sure they don't make it to production. And save us hours of
- | painful debugging.
+ | Keep all errors reportable and available to the configured logger, but do
+ | not render diagnostic details into HTTP responses. This keeps local logs
+ | useful without exposing paths, queries, or secrets through the browser.
  */
 error_reporting(-1);
-ini_set('display_errors', '1');
+ini_set('log_errors', '1');
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
 
 /*
  |--------------------------------------------------------------------------
@@ -19,7 +21,7 @@ ini_set('display_errors', '1');
  | backtraces along with the other error information. If you would
  | prefer to not see this, set this value to false.
  */
-defined('SHOW_DEBUG_BACKTRACE') || define('SHOW_DEBUG_BACKTRACE', true);
+defined('SHOW_DEBUG_BACKTRACE') || define('SHOW_DEBUG_BACKTRACE', false);
 
 /*
  |--------------------------------------------------------------------------

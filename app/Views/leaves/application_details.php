@@ -58,7 +58,7 @@
                     </tr>
                 <?php } ?>
                 <?php
-                $files = @unserialize($leave_info->files);
+                $files = @safe_unserialize($leave_info->files);
                 if ($files && is_array($files) && count($files)) {
                     ?>
                     <tr>

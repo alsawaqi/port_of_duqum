@@ -930,7 +930,7 @@
 
                         <div class="col-lg-3">
                             <div class="form-group">
-                                <label for="password"><?php echo app_lang('password'); ?></label>
+                                <label for="password"><?php echo app_lang('password'); ?> <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <?php
                                     echo form_password([
@@ -939,7 +939,9 @@
                                         "value" => "",
                                         "class" => "form-control",
                                         "placeholder" => app_lang('password'),
-                                        "autocomplete" => "new-password"
+                                        "autocomplete" => "current-password",
+                                        "data-rule-required" => true,
+                                        "data-msg-required" => app_lang('field_required')
                                     ]);
                                     ?>
                                     <button class="btn btn-outline-secondary gv-password-toggle" type="button" id="toggle-password" aria-label="<?php echo app_lang("toggle_password_visibility"); ?>">
@@ -1056,6 +1058,7 @@
             </div>
 
             <div class="gv-footer">
+                <?php echo view("signin/re_captcha"); ?>
                 <p class="note mb0">
                     <?php echo app_lang("guest_vendor_submit_note"); ?>
                 </p>
@@ -1188,7 +1191,7 @@
             $("#vendor-email-error").addClass("d-none").text("");
             $("#user-email-error").addClass("d-none").text("");
 
-            $("#email, #user_email, #cr_number, #phone_country_code, #phone_local, #password_confirm").removeClass("is-invalid gv-shake");
+            $("#email, #user_email, #cr_number, #phone_country_code, #phone_local, #password, #password_confirm").removeClass("is-invalid gv-shake");
         }
 
         function shake($el) {
@@ -1298,9 +1301,10 @@
                     if (res.errors.cr_number) showError("cr_number", res.errors.cr_number);
                     if (res.errors.phone_country_code) showError("phone_country_code", res.errors.phone_country_code);
                     if (res.errors.phone_local) showError("phone_local", res.errors.phone_local);
+                    if (res.errors.password) showError("password", res.errors.password);
                     if (res.errors.password_confirm) showError("password_confirm", res.errors.password_confirm);
 
-                    if (res.errors.email || res.errors.user_email || res.errors.cr_number || res.errors.phone_country_code || res.errors.phone_local || res.errors.password_confirm) {
+                    if (res.errors.email || res.errors.user_email || res.errors.cr_number || res.errors.phone_country_code || res.errors.phone_local || res.errors.password || res.errors.password_confirm) {
                         return false;
                     }
                 }

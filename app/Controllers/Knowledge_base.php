@@ -22,7 +22,7 @@ class Knowledge_base extends App_Controller {
 
             //initialize login users access permissions
             if ($this->login_user->permissions) {
-                $permissions = unserialize($this->login_user->permissions);
+                $permissions = safe_unserialize($this->login_user->permissions);
                 $this->login_user->permissions = is_array($permissions) ? $permissions : array();
             } else {
                 $this->login_user->permissions = array();

@@ -251,9 +251,9 @@ class Proposals extends Security_Controller {
         if ($this->Proposals_model->delete($id)) {
             //delete signature file
             $proposal_info = $this->Proposals_model->get_one($id);
-            $signer_info = @unserialize($proposal_info->meta_data);
+            $signer_info = @safe_unserialize($proposal_info->meta_data);
             if ($signer_info && is_array($signer_info) && get_array_value($signer_info, "signature")) {
-                $signature_file = unserialize(get_array_value($signer_info, "signature"));
+                $signature_file = safe_unserialize(get_array_value($signer_info, "signature"));
                 delete_app_files(get_setting("timeline_file_path"), $signature_file);
             }
 
@@ -1031,7 +1031,7 @@ class Proposals extends Security_Controller {
 
         $all_logs = array();
         foreach ($tracking_info as $tracking_data) {
-            $logs = unserialize($tracking_data->logs);
+            $logs = safe_unserialize($tracking_data->logs);
 
             if (is_array($logs)) {
                 foreach ($logs as $log) {
@@ -1173,7 +1173,7 @@ class Proposals extends Security_Controller {
 
             //delete the files
             $file_path = get_setting("timeline_file_path");
-            $files = unserialize($comment_info->files);
+            $files = safe_unserialize($comment_info->files);
 
             foreach ($files as $file) {
                 $source_path = $file_path . get_array_value($file, "file_name");

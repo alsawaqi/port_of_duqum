@@ -59,6 +59,7 @@ class Gate_pass_commercial_inbox extends Security_Controller
      */
     public function export_list_csv()
     {
+        helper('csv_security');
         $options = [
             "stage" => "commercial",
             "statuses" => ["department_approved"],
@@ -84,13 +85,13 @@ class Gate_pass_commercial_inbox extends Security_Controller
         $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
 
         $fh = fopen("php://temp", "r+");
-        fputcsv($fh, ["reference", "created_at", "company", "department", "requester", "phone", "visit_from", "visit_to", "currency", "fee_amount", "fee_waived", "status", "stage"]);
+        fputcsv($fh, csv_safe_row(["reference", "created_at", "company", "department", "requester", "phone", "visit_from", "visit_to", "currency", "fee_amount", "fee_waived", "status", "stage"]));
         foreach ($list as $r) {
             $requester_name = trim(($r->requester_first_name ?? "") . " " . ($r->requester_last_name ?? ""));
             if ($requester_name === "") {
                 $requester_name = $r->requester_name ?? "";
             }
-            fputcsv($fh, [
+            fputcsv($fh, csv_safe_row([
                 $r->reference ?? "",
                 gate_pass_request_created_at_pick($r) ?? "",
                 $r->company_name ?? "",
@@ -104,7 +105,7 @@ class Gate_pass_commercial_inbox extends Security_Controller
                 !empty($r->fee_is_waived) ? "1" : "0",
                 $r->status ?? "",
                 $r->stage ?? "",
-            ]);
+            ]));
         }
         rewind($fh);
         $body = stream_get_contents($fh);
@@ -193,7 +194,7 @@ class Gate_pass_commercial_inbox extends Security_Controller
         if (!$request || $request->deleted) {
             app_redirect("forbidden");
         }
-        if (!$this->_can_act_on_request($request)) {
+        if (!$this->_can_view_commercial_request($request)) {
             app_redirect("forbidden");
         }
         if ($request->stage !== "commercial" || $request->status !== "department_approved") {
@@ -233,17 +234,18 @@ class Gate_pass_commercial_inbox extends Security_Controller
             show_404();
         }
 
-        $relPath = $visitor->{$field};
-        $relPath = preg_replace("#\.\.+#", "", (string)$relPath);
-        $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
-            show_404();
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
+        if (!$request || !$this->_can_view_commercial_request($request)) {
+            app_redirect("forbidden");
         }
 
-        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
-        if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
-            app_redirect("forbidden");
+        $relPath = (string)$visitor->{$field};
+        $fullPath = $this->_resolve_commercial_upload_path(
+            $relPath,
+            "gate_pass_visitors/request_" . (int)$visitor->gate_pass_request_id
+        );
+        if (!$fullPath) {
+            show_404();
         }
 
         $mime = function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream";
@@ -253,6 +255,8 @@ class Gate_pass_commercial_inbox extends Security_Controller
 
         return $this->response
             ->setHeader("Content-Type", $mime)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($fullPath));
     }
@@ -272,16 +276,17 @@ class Gate_pass_commercial_inbox extends Security_Controller
         if (!$veh || $relPath === "") {
             show_404();
         }
-        $relPath = preg_replace("#\.\.+#", "", (string)$relPath);
-        $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
-            show_404();
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $veh->gate_pass_request_id])->getRow();
+        if (!$request || !$this->_can_view_commercial_request($request)) {
+            app_redirect("forbidden");
         }
 
-        $request = $this->Gate_pass_requests_model->get_details(["id" => $veh->gate_pass_request_id])->getRow();
-        if (!$request || (int)$request->deleted === 1 || !$this->_can_act_on_request($request)) {
-            app_redirect("forbidden");
+        $fullPath = $this->_resolve_commercial_upload_path(
+            (string)$relPath,
+            "gate_pass_vehicles/request_" . (int)$veh->gate_pass_request_id
+        );
+        if (!$fullPath) {
+            show_404();
         }
 
         $mime = function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream";
@@ -291,6 +296,8 @@ class Gate_pass_commercial_inbox extends Security_Controller
 
         return $this->response
             ->setHeader("Content-Type", $mime)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($fullPath));
     }
@@ -304,7 +311,7 @@ class Gate_pass_commercial_inbox extends Security_Controller
         if (!$request || $request->deleted) {
             return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
         }
-        if (!$this->_can_act_on_request($request)) {
+        if (!$this->_can_view_commercial_request($request)) {
             app_redirect("forbidden");
         }
 
@@ -322,7 +329,7 @@ class Gate_pass_commercial_inbox extends Security_Controller
             return $this->response->setJSON(["data" => []]);
         }
         $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
-        if (!$request || $request->deleted || !$this->_can_act_on_request($request)) {
+        if (!$request || !$this->_can_view_commercial_request($request)) {
             return $this->response->setJSON(["data" => []]);
         }
         $list_data = $this->Gate_pass_request_visitors_model->get_details(["gate_pass_request_id" => $request_id])->getResult();
@@ -340,7 +347,7 @@ class Gate_pass_commercial_inbox extends Security_Controller
             return $this->response->setJSON(["data" => []]);
         }
         $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
-        if (!$request || $request->deleted || !$this->_can_act_on_request($request)) {
+        if (!$request || !$this->_can_view_commercial_request($request)) {
             return $this->response->setJSON(["data" => []]);
         }
         $list_data = $this->Gate_pass_request_vehicles_model->get_details(["gate_pass_request_id" => $request_id])->getResult();
@@ -868,6 +875,32 @@ class Gate_pass_commercial_inbox extends Security_Controller
             }
         }
         return false;
+    }
+
+    private function _can_view_commercial_request($request): bool
+    {
+        return $request
+            && (int)($request->deleted ?? 0) !== 1
+            && (string)($request->stage ?? "") === "commercial"
+            && (string)($request->status ?? "") === "department_approved"
+            && $this->_can_act_on_request($request);
+    }
+
+    private function _resolve_commercial_upload_path(string $relative, string $allowedPrefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $allowedPrefix = trim(str_replace('\\', '/', $allowedPrefix), '/') . '/';
+        if (!str_starts_with($relative, $allowedPrefix)) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($allowedPrefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $rootCheck = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+        return str_starts_with($candidateCheck, $rootCheck) ? $candidate : null;
     }
 
 }

@@ -80,7 +80,7 @@
                                 </p>
 
                                 <?php
-                                $files = unserialize($post->files);
+                                $files = safe_unserialize($post->files);
                                 $total_files = count($files);
                                 echo view("includes/timeline_preview", array("files" => $files));
                                 ?>

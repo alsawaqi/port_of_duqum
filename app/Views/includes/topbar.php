@@ -1,4 +1,20 @@
-<?php $user = $login_user->id; ?>
+<?php
+$user = $login_user->id;
+$is_vendor_only_identity = !empty($login_user->is_vendor_only_identity);
+$is_gate_pass_only_identity = !empty($login_user->is_gate_pass_only_identity);
+$is_ptw_applicant_only_identity = !empty($login_user->is_ptw_applicant_only_identity);
+$is_external_portal_only_identity = $is_vendor_only_identity
+    || $is_gate_pass_only_identity
+    || $is_ptw_applicant_only_identity;
+$has_active_vendor_portal_access = !empty($login_user->has_active_vendor_portal_access);
+$has_active_gate_pass_portal_access = !empty($login_user->has_active_gate_pass_portal_access);
+$has_active_ptw_portal_access = !empty($login_user->has_active_ptw_portal_access);
+$external_portal_home = $has_active_vendor_portal_access
+    ? "vendor_portal"
+    : ($has_active_gate_pass_portal_access
+        ? "gate_pass_portal"
+        : ($has_active_ptw_portal_access ? "ptw_portal" : "portal_account/change_password"));
+?>
 
 <nav class="navbar navbar-expand fixed-top navbar-light navbar-custom" role="navigation" id="default-navbar">
     <div class="container-fluid">
@@ -13,9 +29,9 @@
                 <li class="nav-item d-block d-sm-none">
                     <?php
                     $user = $login_user->id;
-                    $dashboard_link = get_uri("dashboard");
+                    $dashboard_link = get_uri($is_external_portal_only_identity ? $external_portal_home : "dashboard");
                     $user_dashboard = get_setting("user_" . $user . "_dashboard");
-                    if ($user_dashboard) {
+                    if ($user_dashboard && !$is_external_portal_only_identity) {
                         $dashboard_link = get_uri("dashboard/view/" . $user_dashboard);
                     }
                     ?>
@@ -69,7 +85,7 @@
                         </button>
                     </li>
 
-                    <?php if (!in_array("language", $hidden_topbar_menus) && (($login_user->user_type == "staff" && !get_setting("disable_language_selector_for_team_members")) || ($login_user->user_type == "client" && !get_setting("disable_language_selector_for_clients")))) { ?>
+                    <?php if (!$is_external_portal_only_identity && !in_array("language", $hidden_topbar_menus) && (($login_user->user_type == "staff" && !get_setting("disable_language_selector_for_team_members")) || ($login_user->user_type == "client" && !get_setting("disable_language_selector_for_clients")))) { ?>
 
                         <li id="topbar-language-dropdown" class="nav-item dropdown pod-language-item">
                             <?php
@@ -210,7 +226,22 @@
                                 <span class="pod-user-menu-name"><?php echo esc($login_user->first_name . " " . $login_user->last_name); ?></span>
                                 <span class="pod-user-menu-email"><?php echo esc($login_user->email); ?></span>
                             </li>
-                            <?php if ($login_user->user_type == "client") { ?>
+                            <?php if ($is_external_portal_only_identity) { ?>
+                                <?php if ($has_active_vendor_portal_access) { ?>
+                                    <li><a href="<?php echo get_uri("vendor_portal"); ?>" class="dropdown-item"><i data-feather="briefcase" class="icon-16 me-2"></i>Vendor Portal</a></li>
+                                <?php } ?>
+                                <?php if ($has_active_gate_pass_portal_access) { ?>
+                                    <li><a href="<?php echo get_uri("gate_pass_portal"); ?>" class="dropdown-item"><i data-feather="key" class="icon-16 me-2"></i><?php echo app_lang("gate_pass_portal"); ?></a></li>
+                                <?php } ?>
+                                <?php if ($has_active_ptw_portal_access) { ?>
+                                    <li><a href="<?php echo get_uri("ptw_portal"); ?>" class="dropdown-item"><i data-feather="shield" class="icon-16 me-2"></i><?php echo app_lang("ptw_portal"); ?></a></li>
+                                <?php } ?>
+                                <?php if ($has_active_vendor_portal_access) { ?>
+                                    <li><a href="<?php echo get_uri("vendor_portal/change_password"); ?>" class="dropdown-item"><i data-feather="key" class="icon-16 me-2"></i><?php echo app_lang("change_password"); ?></a></li>
+                                <?php } else { ?>
+                                    <li><a href="<?php echo get_uri("portal_account/change_password"); ?>" class="dropdown-item"><i data-feather="key" class="icon-16 me-2"></i><?php echo app_lang("change_password"); ?></a></li>
+                                <?php } ?>
+                            <?php } else if ($login_user->user_type == "client") { ?>
                                 <div class="company-switch-option d-none"><?php show_clients_of_this_client_contact($login_user, true); ?></div>
                                 <li><?php echo get_client_contact_profile_link($login_user->id . '/general', "<i data-feather='user' class='icon-16 me-2'></i>" . app_lang('my_profile'), array("class" => "dropdown-item")); ?></li>
                                 <li><?php echo get_client_contact_profile_link($login_user->id . '/account', "<i data-feather='key' class='icon-16 me-2'></i>" . app_lang('change_password'), array("class" => "dropdown-item")); ?></li>

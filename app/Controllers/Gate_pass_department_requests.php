@@ -59,6 +59,7 @@ class Gate_pass_department_requests extends Security_Controller
      */
     public function export_list_csv()
     {
+        helper('csv_security');
         $options = [
             "department_ids" => $this->my_department_ids,
             "stage" => "department",
@@ -72,13 +73,13 @@ class Gate_pass_department_requests extends Security_Controller
         $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
 
         $fh = fopen("php://temp", "r+");
-        fputcsv($fh, ["reference", "created_at", "company", "department", "requester", "phone", "purpose", "status", "stage", "visit_from", "visit_to", "fee_amount", "currency"]);
+        fputcsv($fh, csv_safe_row(["reference", "created_at", "company", "department", "requester", "phone", "purpose", "status", "stage", "visit_from", "visit_to", "fee_amount", "currency"]));
         foreach ($list as $r) {
             $requester_name = trim(($r->requester_first_name ?? "") . " " . ($r->requester_last_name ?? ""));
             if ($requester_name === "") {
                 $requester_name = $r->requester_name ?? "";
             }
-            fputcsv($fh, [
+            fputcsv($fh, csv_safe_row([
                 $r->reference ?? "",
                 gate_pass_request_created_at_pick($r) ?? "",
                 $r->company_name ?? "",
@@ -92,7 +93,7 @@ class Gate_pass_department_requests extends Security_Controller
                 $r->visit_to ?? "",
                 (string)($r->fee_amount ?? ""),
                 (string)($r->currency ?? ""),
-            ]);
+            ]));
         }
         rewind($fh);
         $body = stream_get_contents($fh);
@@ -189,17 +190,7 @@ class Gate_pass_department_requests extends Security_Controller
             app_redirect("forbidden");
         }
 
-        // Must match department + be in department stage
-        if (!$this->login_user->is_admin) {
-            if (!in_array((int)$request->department_id, $this->my_department_ids, true)) {
-                app_redirect("forbidden");
-            }
-        }
-
-        if ($request->stage !== "department") {
-            app_redirect("forbidden");
-        }
-        if (($request->status ?? "") === "returned") {
+        if (!$this->_can_view_department_request($request)) {
             app_redirect("forbidden");
         }
 
@@ -225,10 +216,7 @@ class Gate_pass_department_requests extends Security_Controller
         if (!$request || $request->deleted) {
             return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
         }
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
-            app_redirect("forbidden");
-        }
-        if ($request->stage !== "department") {
+        if (!$this->_can_view_department_request($request)) {
             app_redirect("forbidden");
         }
         if ($request->status !== "submitted") {
@@ -251,7 +239,7 @@ class Gate_pass_department_requests extends Security_Controller
         if (!$request || $request->deleted) {
             return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
         }
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
+        if (!$this->_can_view_department_request($request)) {
             app_redirect("forbidden");
         }
 
@@ -285,7 +273,7 @@ class Gate_pass_department_requests extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
         }
 
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
+        if (!$this->_can_view_department_request($request)) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
 
@@ -382,7 +370,7 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
         if (!$request || $request->deleted) {
             return $this->response->setJSON(["data" => []]);
         }
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
+        if (!$this->_can_view_department_request($request)) {
             return $this->response->setJSON(["data" => []]);
         }
 
@@ -411,7 +399,7 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
         if (!$request || $request->deleted) {
             return $this->response->setJSON(["data" => []]);
         }
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
+        if (!$this->_can_view_department_request($request)) {
             return $this->response->setJSON(["data" => []]);
         }
 
@@ -443,7 +431,7 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
         if (!$request || $request->deleted) {
             return $this->template->view("errors/html/error_general", ["heading" => "Not found", "message" => app_lang("record_not_found")]);
         }
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
+        if (!$this->_can_view_department_request($request)) {
             app_redirect("forbidden");
         }
 
@@ -469,20 +457,18 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
             show_404();
         }
 
-        $relPath = $visitor->{$field};
-        $relPath = preg_replace("#\.\.+#", "", $relPath);
-        $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
-            show_404();
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
+        if (!$request || !$this->_can_view_department_request($request)) {
+            app_redirect("forbidden");
         }
 
-        $request = $this->Gate_pass_requests_model->get_details(["id" => $visitor->gate_pass_request_id])->getRow();
-        if (!$request || $request->deleted) {
+        $relPath = (string)$visitor->{$field};
+        $fullPath = $this->_resolve_department_upload_path(
+            $relPath,
+            "gate_pass_visitors/request_" . (int)$visitor->gate_pass_request_id
+        );
+        if (!$fullPath) {
             show_404();
-        }
-        if (!$this->login_user->is_admin && !in_array((int)$request->department_id, $this->my_department_ids, true)) {
-            app_redirect("forbidden");
         }
 
         $mime = function_exists("mime_content_type") ? mime_content_type($fullPath) : "application/octet-stream";
@@ -492,8 +478,39 @@ if ($decision === "approved" && $fee_amount > 0 && $waive_flag === 1 && $waive_r
 
         return $this->response
             ->setHeader("Content-Type", $mime)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($fullPath));
+    }
+
+    private function _can_view_department_request($request): bool
+    {
+        if (!$request || (int)($request->deleted ?? 0) === 1) {
+            return false;
+        }
+        if ((string)($request->stage ?? "") !== "department" || (string)($request->status ?? "") === "returned") {
+            return false;
+        }
+        return !empty($this->login_user->is_admin)
+            || in_array((int)($request->department_id ?? 0), $this->my_department_ids, true);
+    }
+
+    private function _resolve_department_upload_path(string $relative, string $allowedPrefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $allowedPrefix = trim(str_replace('\\', '/', $allowedPrefix), '/') . '/';
+        if (!str_starts_with($relative, $allowedPrefix)) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($allowedPrefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $rootCheck = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+        return str_starts_with($candidateCheck, $rootCheck) ? $candidate : null;
     }
 
     private function _make_visitor_row($row)

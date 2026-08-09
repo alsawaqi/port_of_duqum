@@ -86,7 +86,7 @@
             <?php
             if ($login_user->user_type === "client") {
                 if ($contract_info->files) {
-                    $files = unserialize($contract_info->files);
+                    $files = safe_unserialize($contract_info->files);
                     if (count($files)) {
                         foreach ($files as $key => $value) {
                             $file_name = get_array_value($value, "file_name");

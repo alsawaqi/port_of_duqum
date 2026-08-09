@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Tender_evaluation_attachments_model extends Crud_model
 {
     protected $table = null;
@@ -20,27 +22,12 @@ class Tender_evaluation_attachments_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("tender_evaluation_attachments");
-
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS `$table` (
-                `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                `tender_evaluation_id` BIGINT(20) UNSIGNED NOT NULL,
-                `tender_id` BIGINT(20) UNSIGNED NOT NULL,
-                `tender_bid_id` BIGINT(20) UNSIGNED NOT NULL,
-                `disk` VARCHAR(50) NOT NULL DEFAULT 'local',
-                `path` VARCHAR(500) NOT NULL,
-                `original_name` VARCHAR(255) DEFAULT NULL,
-                `mime_type` VARCHAR(255) DEFAULT NULL,
-                `size_bytes` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `uploaded_by` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `created_at` DATETIME DEFAULT NULL,
-                `deleted` INT(11) NOT NULL DEFAULT 0,
-                PRIMARY KEY (`id`),
-                KEY `idx_tender_eval_att_eval` (`tender_evaluation_id`, `deleted`),
-                KEY `idx_tender_eval_att_tender` (`tender_id`, `tender_bid_id`, `deleted`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_evaluation_attachments" => [
+                "id", "tender_evaluation_id", "tender_id", "tender_bid_id", "disk", "path",
+                "original_name", "mime_type", "size_bytes", "uploaded_by", "created_at", "deleted",
+            ],
+        ], "tender evaluation attachments");
 
         self::$evaluation_attachment_schema_checked = true;
     }

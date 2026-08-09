@@ -1,6 +1,6 @@
 <?php
 if (isset($files) && $files) {
-    $files = unserialize($files);
+    $files = safe_unserialize($files);
     if (count($files)) {
         $timeline_file_path = get_setting("timeline_file_path");
         echo "<div id='sortable-file-list-container'>";

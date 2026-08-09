@@ -177,7 +177,7 @@ class Contracts extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "contract");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $contract_data = array(
             "client_id" => $client_id,
@@ -316,14 +316,14 @@ class Contracts extends Security_Controller {
 
         if ($this->Contracts_model->delete($id)) {
             //delete signature file
-            $signer_info = @unserialize($contract_info->meta_data);
+            $signer_info = @safe_unserialize($contract_info->meta_data);
             if ($signer_info && is_array($signer_info)) {
                 if (get_array_value($signer_info, "signature")) {
-                    $signature_file = unserialize(get_array_value($signer_info, "signature"));
+                    $signature_file = safe_unserialize(get_array_value($signer_info, "signature"));
                     delete_app_files(get_setting("timeline_file_path"), $signature_file);
                 }
                 if (get_array_value($signer_info, "staff_signature")) {
-                    $signature_file = unserialize(get_array_value($signer_info, "staff_signature"));
+                    $signature_file = safe_unserialize(get_array_value($signer_info, "staff_signature"));
                     delete_app_files(get_setting("timeline_file_path"), $signature_file);
                 }
             }
@@ -331,7 +331,7 @@ class Contracts extends Security_Controller {
             //delete the files
             $file_path = get_setting("timeline_file_path");
             if ($contract_info->files) {
-                $files = unserialize($contract_info->files);
+                $files = safe_unserialize($contract_info->files);
 
                 foreach ($files as $file) {
                     delete_app_files($file_path, array($file));

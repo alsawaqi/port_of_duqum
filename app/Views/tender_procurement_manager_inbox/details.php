@@ -256,20 +256,12 @@ $document_actions = function ($doc) {
 
             <div class="card gp-pro-card mb15">
                 <div class="card-header">
-                    <h4 class="mb0">RFQ Details</h4>
+                    <h4 class="mb0">Tender Details</h4>
                 </div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4 mb15">
-                            <div class="text-off">RFQ No.</div>
-                            <strong><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></strong>
-                        </div>
-                        <div class="col-md-4 mb15">
-                            <div class="text-off">RFQ Date</div>
-                            <strong><?php echo $date_only_value($rfq_detail->rfq_date ?? null); ?></strong>
-                        </div>
-                        <div class="col-md-4 mb15">
-                            <div class="text-off">PR No.</div>
+                            <div class="text-off">PR No (Optional)</div>
                             <strong><?php echo esc($rfq_detail->pr_no ?? "-"); ?></strong>
                         </div>
                         <div class="col-md-4 mb15">
@@ -281,7 +273,7 @@ $document_actions = function ($doc) {
                             <strong><?php echo esc($rfq_detail->incoterm ?? "-"); ?></strong>
                         </div>
                         <div class="col-md-4 mb15">
-                            <div class="text-off">Material Required On</div>
+                            <div class="text-off">Estimated Material/Service Required On</div>
                             <strong><?php echo $date_only_value($rfq_detail->material_required_on ?? null); ?></strong>
                         </div>
                     </div>
@@ -303,6 +295,7 @@ $document_actions = function ($doc) {
                         </div>
                     <?php } ?>
 
+                    <h5 class="mb10">Schedule Rate</h5>
                     <div class="table-responsive gp-pro-table-shell">
                         <table class="table table-bordered table-striped mb0">
                             <thead>
@@ -312,24 +305,43 @@ $document_actions = function ($doc) {
                                     <th>UOM</th>
                                     <th>Qty</th>
                                     <th>Unit Price</th>
-                                    <th>Brand</th>
+                                    <th>Part No (Optional)</th>
+                                    <th>Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (!$rfq_items) { ?>
-                                    <tr><td colspan="6" class="text-center text-off p20">No RFQ items.</td></tr>
+                                    <tr><td colspan="7" class="text-center text-off p20">No tender items.</td></tr>
                                 <?php } ?>
+                                <?php $schedule_rate_total = 0.0; $has_schedule_rate_total = false; ?>
                                 <?php foreach ($rfq_items as $item) { ?>
+                                    <?php
+                                    $line_total = null;
+                                    if (is_numeric($item->qty ?? null) && is_numeric($item->unit_price ?? null)) {
+                                        $line_total = round((float) $item->qty * (float) $item->unit_price, 3);
+                                        $schedule_rate_total += $line_total;
+                                        $has_schedule_rate_total = true;
+                                    }
+                                    ?>
                                     <tr>
                                         <td><?php echo esc($item->sr_no ?? "-"); ?></td>
                                         <td><?php echo nl2br(esc($item->description ?? "-")); ?></td>
                                         <td><?php echo esc($item->uom ?? "-"); ?></td>
                                         <td><?php echo $decimal_value($item->qty ?? null); ?></td>
                                         <td><?php echo $decimal_value($item->unit_price ?? null); ?></td>
-                                        <td><?php echo esc($item->brand ?? "-"); ?></td>
+                                        <td><?php echo esc($item->part_no ?? ($item->brand ?? "-")); ?></td>
+                                        <td><?php echo $line_total !== null ? number_format($line_total, 3) : "-"; ?></td>
                                     </tr>
                                 <?php } ?>
                             </tbody>
+                            <?php if ($rfq_items) { ?>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="6" class="text-end">Schedule Rate Total</th>
+                                        <th><?php echo $has_schedule_rate_total ? number_format($schedule_rate_total, 3) : "-"; ?></th>
+                                    </tr>
+                                </tfoot>
+                            <?php } ?>
                         </table>
                     </div>
                 </div>

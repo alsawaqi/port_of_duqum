@@ -208,7 +208,7 @@
                                     <?php
                                     //show existing conversion rates
                                     $conversion_rate = get_setting("conversion_rate");
-                                    $conversion_rate = @unserialize($conversion_rate);
+                                    $conversion_rate = @safe_unserialize($conversion_rate);
                                     if ($conversion_rate && is_array($conversion_rate) && count($conversion_rate)) {
                                         $decimal_separator = get_setting("decimal_separator");
                                         foreach ($conversion_rate as $currency => $rate) {

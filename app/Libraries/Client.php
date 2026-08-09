@@ -3,6 +3,7 @@
 namespace App\Libraries;
 
 use App\Libraries\Permission_manager;
+use App\Models\Auth_security_model;
 
 class Client {
     private $ci;
@@ -147,8 +148,9 @@ class Client {
         $contact_id = get_array_value($data, "contact_id");
         $client_id = get_array_value($data, "client_id");
 
-        $password = get_array_value($data, "login_password");
-        $password = clean_data($password);
+        // Passwords are validated before this library call and must be hashed
+        // exactly as entered. HTML sanitization changes valid secret bytes.
+        $password = (string) get_array_value($data, "login_password");
 
         if (!$this->permission_manager->can_manage_clients($client_id)) {
             echo json_encode(array("success" => false, 'message' => app_lang('access_denied')));
@@ -217,6 +219,16 @@ class Client {
 
         $save_id = $this->ci->Users_model->ci_save($user_data, $contact_id);
         if ($save_id) {
+            if (!$contact_id && $password) {
+                $authSecurity = new Auth_security_model();
+                $authSecurity->audit(
+                    "password_initialized",
+                    "success",
+                    (int) $save_id,
+                    $authSecurity->identity_hash((string) $user_data["email"]),
+                    ["actor_user_id" => (int) $this->ci->login_user->id]
+                );
+            }
 
             save_custom_fields("client_contacts", $save_id, $this->ci->login_user->is_admin, $this->ci->login_user->user_type);
 
@@ -249,7 +261,9 @@ class Client {
         $parser_data["USER_FIRST_NAME"] = clean_data($contact_info->first_name);
         $parser_data["USER_LAST_NAME"] = clean_data($contact_info->last_name);
         $parser_data["USER_LOGIN_EMAIL"] = $email;
-        $parser_data["USER_LOGIN_PASSWORD"] = $password;
+        // Never place a reusable credential in email. The contact already set
+        // the password, or can use the one-time password-reset flow.
+        $parser_data["USER_LOGIN_PASSWORD"] = app_lang("password_not_sent_by_email");
         $parser_data["DASHBOARD_URL"] = base_url();
         $parser_data["LOGO_URL"] = get_logo_url();
 

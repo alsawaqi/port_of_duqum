@@ -373,7 +373,7 @@ class Projects_model extends Crud_model {
         $comment_file_path = get_setting("timeline_file_path");
         foreach ($project_comments as $comment_info) {
             if ($comment_info->files && $comment_info->files != "a:0:{}") {
-                $files = unserialize($comment_info->files);
+                $files = safe_unserialize($comment_info->files);
                 foreach ($files as $file) {
                     delete_app_files($comment_file_path, array($file));
                 }

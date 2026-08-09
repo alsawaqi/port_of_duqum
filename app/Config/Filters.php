@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Filters\SafeHttpMethods;
 use CodeIgniter\Config\Filters as BaseFilters;
 use CodeIgniter\Filters\Cors;
 use CodeIgniter\Filters\CSRF;
@@ -25,6 +26,7 @@ class Filters extends BaseFilters
      * or [filter_name => [classname1, classname2, ...]]
      */
     public array $aliases = [
+        'safehttp'      => SafeHttpMethods::class,
         'csrf'          => CSRF::class,
         'toolbar'       => DebugToolbar::class,
         'honeypot'      => Honeypot::class,
@@ -69,8 +71,9 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
+            'safehttp',
             // 'honeypot',
-            // 'csrf',
+            'csrf' => ['except' => []],
             // 'invalidchars',
         ],
         'after' => [
@@ -104,4 +107,25 @@ class Filters extends BaseFilters
      * @var array<string, array<string, list<string>>>
      */
     public array $filters = [];
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        // Keep CSRF enabled globally while preserving deliberately public
+        // callbacks. Avoid constructing Rise here because filters are created
+        // before application/plugin hooks exist in some boot contexts.
+        $excluded = Rise::APP_CSRF_EXCLUDE_URIS;
+        if (function_exists('app_hooks')) {
+            $hooks = app_hooks();
+            if (is_object($hooks) && method_exists($hooks, 'apply_filters')) {
+                $excluded = $hooks->apply_filters(
+                    'app_filter_app_csrf_exclude_uris',
+                    $excluded
+                );
+            }
+        }
+
+        $this->globals['before']['csrf']['except'] = $excluded;
+    }
 }

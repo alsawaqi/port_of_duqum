@@ -75,7 +75,7 @@
                 <?php
                 $files = array();
                 if ($comment->files) {
-                    $files = unserialize($comment->files);
+                    $files = safe_unserialize($comment->files);
                 }
 
                 $comment_description = "";

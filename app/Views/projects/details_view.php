@@ -158,7 +158,7 @@ if (!function_exists("make_project_tabs_data")) {
                             if (get_setting("module_invoice") && $show_invoice_info) {
                                 //check left menu settings
                                 $left_menu = get_setting("user_" . $login_user->id . "_left_menu") ? get_setting("user_" . $login_user->id . "_left_menu") : get_setting("default_client_left_menu");
-                                $left_menu = $left_menu ? json_decode(json_encode(@unserialize($left_menu)), true) : false;
+                                $left_menu = $left_menu ? json_decode(json_encode(@safe_unserialize($left_menu)), true) : false;
                                 if (!$left_menu || in_array("invoices", array_column($left_menu, "name"))) {
                                     $project_tabs["invoices"] = "projects/invoices/" . $project_info->id . "/" . $login_user->client_id;
                                 }

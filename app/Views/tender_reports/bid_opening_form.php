@@ -5,6 +5,8 @@ $teams = $teams ?? [];
 $opening_audit = $opening_audit ?? [];
 $opening_session = $opening_session ?? null;
 $signature_rows = $signature_rows ?? [];
+$signature_image_route = trim((string) ($signature_image_route ?? "tender_reports/signature_image"), "/");
+$manual_form_download_url = (string) ($manual_form_download_url ?? "");
 $back_url = $back_url ?? get_uri("tender_reports/details/" . (int) ($tender->id ?? 0));
 $back_label = $back_label ?? "Back to Tender Report";
 $supplier_rows = array_values(array_filter($vendors, static function ($vendor) {
@@ -23,18 +25,12 @@ $money_value = static function ($value, string $currency = "OMR") {
     return number_format((float) $value, 3) . " " . esc($currency);
 };
 
-$signature_src = static function ($path) {
-    $path = trim((string) $path);
-    if ($path === "") {
+$signature_src = static function (array $row) use ($signature_image_route) {
+    $entry_id = (int) ($row["signature_entry_id"] ?? 0);
+    if (!$entry_id || empty($row["has_signature_image"])) {
         return "";
     }
-
-    $full_path = WRITEPATH . "uploads/" . ltrim($path, "/");
-    if (!is_file($full_path)) {
-        return "";
-    }
-
-    return "data:image/png;base64," . base64_encode(file_get_contents($full_path));
+    return get_uri($signature_image_route . "/" . $entry_id);
 };
 
 $team_rows = function (string $role) use ($teams) {
@@ -77,7 +73,8 @@ foreach ($signature_rows as $signature) {
             ][$role] ?? ucwords(str_replace("_", " ", $role)),
             "remarks" => $role === "chairman" ? "Circulation" : "Attend",
             "signed_at" => $signature->signed_at,
-            "signature_image_path" => $signature->signature_image_path ?? "",
+            "signature_entry_id" => (int) ($signature->id ?? 0),
+            "has_signature_image" => !empty($signature->signature_image_path),
             "signature_statement" => $signature->signature_statement ?? "",
         ];
     }
@@ -93,7 +90,8 @@ $attendance_rows = $signed_attendance ?: array_map(static function ($row) {
         ][$role] ?? $row["role"],
         "remarks" => $role === "chairman" ? "Circulation" : "Attend",
         "signed_at" => null,
-        "signature_image_path" => "",
+        "signature_entry_id" => 0,
+        "has_signature_image" => false,
         "signature_statement" => "",
     ];
 }, $attendance);
@@ -213,7 +211,7 @@ $opening_header_actions = '<a href="' . esc($back_url, "attr") . '" class="btn b
                             <tr><td colspan="4" class="text-center text-off p20">No ITC members assigned.</td></tr>
                         <?php } ?>
                         <?php foreach ($attendance_rows as $row) { ?>
-                            <?php $image_src = $signature_src($row["signature_image_path"] ?? ""); ?>
+                            <?php $image_src = $signature_src($row); ?>
                             <tr>
                                 <td><?php echo esc($row["name"]); ?></td>
                                 <td><?php echo esc($row["role"]); ?></td>
@@ -233,6 +231,11 @@ $opening_header_actions = '<a href="' . esc($back_url, "attr") . '" class="btn b
                                     Manual signed opening form uploaded by procurement:
                                     <strong><?php echo esc($opening_session->manual_form_original_name ?? "-"); ?></strong>
                                     on <?php echo $date_value($opening_session->manual_form_uploaded_at ?? null); ?>.
+                                    <?php if ($manual_form_download_url) { ?>
+                                        <a href="<?php echo esc($manual_form_download_url, "attr"); ?>" class="btn btn-default btn-xs ms10">
+                                            <i data-feather="download" class="icon-12"></i> Download
+                                        </a>
+                                    <?php } ?>
                                 </td>
                             </tr>
                         <?php } ?>

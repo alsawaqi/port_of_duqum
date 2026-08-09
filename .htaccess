@@ -1,0 +1,79 @@
+# The application is installed directly below Apache's document root.
+# Deny configuration, source, test, and database artifacts before routing.
+Options -Indexes
+LimitRequestBody 67108864
+
+# Restrict HTTP verbs at the directory boundary. Apache can answer TRACE
+# before .htaccess is evaluated, so production must also set TraceEnable Off.
+<LimitExcept GET POST HEAD OPTIONS>
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</LimitExcept>
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "(?i)^(?:\.env(?:\..*)?|\.htaccess|\.htpasswd|phpunit\.xml(?:\.dist)?|composer\.(?:json|lock)|spark|preload\.php)$">
+        Require all denied
+    </FilesMatch>
+    <FilesMatch "(?i)\.(?:bak|conf|dist|ini|log|sql|sqlite|sqlite3|yml|yaml)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    <FilesMatch "(?i)^(?:\.env(?:\..*)?|\.htaccess|\.htpasswd|phpunit\.xml(?:\.dist)?|composer\.(?:json|lock)|spark|preload\.php)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+    <FilesMatch "(?i)\.(?:bak|conf|dist|ini|log|sql|sqlite|sqlite3|yml|yaml)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Authorization fallback for hidden tooling/metadata directories when rewrite
+# is unavailable. Visible sensitive directories also carry their own deny file.
+<IfModule mod_authz_core.c>
+    <If "%{REQUEST_URI} =~ m#(?i)/(?:\.git|\.svn|\.vscode|\.vs|\.qodo|\.sql)(?:/|$)#">
+        Require all denied
+    </If>
+    <If "%{REQUEST_URI} =~ m#(?i)/files/(?:temp|tender_files)(?:/|$)#">
+        Require all denied
+    </If>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteOptions InheritDownBefore
+    RewriteCond %{REQUEST_METHOD} ^TRACE$ [NC]
+    RewriteRule ^ - [F,L]
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
+    RewriteRule ^(?:app|system|tests|writable|updates|documentation|vendor|node_modules|\.git|\.svn)(?:/|$) - [F,L,NC]
+    RewriteRule ^files/(?:temp|tender_files)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:files|plugins)/.*\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$ - [F,L,NC]
+</IfModule>
+
+<IfModule php_module>
+    php_flag expose_php Off
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header unset X-Powered-By
+    Header always unset X-Powered-By
+    # Remove application-table copies before setting canonical values in the
+    # always table, avoiding ambiguous duplicate headers on dynamic responses.
+    Header unset X-Content-Type-Options
+    Header unset X-Frame-Options
+    Header unset Referrer-Policy
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "0"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(self), usb=()"
+    Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+    Header always set Strict-Transport-Security "max-age=31536000" "expr=%{HTTPS} == 'on'"
+</IfModule>

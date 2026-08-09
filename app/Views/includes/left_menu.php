@@ -1,10 +1,24 @@
 <div class="sidebar sidebar-off">
     <?php
     $user = $login_user->id;
-    $dashboard_link = get_uri("dashboard");
+    $is_vendor_only_identity = !empty($login_user->is_vendor_only_identity);
+    $is_gate_pass_only_identity = !empty($login_user->is_gate_pass_only_identity);
+    $is_ptw_applicant_only_identity = !empty($login_user->is_ptw_applicant_only_identity);
+    $is_external_portal_only_identity = $is_vendor_only_identity
+        || $is_gate_pass_only_identity
+        || $is_ptw_applicant_only_identity;
+    $has_active_vendor_portal_access = !empty($login_user->has_active_vendor_portal_access);
+    $has_active_gate_pass_portal_access = !empty($login_user->has_active_gate_pass_portal_access);
+    $has_active_ptw_portal_access = !empty($login_user->has_active_ptw_portal_access);
+    $portal_home = $has_active_vendor_portal_access
+        ? "vendor_portal"
+        : ($has_active_gate_pass_portal_access
+            ? "gate_pass_portal"
+            : ($has_active_ptw_portal_access ? "ptw_portal" : "portal_account/change_password"));
+    $dashboard_link = get_uri($is_external_portal_only_identity ? $portal_home : "dashboard");
     $app_title = get_setting("app_title") ? get_setting("app_title") : "Port of Duqm";
     $user_dashboard = get_setting("user_" . $user . "_dashboard");
-    if ($user_dashboard) {
+    if ($user_dashboard && !$is_external_portal_only_identity) {
         $dashboard_link = get_uri("dashboard/view/" . $user_dashboard);
     }
     ?>

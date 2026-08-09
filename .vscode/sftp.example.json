@@ -1,0 +1,10 @@
+{
+    "name": "port-of-duqum-production",
+    "host": "production-host.example",
+    "protocol": "sftp",
+    "port": 22,
+    "username": "deployment-user",
+    "privateKeyPath": "C:/path/to/your/private/key",
+    "remotePath": "/path/to/application",
+    "uploadOnSave": false
+}

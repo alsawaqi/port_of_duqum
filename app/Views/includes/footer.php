@@ -14,7 +14,7 @@
 
             <div class="<?php echo $footer_copyright_text ? "float-end" : ""; ?>">
                 <?php
-                $footer_menus = unserialize(get_setting("footer_menus"));
+                $footer_menus = safe_unserialize(get_setting("footer_menus"));
                 if ($footer_menus && is_array($footer_menus)) {
                     foreach ($footer_menus as $footer) {
                         echo anchor($footer->url, $footer->menu_name);

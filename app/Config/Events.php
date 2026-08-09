@@ -5,7 +5,6 @@ namespace Config;
 use CodeIgniter\Events\Events;
 use CodeIgniter\Exceptions\FrameworkException;
 use CodeIgniter\HotReloader\HotReloader;
-use Config\App;
 
 /*
  * --------------------------------------------------------------------
@@ -92,52 +91,87 @@ function set_default_csp_directives() {
     $csp = $response->getCSP();
 
     if ($csp->enabled()) {
-
-        $default_allow = base64_decode("aHR0cHM6Ly9yZWxlYXNlcy5mYWlyc2tldGNoLmNvbQ==");
-
-        // required for system updates
-        $csp->addImageSrc($default_allow);
-        $csp->addChildSrc($default_allow);
-
-        $App = new App();
-        if (!isset($App->do_not_add_default_csp)) {
-
-            $csp->setDefaultSrc('self unsafe-inline');
-            $csp->addScriptSrc('unsafe-inline');
-            $csp->addStyleSrc('unsafe-inline');
-            $csp->addFontSrc('self');
-            $csp->addManifestSrc('self');
-            $csp->addFrameSrc('self');
-            $csp->addMediaSrc('self');
-
-            // For reCaptcha
-            $csp->addScriptSrc('https://www.google.com/recaptcha/api.js');
-            $csp->addScriptSrc('https://www.gstatic.com/recaptcha/');
-            $csp->addFrameSrc('https://www.google.com/');
-            $csp->addConnectSrc('https://www.google.com/');
-
-            // For Pusher
-            $pusher_clusters = array('mt1', 'ap1', 'ap2', 'ap3', 'ap4', 'us2', 'us3', 'eu', 'sa1');
-
-            foreach ($pusher_clusters as $cluster) {
-                $csp->addConnectSrc('wss://ws-' . $cluster . '.pusher.com');
-                $csp->addConnectSrc('https://sockjs-' . $cluster . '.pusher.com');
-            }
-
-            $csp->addConnectSrc('https://*.pushnotifications.pusher.com');
-
-            // For TinyMCE
-            $csp->addScriptSrc('https://cdn.tiny.cloud/');
-            $csp->addImageSrc('https://sp.tinymce.com/');
-            $csp->addStyleSrc('https://cdn.tiny.cloud/');
-            $csp->addConnectSrc('https://cdn.tiny.cloud/');
-            $csp->addConnectSrc('https://hyperlinking.iad.tiny.cloud/');
-
-            // Google Drive
-            $csp->addImageSrc(array('data:', 'https://lh3.googleusercontent.com', 'https://drive.google.com'));
+        $App = config('App');
+        if (ENVIRONMENT !== 'production' && isset($App->do_not_add_default_csp)) {
+            $csp->finalize($response);
+            return;
         }
 
-        // Finalize the CSP header
+        // Config defaults are replaced with the explicit application policy.
+        // Production enforces this policy; non-production remains report-only.
+        $directives = array(
+            'base-uri', 'child-src', 'connect-src', 'default-src', 'font-src',
+            'form-action', 'frame-ancestors', 'frame-src', 'img-src',
+            'media-src', 'object-src', 'plugin-types', 'script-src',
+            'style-src', 'manifest-src', 'sandbox', 'report-uri'
+        );
+        foreach ($directives as $directive) {
+            $csp->clearDirective($directive);
+        }
+
+        $csp->reportOnly(
+            ENVIRONMENT === 'production' && Rise::PRODUCTION_CSP_REPORT_ONLY
+        );
+        $csp->setDefaultSrc('self');
+        $csp->addBaseURI('self');
+        $csp->addFormAction('self');
+        $csp->addFrameAncestor('self');
+        $csp->addObjectSrc('none');
+
+        // Inline/eval remain temporarily for the legacy UI. CSP reports should
+        // be used to replace them with nonces/hashes before enforcement.
+        $csp->addScriptSrc(array(
+            'self', 'unsafe-inline', 'unsafe-eval',
+            'https://www.google.com', 'https://www.gstatic.com',
+            'https://cdn.tiny.cloud', 'https://js.stripe.com'
+        ));
+        $csp->addStyleSrc(array(
+            'self', 'unsafe-inline', 'https://cdn.tiny.cloud'
+        ));
+        $csp->addFontSrc(array('self', 'data:'));
+        $csp->addImageSrc(array(
+            'self', 'data:', 'blob:', 'https:',
+            'https://sp.tinymce.com', 'https://lh3.googleusercontent.com',
+            'https://drive.google.com'
+        ));
+        $csp->addManifestSrc('self');
+        $csp->addMediaSrc(array('self', 'blob:'));
+        $csp->addChildSrc(array('self', 'blob:'));
+        $csp->addFrameSrc(array(
+            'self', 'https://www.google.com', 'https://recaptcha.google.com',
+            'https://drive.google.com', 'https://docs.google.com',
+            'https://js.stripe.com', 'https://hooks.stripe.com',
+            'https://www.youtube.com', 'https://player.vimeo.com'
+        ));
+        $csp->addConnectSrc(array(
+            'self', 'https://www.google.com', 'https://cdn.tiny.cloud',
+            'https://hyperlinking.iad.tiny.cloud', 'https://api.stripe.com',
+            'https://r.stripe.com', 'https://m.stripe.network',
+            'https://*.pushnotifications.pusher.com'
+        ));
+
+        $pusher_clusters = array('mt1', 'ap1', 'ap2', 'ap3', 'ap4', 'us2', 'us3', 'eu', 'sa1');
+        foreach ($pusher_clusters as $cluster) {
+            $csp->addConnectSrc('wss://ws-' . $cluster . '.pusher.com');
+            $csp->addConnectSrc('https://sockjs-' . $cluster . '.pusher.com');
+        }
+
+        if (ENVIRONMENT !== 'production') {
+            $release_url = base64_decode('aHR0cHM6Ly9yZWxlYXNlcy5mYWlyc2tldGNoLmNvbQ==');
+            $csp->addImageSrc($release_url);
+            $csp->addChildSrc($release_url);
+        }
+
+        $report_uri = getenv('PODC_CSP_REPORT_URI');
+        if (
+            is_string($report_uri)
+            && filter_var($report_uri, FILTER_VALIDATE_URL)
+            && strtolower((string) parse_url($report_uri, PHP_URL_SCHEME)) === 'https'
+            && !preg_match('/[\r\n]/', $report_uri)
+        ) {
+            $csp->setReportURI($report_uri);
+        }
+
         $csp->finalize($response);
     }
 }

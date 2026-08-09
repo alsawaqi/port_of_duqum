@@ -109,7 +109,7 @@ class Items extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "item");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         if ($id) {
             $item_info = $this->Items_model->get_one($id);

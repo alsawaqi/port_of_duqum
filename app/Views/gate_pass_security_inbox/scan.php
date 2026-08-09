@@ -171,6 +171,7 @@
 $(document).ready(function () {
     let currentRequestId = 0;
     let currentGatePassId = 0;
+    let currentScanNonce = "";
 
     const lookupUrl = "<?php echo get_uri('gate_pass_security_inbox/lookup_by_qr'); ?>";
     const actionUrl = "<?php echo get_uri('gate_pass_security_inbox/save_scan_action'); ?>";
@@ -278,7 +279,7 @@ $(document).ready(function () {
             $("#gp-blocked-alert").removeClass("gp-pro-pulse");
         }
 
-        $("#btn_save_action").prop("disabled", false);
+        $("#btn_save_action").prop("disabled", !currentScanNonce);
         renderVisitorChecks(d.visitors || [], parseInt(d.assigned_visitor_id || 0));
     }
 
@@ -346,6 +347,8 @@ $(document).ready(function () {
             success: function(res){
                 appLoader.hide();
                 if (!res || !res.success) {
+                    currentScanNonce = "";
+                    currentGatePassId = 0;
                     $("#scan_info").hide();
                     $("#scan_tables").hide();
                     $("#btn_save_action").prop("disabled", true);
@@ -356,6 +359,7 @@ $(document).ready(function () {
                 const d = res.data;
                 currentRequestId = d.request_id;
                 currentGatePassId = d.gate_pass_id;
+                currentScanNonce = d.scan_nonce || "";
 
                 fillInfo(d);
                 initTables(currentRequestId);
@@ -377,7 +381,7 @@ $(document).ready(function () {
     });
 
     $("#btn_save_action").on("click", function(){
-        if (!currentGatePassId) return;
+        if (!currentGatePassId || !currentScanNonce) return;
 
         const action = $("#scan_action").val();
         const note = $("#scan_note").val();
@@ -389,6 +393,7 @@ $(document).ready(function () {
             dataType: "json",
             data: {
                 gate_pass_id: currentGatePassId,
+                scan_nonce: currentScanNonce,
                 action: action,
                 note: note,
                 visitor_ids: selectedVisitorIds(),
@@ -396,6 +401,10 @@ $(document).ready(function () {
             },
             success: function(res){
                 appLoader.hide();
+                currentScanNonce = "";
+                currentGatePassId = 0;
+                $("#btn_save_action").prop("disabled", true);
+                $("#qr_text").val("").trigger("focus");
                 if (res && res.success) {
                     appAlert.success(res.message || "Saved");
                     $("#scan_note").val("");
@@ -403,9 +412,15 @@ $(document).ready(function () {
                     appAlert.error(res && res.message ? res.message : "Error");
                 }
             },
-            error: function(){
+            error: function(xhr){
                 appLoader.hide();
-                appAlert.error("Error saving action.");
+                currentScanNonce = "";
+                currentGatePassId = 0;
+                $("#btn_save_action").prop("disabled", true);
+                const message = xhr && xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : "Error saving action. Scan the QR again.";
+                appAlert.error(message);
             }
         });
     });

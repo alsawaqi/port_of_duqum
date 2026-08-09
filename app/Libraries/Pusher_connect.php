@@ -22,7 +22,9 @@ class Pusher_connect {
     public function trigger_beams_event($beams_interests, $notification_data) {
         $pusher_beams_instance_id = get_setting("pusher_beams_instance_id");
         $pusher_beams_primary_key = get_setting("pusher_beams_primary_key");
-        if (!$pusher_beams_instance_id || !$pusher_beams_primary_key) {
+        if (!$pusher_beams_instance_id
+            || !$pusher_beams_primary_key
+            || preg_match('/^[A-Za-z0-9-]{1,64}$/D', (string) $pusher_beams_instance_id) !== 1) {
             return false;
         }
 
@@ -51,21 +53,32 @@ class Pusher_connect {
 
         $ch = curl_init($url);
 
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POSTFIELDS => json_encode($data),
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+        ]);
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if (curl_errno($ch)) {
-            log_message('error', '[ERROR] {exception}', ['exception' => curl_error($ch)]);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+            log_message('error', 'Pusher delivery failed: {error}', ['error' => $curlError]);
             return false;
         }
 
         curl_close($ch);
-        return true;
+        return $httpCode >= 200 && $httpCode < 300;
     }
 
 

@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <?php echo form_open(get_uri("gate_pass_visitors/save"), ["id" => "visitor-form", "class" => "general-form", "role" => "form"]); ?>
 
 <div class="modal-body clearfix">
@@ -126,8 +127,15 @@
                     <?php echo form_password([
                         "name" => "password",
                         "class" => "form-control",
-                        "placeholder" => ($model_info ? "Leave blank to keep existing password" : "Required")
+                        "placeholder" => ($model_info ? "Leave blank to keep existing password" : "Required"),
+                        "autocomplete" => "new-password",
+                        "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                        "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
                     ]); ?>
+                    <small class="text-muted">
+                        Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                        characters with uppercase, lowercase, number, and special character.
+                    </small>
                 </div>
             </div>
         </div>

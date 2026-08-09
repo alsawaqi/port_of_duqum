@@ -8,6 +8,23 @@ use CodeIgniter\Session\Handlers\FileHandler;
 
 class Session extends BaseConfig
 {
+    public function __construct()
+    {
+        parent::__construct();
+
+        if (ENVIRONMENT === 'production') {
+            // Never allow production overrides to create an unlimited session
+            // or disable periodic session-ID replacement.
+            $this->expiration = $this->expiration > 0
+                ? min($this->expiration, 7200)
+                : 7200;
+            $this->timeToUpdate = $this->timeToUpdate > 0
+                ? max(60, min($this->timeToUpdate, 300))
+                : 300;
+            $this->regenerateDestroy = true;
+        }
+    }
+
     /**
      * --------------------------------------------------------------------------
      * Session Driver

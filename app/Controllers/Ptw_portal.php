@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Libraries\Pdf;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 class Ptw_portal extends Security_Controller
 {
@@ -12,6 +14,7 @@ class Ptw_portal extends Security_Controller
     protected $Ptw_attachments_model;
     protected $Ptw_reviews_model;
     protected $Ptw_audit_logs_model;
+    protected $Ptw_applicant_users_model;
     protected $Gate_pass_companies_model;
 
     public function __construct()
@@ -26,6 +29,7 @@ class Ptw_portal extends Security_Controller
         $this->Ptw_attachments_model = model("App\\Models\\Ptw_attachments_model");
         $this->Ptw_reviews_model = model("App\\Models\\Ptw_reviews_model");
         $this->Ptw_audit_logs_model = model("App\\Models\\Ptw_audit_logs_model");
+        $this->Ptw_applicant_users_model = model("App\\Models\\Ptw_applicant_users_model");
         $this->Gate_pass_companies_model = model("App\\Models\\Gate_pass_companies_model");
     }
 
@@ -36,6 +40,7 @@ class Ptw_portal extends Security_Controller
 
     function view($tab = "")
     {
+        $this->_require_ptw_access();
         $view_data["tab"] = $tab;
         return $this->template->rander("ptw_portal/view", $view_data);
     }
@@ -78,6 +83,10 @@ class Ptw_portal extends Security_Controller
         if ($app && !$this->_can_edit_application($app)) {
             app_redirect("ptw_portal/application_details/" . $app->id);
         }
+        if (!$app && !$this->login_user->is_admin
+            && !$this->Ptw_applicant_users_model->get_active_company_ids((int) $this->login_user->id)) {
+            app_redirect("forbidden");
+        }
 
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
         $response_rows = [];
@@ -90,7 +99,7 @@ class Ptw_portal extends Security_Controller
 
         $session = \Config\Services::session();
 
-        $companies_list = $this->Gate_pass_companies_model->get_details()->getResult();
+        $companies_list = $this->_get_allowed_ptw_applicant_companies();
 
         $view_data = [
             "model_info"          => $app,
@@ -158,6 +167,25 @@ class Ptw_portal extends Security_Controller
             app_redirect("forbidden");
         }
 
+        $posted_company_id = trim((string)$this->request->getPost("company_id"));
+        $selected_company = null;
+        $postedCompanyId = ctype_digit($posted_company_id) ? (int) $posted_company_id : 0;
+        if ($existing && $postedCompanyId !== (int) ($existing->company_id ?? 0)) {
+            // Company is an authorization boundary and is immutable once the
+            // application exists. Reassignment is an audited admin operation.
+            app_redirect("forbidden");
+        }
+        if ($postedCompanyId > 0
+            && ($this->login_user->is_admin
+                || $this->Ptw_applicant_users_model->has_active_company_assignment(
+                    (int) $this->login_user->id,
+                    $postedCompanyId
+                ))) {
+            $selected_company = $this->Gate_pass_companies_model
+                ->get_details(["id" => $postedCompanyId])
+                ->getRow();
+        }
+
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
         $defs_index = [];
         foreach ($defs as $d) {
@@ -168,7 +196,7 @@ class Ptw_portal extends Security_Controller
             $defs_index[(int)$virtual_other->id] = $virtual_other;
         }
 
-        [$errors, $field_errors] = $this->_validate_ptw_submission($existing, $defs_index, $submit_mode);
+        [$errors, $field_errors] = $this->_validate_ptw_submission($existing, $defs_index, $submit_mode, $selected_company);
         if (count($errors)) {
             $session = \Config\Services::session();
             $session->setFlashdata('ptw_errors', $errors);
@@ -190,7 +218,8 @@ class Ptw_portal extends Security_Controller
         $data = [
             "reference" => $existing->reference ?? ("PTW-TMP-" . time() . "-" . rand(100, 999)),
             "applicant_user_id" => $existing->applicant_user_id ?? $this->login_user->id,
-            "company_name" => trim((string) $this->request->getPost("company_name")),
+            "company_id" => (int)$selected_company->id,
+            "company_name" => trim((string)$selected_company->name),
             "applicant_name" => trim((string) $this->request->getPost("applicant_name")),
             "applicant_position" => trim((string) $this->request->getPost("applicant_position")),
             "contact_phone" => trim((string) $this->request->getPost("contact_phone")),
@@ -268,8 +297,17 @@ if ($submit_mode === "draft") {
             $application->reference = $final_ref;
         }
 
-        $this->_save_requirement_responses($application_id, $defs_index);
-        $this->_save_signature_file($application_id);
+        try {
+            $this->_save_requirement_responses($application_id, $defs_index);
+            $this->_save_signature_file($application_id);
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('notice', 'PTW attachment storage failed.');
+            $session = \Config\Services::session();
+            $session->setFlashdata('ptw_errors', ['One or more attachments were rejected. Upload JPG, JPEG, PNG, or PDF files only.']);
+            app_redirect('ptw_portal/application_form/' . ($id ?: ''));
+            return;
+        }
 
 
 
@@ -378,8 +416,8 @@ if ($submit_mode === "draft") {
             app_redirect("forbidden");
         }
 
-        $full = WRITEPATH . "uploads/" . ltrim((string) $row->file_path, "/");
-        if (!is_file($full)) {
+        $full = $this->_resolve_ptw_upload_path((string)$row->file_path);
+        if (!$full) {
             app_redirect("forbidden");
         }
 
@@ -395,8 +433,8 @@ if ($submit_mode === "draft") {
             app_redirect("forbidden");
         }
 
-        $full = WRITEPATH . "uploads/" . ltrim((string) $app->signature_file_path, "/");
-        if (!is_file($full)) {
+        $full = $this->_resolve_ptw_upload_path((string)$app->signature_file_path);
+        if (!$full) {
             app_redirect("forbidden");
         }
 
@@ -447,8 +485,46 @@ if ($submit_mode === "draft") {
             return;
         }
 
-        // Allow portal users. Reviewer restrictions are enforced later in inbox modules.
-        return;
+        $userId = (int) ($this->login_user->id ?? 0);
+        if ($this->Ptw_applicant_users_model->get_active_company_ids($userId)) {
+            return;
+        }
+
+        $db = db_connect();
+        foreach (["ptw_hsse_users", "ptw_hmo_users", "ptw_terminal_users"] as $tableName) {
+            $table = $db->prefixTable($tableName);
+            if ($db->query(
+                "SELECT id FROM {$table}
+                 WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1",
+                [$userId]
+            )->getRow()) {
+                return;
+            }
+        }
+
+        app_redirect("forbidden");
+    }
+
+    private function _get_allowed_ptw_applicant_companies(): array
+    {
+        if ($this->login_user->is_admin) {
+            return $this->Gate_pass_companies_model->get_details()->getResult();
+        }
+
+        $companyIds = $this->Ptw_applicant_users_model
+            ->get_active_company_ids((int) $this->login_user->id);
+        if (!$companyIds) {
+            return [];
+        }
+
+        $companies = db_connect()->prefixTable("companies");
+        $placeholders = implode(",", array_fill(0, count($companyIds), "?"));
+        return db_connect()->query(
+            "SELECT * FROM {$companies}
+             WHERE deleted=0 AND id IN ({$placeholders})
+             ORDER BY name ASC",
+            $companyIds
+        )->getResult();
     }
 
     private function _can_access_application($app)
@@ -458,16 +534,35 @@ if ($submit_mode === "draft") {
         }
 
         if ((int) $app->applicant_user_id === (int) $this->login_user->id) {
-            return true;
+            return $this->Ptw_applicant_users_model->has_active_company_assignment(
+                (int) $this->login_user->id,
+                (int) ($app->company_id ?? 0)
+            );
         }
 
-        // PTW stage reviewers can also access
+        // Reviewer access is company-scoped. Legacy rows that could not be
+        // backfilled uniquely remain visible to the applicant/admin only.
+        $company_id = (int)($app->company_id ?? 0);
+        if ($company_id < 1) {
+            return false;
+        }
+
         $db = db_connect();
-        $uid = (int) $this->login_user->id;
-        $tables = ["ptw_hsse_users", "ptw_hmo_users", "ptw_terminal_users"];
-        foreach ($tables as $t) {
-            $table = $db->prefixTable($t);
-            $row = $db->query("SELECT id FROM $table WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1", [$uid])->getRow();
+        $uid = (int)$this->login_user->id;
+        $companies = $db->prefixTable("companies");
+        foreach (["ptw_hsse_users", "ptw_hmo_users", "ptw_terminal_users"] as $assignment_table) {
+            $assignments = $db->prefixTable($assignment_table);
+            $row = $db->query(
+                "SELECT $assignments.id
+                 FROM $assignments
+                 INNER JOIN $companies ON $companies.id=$assignments.company_id AND $companies.deleted=0
+                 WHERE $assignments.user_id=?
+                   AND $assignments.company_id=?
+                   AND $assignments.deleted=0
+                   AND $assignments.status='active'
+                 LIMIT 1",
+                [$uid, $company_id]
+            )->getRow();
             if ($row) {
                 return true;
             }
@@ -482,6 +577,13 @@ if ($submit_mode === "draft") {
         $status = strtolower(trim((string)($app->status ?? "")));
 
         if ((int)$app->applicant_user_id !== (int)$this->login_user->id && !$this->login_user->is_admin) {
+            return false;
+        }
+        if (!$this->login_user->is_admin
+            && !$this->Ptw_applicant_users_model->has_active_company_assignment(
+                (int) $this->login_user->id,
+                (int) ($app->company_id ?? 0)
+            )) {
             return false;
         }
 
@@ -643,7 +745,7 @@ HTML;
         return "HSSE";
     }
 
-    private function _validate_ptw_submission($existing, array $defs_index, string $submit_mode): array
+    private function _validate_ptw_submission($existing, array $defs_index, string $submit_mode, $selected_company): array
     {
         $errors       = [];
         $field_errors = [];
@@ -655,9 +757,12 @@ HTML;
             }
         };
 
+        if (!$selected_company || (int)($selected_company->id ?? 0) < 1) {
+            $addError("Select a valid active Company", "company_id");
+        }
+
         if ($submit_mode === "submit") {
             $required = [
-                "company_name"                 => "Company Name",
                 "applicant_name"               => "Applicant Name",
                 "applicant_position"           => "Applicant Position",
                 "contact_phone"                => "Contact Number",
@@ -741,7 +846,12 @@ HTML;
                 }
 
                 if ($file && $file->isValid() && !$file->hasMoved()) {
-                    if (!$this->_is_allowed_file_for_definition($file->getClientExtension(), $def)) {
+                    try {
+                        (new Upload_security())->validateUploadedFile(
+                            $file,
+                            Upload_security::CONTEXT_SECURITY_DOCUMENT
+                        );
+                    } catch (UploadSecurityException $e) {
                         $addError($def->label . " has invalid file type", "req_{$def_id}_file");
                     }
                 }
@@ -781,13 +891,13 @@ HTML;
             if ($file && $file->isValid() && !$file->hasMoved()) {
                 $rel_dir = "ptw/app_{$application_id}/requirements/";
                 $dir = WRITEPATH . "uploads/" . $rel_dir;
-                if (!is_dir($dir)) {
-                    mkdir($dir, 0775, true);
-                }
-
-                $safe_ext = strtolower((string) $file->getClientExtension());
-                $new_name = "req_{$def_id}_" . uniqid("", true) . "." . $safe_ext;
-                $file->move($dir, $new_name);
+                $stored = (new Upload_security())->storeUploadedFile(
+                    $file,
+                    $dir,
+                    Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                    "req_{$def_id}_"
+                );
+                $new_name = $stored['stored_name'];
                 $rel_path = $rel_dir . $new_name;
 
                 $att_path_data = ["attachment_path" => $rel_path];
@@ -801,10 +911,10 @@ HTML;
                     "ptw_requirement_id"          => $def_id,
                     "ptw_application_id"          => $application_id,
                     "ptw_requirement_response_id" => (int)$response_id,
-                    "file_name"                   => $file->getClientName(),
+                    "file_name"                   => $stored['original_name'],
                     "file_path"                   => $rel_path,
-                    "file_type"                   => (string) $file->getClientMimeType(),
-                    "file_size"                   => (int) $file->getSize(),
+                    "file_type"                   => $stored['detected_mime'],
+                    "file_size"                   => $stored['size_bytes'],
                     "uploaded_by"                 => (int) $this->login_user->id,
                 ];
                 $this->Ptw_attachments_model->ci_save($att_data);
@@ -882,8 +992,15 @@ HTML;
                 if ($file && $file->getError() !== UPLOAD_ERR_NO_FILE) {
                     if (!$file->isValid() || $file->hasMoved()) {
                         $addError("Other " . $this->_ptw_other_category_label($category) . " attachment is invalid", "{$prefix}_file_{$index}");
-                    } elseif (!$this->_is_allowed_file_for_definition($file->getClientExtension(), $def)) {
-                        $addError("Other " . $this->_ptw_other_category_label($category) . " has invalid file type", "{$prefix}_file_{$index}");
+                    } else {
+                        try {
+                            (new Upload_security())->validateUploadedFile(
+                                $file,
+                                Upload_security::CONTEXT_SECURITY_DOCUMENT
+                            );
+                        } catch (UploadSecurityException $e) {
+                            $addError("Other " . $this->_ptw_other_category_label($category) . " has invalid file type", "{$prefix}_file_{$index}");
+                        }
                     }
                 }
             }
@@ -1035,27 +1152,32 @@ HTML;
         }
 
         $dir = $this->_ptw_pending_upload_dir();
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-
-        $ext = strtolower((string)$file->getClientExtension());
         $token = bin2hex(random_bytes(16));
-        $stored_name = $token . ($ext ? "." . $ext : "");
-        $file->move($dir, $stored_name);
+        try {
+            $stored = (new Upload_security())->storeUploadedFile(
+                $file,
+                $dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'ptw_' . $token . '_'
+            );
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'PTW pending attachment rejected.');
+            return null;
+        }
 
         $meta = [
             "token" => $token,
             "context" => preg_replace('/[^a-zA-Z0-9_-]/', "_", $context),
-            "file_name" => (string)$file->getClientName(),
-            "file_type" => (string)$file->getClientMimeType(),
-            "file_size" => (int)$file->getSize(),
-            "extension" => $ext,
-            "stored_name" => $stored_name,
+            "file_name" => $stored['original_name'],
+            "file_type" => $stored['detected_mime'],
+            "file_size" => $stored['size_bytes'],
+            "extension" => $stored['extension'],
+            "stored_name" => $stored['stored_name'],
             "created_at" => time(),
         ];
 
         file_put_contents($dir . $token . ".json", json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        @chmod($dir . $token . ".json", 0600);
         return $meta;
     }
 
@@ -1092,14 +1214,27 @@ HTML;
             return null;
         }
 
-        $rel_dir = "ptw/app_{$application_id}/requirements/";
-        $dir = WRITEPATH . "uploads/" . $rel_dir;
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+        try {
+            (new Upload_security())->validatePath(
+                (string)$meta['path'],
+                (string)$meta['file_name'],
+                (int)$meta['file_size'],
+                Upload_security::CONTEXT_SECURITY_DOCUMENT
+            );
+        } catch (UploadSecurityException $e) {
+            $this->_delete_ptw_pending_upload($token);
+            log_message('notice', 'PTW pending attachment failed revalidation.');
+            return null;
         }
 
+        $rel_dir = "ptw/app_{$application_id}/requirements/";
+        $dir = (new Upload_security())->prepareStorageDirectory(
+            WRITEPATH . "uploads/" . $rel_dir
+        ) . DIRECTORY_SEPARATOR;
+
         $ext = (string)($meta["extension"] ?? pathinfo((string)$meta["file_name"], PATHINFO_EXTENSION));
-        $new_name = preg_replace('/[^a-zA-Z0-9_-]/', "_", $name_prefix) . uniqid("", true) . ($ext ? "." . $ext : "");
+        $new_name = preg_replace('/[^a-zA-Z0-9_-]/', "_", $name_prefix)
+            . bin2hex(random_bytes(24)) . ($ext ? "." . $ext : "");
         $target = $dir . $new_name;
         if (!@rename((string)$meta["path"], $target)) {
             if (!@copy((string)$meta["path"], $target)) {
@@ -1107,6 +1242,7 @@ HTML;
             }
             @unlink((string)$meta["path"]);
         }
+        @chmod($target, 0640);
 
         $this->_delete_ptw_pending_upload($token, false);
 
@@ -1261,30 +1397,30 @@ HTML;
             if ($has_new_upload) {
                 $rel_dir = "ptw/app_{$application_id}/requirements/";
                 $dir = WRITEPATH . "uploads/" . $rel_dir;
-                if (!is_dir($dir)) {
-                    mkdir($dir, 0775, true);
-                }
-
-                $safe_ext = strtolower((string)$file->getClientExtension());
-                $new_name = "other_{$def_id}_{$index}_" . uniqid("", true) . "." . $safe_ext;
-                $file->move($dir, $new_name);
+                $stored = (new Upload_security())->storeUploadedFile(
+                    $file,
+                    $dir,
+                    Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                    "other_{$def_id}_{$index}_"
+                );
+                $new_name = $stored['stored_name'];
                 $rel_path = $rel_dir . $new_name;
 
                 $att_data = [
                     "ptw_requirement_id" => $stored_definition_id,
                     "ptw_application_id" => $application_id,
                     "ptw_requirement_response_id" => $response_id,
-                    "file_name" => $file->getClientName(),
+                    "file_name" => $stored['original_name'],
                     "file_path" => $rel_path,
-                    "file_type" => (string)$file->getClientMimeType(),
-                    "file_size" => (int)$file->getSize(),
+                    "file_type" => $stored['detected_mime'],
+                    "file_size" => $stored['size_bytes'],
                     "uploaded_by" => (int)$this->login_user->id,
                 ];
                 $attachment_id = (int)$this->Ptw_attachments_model->ci_save($att_data);
 
                 $item["attachment_id"] = $attachment_id;
                 $item["attachment_path"] = $rel_path;
-                $item["attachment_name"] = (string)$file->getClientName();
+                $item["attachment_name"] = $stored['original_name'];
                 $kept_attachment_ids[] = $attachment_id;
                 $this->_delete_ptw_pending_upload($pending_token);
             } elseif ($has_pending_attachment) {
@@ -1423,6 +1559,22 @@ HTML;
         ];
     }
 
+    private function _resolve_ptw_upload_path(string $relative): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        if (!str_starts_with($relative, 'ptw/')) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/ptw');
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $root = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+        return str_starts_with($candidateCheck, $root) ? $candidate : null;
+    }
+
     private function _delete_removed_ptw_other_attachments(int $response_id, array $kept_attachment_ids): void
     {
         $db = db_connect();
@@ -1451,22 +1603,33 @@ HTML;
         $binary = (string) $parsed["binary"];
 
         $rel_dir = "ptw/app_{$application_id}/signature/";
-        $dir = WRITEPATH . "uploads/" . $rel_dir;
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
+        $security = new Upload_security();
+        $dir = $security->prepareStorageDirectory(WRITEPATH . "uploads/" . $rel_dir)
+            . DIRECTORY_SEPARATOR;
 
-        $new_name = "signature_" . uniqid("", true) . "." . $ext;
+        $new_name = 'signature_' . bin2hex(random_bytes(24)) . '.' . $ext;
         $full_path = $dir . $new_name;
         if (@file_put_contents($full_path, $binary) === false) {
             return;
+        }
+        @chmod($full_path, 0640);
+        try {
+            $validated = $security->validatePath(
+                $full_path,
+                'signature.' . $ext,
+                strlen($binary),
+                Upload_security::CONTEXT_IMAGE
+            );
+        } catch (UploadSecurityException $e) {
+            @unlink($full_path);
+            throw $e;
         }
 
         $sig_data = [
             "signature_file_name" => "signature." . $ext,
             "signature_file_path" => $rel_dir . $new_name,
-            "signature_file_type" => $mime,
-            "signature_file_size" => strlen($binary),
+            "signature_file_type" => $validated['detected_mime'],
+            "signature_file_size" => $validated['size_bytes'],
         ];
         $this->Ptw_applications_model->ci_save($sig_data, $application_id);
     }
@@ -1477,7 +1640,7 @@ HTML;
             return null;
         }
 
-        if (!preg_match('/^data:image\/(png|jpe?g|webp);base64,(.+)$/i', $signature_data, $m)) {
+        if (!preg_match('/^data:image\/(png|jpe?g);base64,(.+)$/i', $signature_data, $m)) {
             return null;
         }
 
@@ -1495,7 +1658,7 @@ HTML;
         $mime = "image/" . $type;
         if (function_exists("getimagesizefromstring")) {
             $info = @getimagesizefromstring($binary);
-            $allowed_mimes = ["image/png", "image/jpeg", "image/webp"];
+            $allowed_mimes = ["image/png", "image/jpeg"];
             $detected = strtolower((string)($info["mime"] ?? ""));
             if ($detected === "" || !in_array($detected, $allowed_mimes, true)) {
                 return null;
@@ -1506,7 +1669,6 @@ HTML;
         $ext_map = [
             "image/png" => "png",
             "image/jpeg" => "jpg",
-            "image/webp" => "webp",
         ];
         $ext = $ext_map[$mime] ?? null;
         if (!$ext) {

@@ -6,6 +6,9 @@ use CodeIgniter\Config\BaseConfig;
 
 class Email extends BaseConfig
 {
+    /** Supported SMTP authentication mode: login or plain. */
+    public string $SMTPAuthMethod = 'login';
+
     public string $fromEmail  = '';
     public string $fromName   = '';
     public string $recipients = '';

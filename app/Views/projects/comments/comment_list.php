@@ -83,7 +83,7 @@ foreach ($comments as $comment) {
                     <div class="comment-image-box clearfix">
 
                         <?php
-                        $files = unserialize($comment->files);
+                        $files = safe_unserialize($comment->files);
                         $total_files = count($files);
                         echo view("includes/timeline_preview", array("files" => $files));
                         ?>

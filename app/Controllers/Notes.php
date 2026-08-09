@@ -131,7 +131,7 @@ class Notes extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "note");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $labels = $this->request->getPost('labels');
         validate_list_of_numbers($labels);
@@ -202,7 +202,7 @@ class Notes extends Security_Controller {
             //delete the files
             $file_path = get_setting("timeline_file_path");
             if ($note_info->files) {
-                $files = unserialize($note_info->files);
+                $files = safe_unserialize($note_info->files);
 
                 foreach ($files as $file) {
                     delete_app_files($file_path, array($file));
@@ -278,7 +278,7 @@ class Notes extends Security_Controller {
         $files_link = "";
         $file_download_link = "";
         if ($data->files) {
-            $files = unserialize($data->files);
+            $files = safe_unserialize($data->files);
             if (count($files)) {
                 foreach ($files as $key => $value) {
                     $file_name = get_array_value($value, "file_name");
@@ -348,7 +348,7 @@ class Notes extends Security_Controller {
             $note_info = $this->Notes_model->get_one($id);
             $this->validate_access_to_note($note_info);
 
-            $files = unserialize($note_info->files);
+            $files = safe_unserialize($note_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

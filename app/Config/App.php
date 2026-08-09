@@ -3,19 +3,113 @@
 namespace Config;
 
 use CodeIgniter\Config\BaseConfig;
+use CodeIgniter\CodeIgniter;
 use CodeIgniter\Session\Handlers\FileHandler;
 
 class App extends BaseConfig {
 
     public function __construct() {
+        parent::__construct();
+        $this->load_security_environment();
         $this->set_base_url();
+
+        if (ENVIRONMENT === 'production') {
+            $this->validate_production_security_config();
+        }
+
         $this->set_supported_languages();
+    }
+
+    private function load_security_environment() {
+        $base_url = $this->read_environment_value(array('PODC_BASE_URL', 'APP_BASE_URL'));
+        if ($base_url !== null) {
+            $this->baseURL = $base_url;
+        }
+
+        $encryption_key = $this->read_environment_value(array('PODC_APP_ENCRYPTION_KEY', 'APP_ENCRYPTION_KEY'));
+        if ($encryption_key !== null) {
+            $this->encryption_key = $encryption_key;
+        }
+    }
+
+    private function read_environment_value(array $names) {
+        foreach ($names as $name) {
+            $value = getenv($name);
+            if ($value === false && array_key_exists($name, $_ENV)) {
+                $value = $_ENV[$name];
+            }
+            if ($value === false && array_key_exists($name, $_SERVER)) {
+                $value = $_SERVER[$name];
+            }
+
+            if ($value !== false && trim((string) $value) !== '') {
+                return trim((string) $value);
+            }
+        }
+
+        return null;
+    }
+
+    private function validate_production_security_config() {
+        $this->forceGlobalSecureRequests = true;
+        $this->CSPEnabled = true;
+
+        // 4.7.4 contains security fixes for trusted-proxy HTTPS detection,
+        // batch deletion, uploaded-file paths, and extension/MIME validation.
+        // Refuse production startup on a known-vulnerable framework baseline.
+        if (version_compare(CodeIgniter::CI_VERSION, '4.7.4', '<')) {
+            throw new \RuntimeException(
+                'Production requires CodeIgniter 4.7.4 or a later security-supported release.'
+            );
+        }
+
+        if ((string) $this->encryption_key === '') {
+            throw new \RuntimeException(
+                'Production requires app.encryption_key or PODC_APP_ENCRYPTION_KEY.'
+            );
+        }
+
+        // Current-release compatibility: existing deployments may still use
+        // the legacy RISE encryption key length. Do not rotate it silently;
+        // changing this key can invalidate encoded IDs and saved encrypted
+        // values. Plan a proper key migration before enforcing 32+ bytes.
+
+        $parts = parse_url($this->baseURL);
+        if (
+            !is_array($parts)
+            || strtolower((string) ($parts['scheme'] ?? '')) !== 'https'
+            || empty($parts['host'])
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || isset($parts['query'])
+            || isset($parts['fragment'])
+            || preg_match('/[\r\n]/', $this->baseURL)
+        ) {
+            throw new \RuntimeException(
+                'Production requires an HTTPS app.baseURL, PODC_BASE_URL, or HTTPS request origin.'
+            );
+        }
+
+        $this->baseURL = rtrim($this->baseURL, '/') . '/';
     }
 
     private function set_base_url() {
         if (!$this->baseURL) {
 
-            $domain = $_SERVER['HTTP_HOST'] . $_SERVER['SCRIPT_NAME'];
+            // CLI launchers do not have a trustworthy HTTP_HOST/SCRIPT_NAME.
+            // Use a stable non-production origin instead of producing values
+            // such as http://localhostspark or an invalid SiteURI.
+            if (PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg') {
+                $this->baseURL = 'http://localhost/';
+                return;
+            }
+
+            $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            if (!preg_match('/\A(?:\[[0-9a-f:]+\]|[a-z0-9.-]+)(?::[0-9]{1,5})?\z/i', $host)) {
+                $host = 'localhost';
+            }
+
+            $domain = $host . (string) ($_SERVER['SCRIPT_NAME'] ?? '/');
 
             $domain = preg_replace('/index.php.*/', '', $domain);
             $domain = strtolower($domain);
@@ -216,7 +310,7 @@ class App extends BaseConfig {
      *
      * @var bool
      */
-    public $forceGlobalSecureRequests = false;
+    public $forceGlobalSecureRequests = ENVIRONMENT === 'production';
 
     /**
      * --------------------------------------------------------------------------
@@ -256,10 +350,12 @@ class App extends BaseConfig {
      *
      * @var bool
      */
-    public $CSPEnabled = false;
+    public $CSPEnabled = ENVIRONMENT === 'production';
 
     /* User configs */
-    public $encryption_key = "715e7d502625270";
+    // Keep the current value unchanged in an environment secret before
+    // deployment. Rotating it without a data migration invalidates encoded IDs.
+    public $encryption_key = '';
     public $csrf_protection = true;
     public $temp_file_path = 'files/temp/';
     public $profile_image_path = 'files/profile_images/';

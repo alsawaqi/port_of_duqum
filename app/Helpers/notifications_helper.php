@@ -1269,10 +1269,39 @@ if (!function_exists('get_notification_multiple_tasks_data')) {
     }
 }
 
+if (!function_exists('is_allowed_slack_webhook_url')) {
+
+    /**
+     * Slack webhook destinations are credentials as well as outbound URLs.
+     * Restricting them to Slack's fixed HTTPS hosts prevents the configurable
+     * integration from becoming an SSRF primitive.
+     */
+    function is_allowed_slack_webhook_url($webhook_url): bool {
+        $parts = parse_url(trim((string) $webhook_url));
+        if (!is_array($parts)
+            || strtolower((string) ($parts["scheme"] ?? "")) !== "https"
+            || !empty($parts["user"])
+            || !empty($parts["pass"])
+            || !empty($parts["query"])
+            || !empty($parts["fragment"])) {
+            return false;
+        }
+
+        $host = strtolower(rtrim((string) ($parts["host"] ?? ""), "."));
+        if (!in_array($host, ["hooks.slack.com", "hooks.slack-gov.com"], true)) {
+            return false;
+        }
+
+        $port = (int) ($parts["port"] ?? 443);
+        $path = (string) ($parts["path"] ?? "");
+        return $port === 443 && preg_match('#^/services/[A-Za-z0-9/_-]+$#D', $path) === 1;
+    }
+}
+
 if (!function_exists('send_slack_notification')) {
 
     function send_slack_notification($event, $user_id = 0, $notification_id = 0, $webhook_url = "") {
-        if ($webhook_url) {
+        if ($webhook_url && is_allowed_slack_webhook_url($webhook_url)) {
             $ci = new App_Controller();
 
             $message = app_lang("notification_" . $event);
@@ -1331,16 +1360,34 @@ if (!function_exists('send_slack_notification')) {
                 );
             }
 
+            $payload = json_encode($data);
+            if ($payload === false) {
+                return false;
+            }
+
             $ch = curl_init($webhook_url);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt_array($ch, [
+                CURLOPT_CUSTOMREQUEST => "POST",
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => ["Content-Type: application/json"],
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+            ]);
             $result = curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
-            if ($result == "ok") {
+            if ($status === 200 && hash_equals("ok", trim((string) $result))) {
                 return true;
             }
         }
+
+        return false;
     }
 }

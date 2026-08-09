@@ -29,9 +29,85 @@
         <div class="form-group">
             <div class="row">
                 <label class="col-md-3"><?php echo app_lang("email"); ?></label>
-                <div class="col-md-9"><?php echo form_input(array("name" => "email", "value" => $model_info->email, "class" => "form-control")); ?></div>
+                <div class="col-md-9">
+                    <?php echo form_input(array_merge(
+                        array(
+                            "name" => "email",
+                            "value" => $model_info->email,
+                            "class" => "form-control",
+                            "autocomplete" => "email",
+                            "data-rule-required" => true,
+                            "data-rule-email" => true,
+                            "data-msg-required" => app_lang("field_required"),
+                        ),
+                        !empty($model_info->user_id) ? array("readonly" => "readonly") : array()
+                    )); ?>
+                    <small class="text-muted">
+                        This is the contact's login email. It must be unique within this CR.
+                        <?php if (!empty($model_info->user_id)) { ?>The email is locked because the contact is already linked to an account.<?php } ?>
+                    </small>
+                </div>
             </div>
         </div>
+
+        <?php if (empty($model_info->user_id)) { ?>
+            <div class="form-group">
+                <div class="row">
+                    <label class="col-md-3">Portal access</label>
+                    <div class="col-md-9">
+                        <?php echo form_dropdown(
+                            "access_role",
+                            $portal_access_roles ?? [],
+                            $portal_access_role ?? "VIEWER",
+                            "class='form-control select2' data-rule-required='true'"
+                        ); ?>
+                        <small class="text-muted">
+                            Viewer is read-only. Bidder can participate in tenders. Editor can also maintain CR profile data.
+                            Only the CR owner can manage contacts.
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="row">
+                    <label class="col-md-3">Initial password</label>
+                    <div class="col-md-9">
+                        <?php echo form_password(array(
+                            "name" => "initial_password",
+                            "id" => "vendor-contact-initial-password",
+                            "class" => "form-control",
+                            "autocomplete" => "new-password",
+                            "data-rule-minlength" => 10,
+                            "data-rule-maxlength" => 72,
+                            "data-msg-minlength" => "Use at least 10 characters."
+                        )); ?>
+                        <small class="text-muted">
+                            Required for a new login email. If this email already has an active portal account,
+                            its existing password is retained and applies to every linked CR.
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="row">
+                    <label class="col-md-3">Confirm password</label>
+                    <div class="col-md-9">
+                        <?php echo form_password(array(
+                            "name" => "initial_password_confirm",
+                            "id" => "vendor-contact-initial-password-confirm",
+                            "class" => "form-control",
+                            "autocomplete" => "new-password",
+                            "data-rule-equalTo" => "#vendor-contact-initial-password",
+                            "data-msg-equalTo" => app_lang("enter_same_value")
+                        )); ?>
+                    </div>
+                </div>
+            </div>
+        <?php } else { ?>
+            <input type="hidden" name="access_role" value="<?php echo esc($portal_access_role ?? "VIEWER"); ?>" />
+        <?php } ?>
 
         <div class="form-group">
             <div class="row">

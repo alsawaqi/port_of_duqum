@@ -516,6 +516,7 @@
                     <div class="row">
                         <?php
                         $ptw_sections = array(
+                            'applicant_users'  => 'Applicant Users',
                             'hsse_users'       => 'HSSE Users',
                             'hmo_users'        => 'HMO Users',
                             'terminal_users'   => 'Terminal Users',

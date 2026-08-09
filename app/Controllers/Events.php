@@ -232,7 +232,7 @@ class Events extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "event");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $data = array(
             "title" => $this->request->getPost('title'),
@@ -377,7 +377,7 @@ class Events extends Security_Controller {
             //delete the files
             $file_path = get_setting("timeline_file_path");
             if ($event_info->files) {
-                $files = unserialize($event_info->files);
+                $files = safe_unserialize($event_info->files);
 
                 foreach ($files as $file) {
                     delete_app_files($file_path, array($file));
@@ -783,7 +783,7 @@ class Events extends Security_Controller {
     function google_calendar_settings_modal_form() {
         if (get_setting("enable_google_calendar_api") && (get_setting("google_calendar_authorized") || get_setting('user_' . $this->login_user->id . '_google_calendar_authorized'))) {
             $user_calendar_ids = get_setting('user_' . $this->login_user->id . '_calendar_ids');
-            $calendar_ids = $user_calendar_ids ? unserialize($user_calendar_ids) : array();
+            $calendar_ids = $user_calendar_ids ? safe_unserialize($user_calendar_ids) : array();
 
             return $this->template->view("events/google_calendar_settings_modal_form", array("calendar_ids" => $calendar_ids));
         }
@@ -829,7 +829,7 @@ class Events extends Security_Controller {
         if ($id) {
             validate_numeric_value($id);
             $event_info = $this->Events_model->get_one($id);
-            $files = unserialize($event_info->files);
+            $files = safe_unserialize($event_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

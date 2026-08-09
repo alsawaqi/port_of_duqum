@@ -3,9 +3,18 @@ $model_info = $model_info ?? null;
 $is_edit = !empty($model_info->id);
 $field_id = "operational-user-" . uniqid();
 $password_required = $is_edit ? "false" : "true";
+$passwordPolicy = config("AuthSecurity");
+$sessionUserId = (int) service("session")->get("user_id");
+$isSelfEdit = $is_edit
+    && (int) ($model_info->user_id ?? 0) === $sessionUserId;
 ?>
 
-<div class="operational-user-identity" id="<?php echo $field_id; ?>" data-is-edit="<?php echo $is_edit ? "1" : "0"; ?>">
+<div
+    class="operational-user-identity"
+    id="<?php echo $field_id; ?>"
+    data-is-edit="<?php echo $is_edit ? "1" : "0"; ?>"
+    data-is-self-edit="<?php echo $isSelfEdit ? "1" : "0"; ?>"
+>
     <input type="hidden" name="existing_user_id" value="" class="js-existing-user-id" />
 
     <div class="form-group">
@@ -42,6 +51,30 @@ $password_required = $is_edit ? "false" : "true";
     </div>
 
     <div class="js-new-user-fields">
+        <?php if ($isSelfEdit) { ?>
+            <div class="form-group">
+                <div class="row">
+                    <label class="col-md-3" for="<?php echo $field_id; ?>-current-password">
+                        Current password
+                    </label>
+                    <div class="col-md-9">
+                        <?php
+                        echo form_password([
+                            "id" => $field_id . "-current-password",
+                            "name" => "current_password",
+                            "class" => "form-control js-operational-current-password",
+                            "placeholder" => "Current password",
+                            "autocomplete" => "current-password",
+                        ]);
+                        ?>
+                        <small class="text-muted">
+                            Required when changing your own password.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        <?php } ?>
+
         <div class="form-group">
             <div class="row">
                 <label class="col-md-3" for="<?php echo $field_id; ?>-first-name"><?php echo app_lang("first_name"); ?></label>
@@ -107,12 +140,18 @@ $password_required = $is_edit ? "false" : "true";
                         "name" => "password",
                         "class" => "form-control js-operational-password js-new-user-required",
                         "placeholder" => app_lang("password"),
+                        "autocomplete" => "new-password",
                         "data-rule-required" => $is_edit ? false : true,
-                        "data-rule-noSpacePassword" => true,
+                        "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                        "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
                         "data-msg-required" => app_lang("field_required"),
                     ]);
                     ?>
-                    <small class="text-muted"><?php echo $is_edit ? app_lang("leave_blank_to_keep") : app_lang("password_no_spaces"); ?></small>
+                    <small class="text-muted">
+                        <?php echo $is_edit ? app_lang("leave_blank_to_keep") . " " : ""; ?>
+                        Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                        characters with uppercase, lowercase, number, and special character.
+                    </small>
                 </div>
             </div>
         </div>
@@ -127,6 +166,7 @@ $password_required = $is_edit ? "false" : "true";
                         "name" => "password_confirm",
                         "class" => "form-control js-operational-password-confirm js-new-user-required",
                         "placeholder" => app_lang("password_confirm"),
+                        "autocomplete" => "new-password",
                         "data-rule-required" => $is_edit ? false : true,
                         "data-rule-equalTo" => "#" . $field_id . "-password",
                         "data-msg-required" => app_lang("field_required"),
@@ -141,12 +181,6 @@ $password_required = $is_edit ? "false" : "true";
 
 <script>
 $(document).ready(function () {
-    if ($.validator && !$.validator.methods.noSpacePassword) {
-        $.validator.addMethod("noSpacePassword", function (value) {
-            return !value || !/\s/.test(value);
-        }, "<?php echo app_lang("password_no_spaces"); ?>");
-    }
-
     var $block = $("#<?php echo $field_id; ?>");
     var $email = $block.find(".js-operational-email");
     var $newFields = $block.find(".js-new-user-fields");
@@ -154,7 +188,9 @@ $(document).ready(function () {
     var $existingNotice = $block.find(".js-existing-user-notice");
     var $nonStaffNotice = $block.find(".js-non-staff-user-notice");
     var $existingUserId = $block.find(".js-existing-user-id");
+    var $currentPassword = $block.find(".js-operational-current-password");
     var isEdit = $block.data("is-edit") === 1;
+    var isSelfEdit = $block.data("is-self-edit") === 1;
     var lookupTimer = null;
 
     function setRequired($field, required) {
@@ -247,6 +283,9 @@ $(document).ready(function () {
     $block.find(".js-operational-password").on("input", function () {
         var hasPassword = !!$(this).val();
         setRequired($block.find(".js-operational-password-confirm"), hasPassword || "<?php echo $password_required; ?>" === "true");
+        if (isSelfEdit) {
+            setRequired($currentPassword, hasPassword);
+        }
     });
 });
 </script>

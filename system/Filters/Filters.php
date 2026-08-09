@@ -206,8 +206,8 @@ class Filters
      * Runs through all the filters (except "Required Filters") for the specified
      * URI and position.
      *
-     * @param         string           $uri      URI path relative to baseURL
-     * @phpstan-param 'before'|'after' $position
+     * @param string           $uri      URI path relative to baseURL
+     * @param 'after'|'before' $position
      *
      * @return RequestInterface|ResponseInterface|string|null
      *
@@ -310,7 +310,7 @@ class Filters
     /**
      * Returns the "Required Filters" class list.
      *
-     * @phpstan-param 'before'|'after' $position
+     * @param 'after'|'before' $position
      *
      * @return list<array{0: class-string, 1: list<string>}> [[classname, arguments], ...]
      */
@@ -340,7 +340,7 @@ class Filters
     /**
      * Runs "Required Filters" for the specified position.
      *
-     * @phpstan-param 'before'|'after' $position
+     * @param 'after'|'before' $position
      *
      * @return RequestInterface|ResponseInterface|string|null
      *
@@ -367,7 +367,7 @@ class Filters
     /**
      * Returns "Required Filters" for the specified position.
      *
-     * @phpstan-param 'before'|'after' $position
+     * @param 'after'|'before' $position
      *
      * @internal
      */
@@ -375,7 +375,7 @@ class Filters
     {
         // For backward compatibility. For users who do not update Config\Filters.
         if (! isset($this->config->required[$position])) {
-            $baseConfig = config(BaseFiltersConfig::class); // @phpstan-ignore-line
+            $baseConfig = config(BaseFiltersConfig::class);
             $filters    = $baseConfig->required[$position];
             $aliases    = $baseConfig->aliases;
         } else {
@@ -465,7 +465,7 @@ class Filters
         // Decode URL-encoded string
         $uri = urldecode($uri ?? '');
 
-        $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false;
+        $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false; // @phpstan-ignore nullCoalesce.property
         if ($oldFilterOrder) {
             $this->processGlobals($uri);
             $this->processMethods();
@@ -544,7 +544,7 @@ class Filters
      * MUST be called prior to initialize();
      * Intended for use within routes files.
      *
-     * @phpstan-param 'before'|'after' $position
+     * @param 'after'|'before' $position
      *
      * @return $this
      */
@@ -574,9 +574,9 @@ class Filters
      * after the filter name, followed by a comma-separated list of arguments that
      * are passed to the filter when executed.
      *
-     * @param         string           $filter   filter_name or filter_name:arguments like 'role:admin,manager'
-     *                                           or filter classname.
-     * @phpstan-param 'before'|'after' $position
+     * @param string           $filter   filter_name or filter_name:arguments like 'role:admin,manager'
+     *                                   or filter classname.
+     * @param 'after'|'before' $position
      */
     private function enableFilter(string $filter, string $position = 'before'): void
     {
@@ -669,10 +669,6 @@ class Filters
      */
     protected function processGlobals(?string $uri = null)
     {
-        if (! isset($this->config->globals) || ! is_array($this->config->globals)) {
-            return;
-        }
-
         $uri = strtolower(trim($uri ?? '', '/ '));
 
         // Add any global filters, unless they are excluded for this URI
@@ -706,7 +702,7 @@ class Filters
         }
 
         if (isset($filters['before'])) {
-            $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false;
+            $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false; // @phpstan-ignore nullCoalesce.property
             if ($oldFilterOrder) {
                 $this->filters['before'] = array_merge($this->filters['before'], $filters['before']);
             } else {
@@ -726,10 +722,6 @@ class Filters
      */
     protected function processMethods()
     {
-        if (! isset($this->config->methods) || ! is_array($this->config->methods)) {
-            return;
-        }
-
         $method = $this->request->getMethod();
 
         $found = false;
@@ -752,7 +744,7 @@ class Filters
         }
 
         if ($found) {
-            $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false;
+            $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false; // @phpstan-ignore nullCoalesce.property
             if ($oldFilterOrder) {
                 $this->filters['before'] = array_merge($this->filters['before'], $this->config->methods[$method]);
             } else {
@@ -770,7 +762,7 @@ class Filters
      */
     protected function processFilters(?string $uri = null)
     {
-        if (! isset($this->config->filters) || $this->config->filters === []) {
+        if ($this->config->filters === []) {
             return;
         }
 
@@ -802,7 +794,7 @@ class Filters
             }
         }
 
-        $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false;
+        $oldFilterOrder = config(Feature::class)->oldFilterOrder ?? false; // @phpstan-ignore nullCoalesce.property
 
         if (isset($filters['before'])) {
             if ($oldFilterOrder) {
@@ -824,7 +816,7 @@ class Filters
     /**
      * Maps filter aliases to the equivalent filter classes
      *
-     * @phpstan-param 'before'|'after' $position
+     * @param 'after'|'before' $position
      *
      * @return void
      *

@@ -33,7 +33,7 @@
             <div class="comment-image-box clearfix">
                 <?php
                 if ($reply->files) {
-                    $files = unserialize($reply->files);
+                    $files = safe_unserialize($reply->files);
                     $total_files = count($files);
                     echo view("includes/timeline_preview", array("files" => $files));
                     if ($total_files) {

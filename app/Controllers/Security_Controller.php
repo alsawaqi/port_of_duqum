@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Libraries\Permission_manager;
+use App\Models\Auth_security_model;
 
 class Security_Controller extends App_Controller {
 
@@ -22,6 +23,13 @@ class Security_Controller extends App_Controller {
 
         //check user's login status, if not logged in redirect to signin page
         $login_user_id = $this->Users_model->login_user_id();
+        if ($login_user_id && !$this->Users_model->is_login_enabled((int) $login_user_id)) {
+            // A disabled/deleted account must lose existing sessions on its
+            // very next protected request, not only on its next sign-in.
+            $this->Users_model->sign_out();
+            $login_user_id = 0;
+        }
+
         if (!$login_user_id && $redirect) {
             $uri_string = uri_string();
 
@@ -42,7 +50,7 @@ class Security_Controller extends App_Controller {
 
         //initialize login users access permissions
         if ($this->login_user && $this->login_user->permissions) {
-            $permissions = unserialize($this->login_user->permissions);
+            $permissions = safe_unserialize($this->login_user->permissions);
             $this->login_user->permissions = is_array($permissions) ? $permissions : array();
         } else {
             if (!$this->login_user) {
@@ -50,7 +58,167 @@ class Security_Controller extends App_Controller {
             }
             $this->login_user->permissions = array();
         }
+
+        // Resolve all external identity classes before enforcing any one of
+        // them. This lets a revoked vendor CR coexist safely with an active
+        // Gate Pass/PTW membership and ensures final-membership revocation is
+        // processed before an internal-controller denial can short-circuit.
+        $this->_confine_vendor_only_identity(false);
+        $this->_confine_gate_pass_only_identity(false);
+        $this->_confine_ptw_applicant_only_identity(false);
+        $this->_set_active_external_portal_flags();
+
+        // redirect=false permits anonymous public controller actions and exact
+        // Security_Controller utility instances. It must not become an escape
+        // from the portal-only boundary for an authenticated controller
+        // subclass such as Store, Contract, Estimate, or Offer.
+        $enforceExternalControllerBoundary = (bool) $redirect
+            || ((int) $login_user_id > 0 && get_class($this) !== self::class);
+        $this->_redirect_external_dashboard($enforceExternalControllerBoundary);
+        if ($enforceExternalControllerBoundary) {
+            $this->_confine_vendor_only_identity(true);
+            $this->_confine_gate_pass_only_identity(true);
+            $this->_confine_ptw_applicant_only_identity(true);
+        }
         $this->permission_manager = new Permission_manager($this);
+    }
+
+    /**
+     * Vendor owners and contacts are stored as role-less staff identities for
+     * compatibility with the existing portal. Treat that as an implementation
+     * detail, not permission to enter internal staff modules.
+     */
+    private function _confine_vendor_only_identity(bool $redirect): void
+    {
+        $userId = (int) ($this->login_user->id ?? 0);
+        $isVendorOnly = property_exists($this->login_user, "is_vendor_only_identity")
+            ? (bool) $this->login_user->is_vendor_only_identity
+            : $this->Users_model->is_vendor_only_identity($userId, $this->login_user);
+        $this->login_user->is_vendor_only_identity = $isVendorOnly;
+        if (!$isVendorOnly || !$redirect) {
+            return;
+        }
+
+        $controller = strtolower((new \ReflectionClass($this))->getShortName());
+        if ($controller !== "dashboard" && !in_array($controller, ["vendor_portal", "gate_pass_portal", "ptw_portal", "portal_account", "notifications"], true)) {
+            app_redirect("forbidden");
+        }
+    }
+
+    /**
+     * Public gate-pass requesters are represented by role-less staff rows for
+     * legacy compatibility. Confine those identities to their purpose-built
+     * portal so a staff type flag never becomes internal team membership.
+     */
+    private function _confine_gate_pass_only_identity(bool $redirect): void
+    {
+        $userId = (int) ($this->login_user->id ?? 0);
+        $isGatePassOnly = property_exists($this->login_user, "is_gate_pass_only_identity")
+            ? (bool) $this->login_user->is_gate_pass_only_identity
+            : $this->Users_model->is_gate_pass_only_identity(
+                $userId,
+                $this->login_user
+            );
+        $this->login_user->is_gate_pass_only_identity = $isGatePassOnly;
+        if (!$isGatePassOnly || !$redirect) {
+            return;
+        }
+
+        $controller = strtolower((new \ReflectionClass($this))->getShortName());
+        if ($controller !== "dashboard" && !in_array($controller, ["vendor_portal", "gate_pass_portal", "ptw_portal", "portal_account", "notifications"], true)) {
+            app_redirect("forbidden");
+        }
+    }
+
+    private function _confine_ptw_applicant_only_identity(bool $redirect): void
+    {
+        $userId = (int) ($this->login_user->id ?? 0);
+        $isApplicantOnly = property_exists($this->login_user, "is_ptw_applicant_only_identity")
+            ? (bool) $this->login_user->is_ptw_applicant_only_identity
+            : $this->Users_model->is_ptw_applicant_only_identity(
+                $userId,
+                $this->login_user
+            );
+        $this->login_user->is_ptw_applicant_only_identity = $isApplicantOnly;
+        if (!$isApplicantOnly || !$redirect) {
+            return;
+        }
+
+        $controller = strtolower((new \ReflectionClass($this))->getShortName());
+        if ($controller !== "dashboard" && !in_array($controller, ["vendor_portal", "gate_pass_portal", "ptw_portal", "portal_account", "notifications"], true)) {
+            app_redirect("forbidden");
+        }
+    }
+
+    private function _set_active_external_portal_flags(): void
+    {
+        $userId = (int) ($this->login_user->id ?? 0);
+        $this->login_user->has_active_vendor_portal_access = $userId > 0
+            && !empty($this->login_user->is_vendor_only_identity)
+            && $this->Users_model->has_active_vendor_portal_membership($userId);
+        $this->login_user->has_active_gate_pass_portal_access = $userId > 0
+            && !empty($this->login_user->is_gate_pass_only_identity)
+            && $this->Users_model->has_active_gate_pass_portal_membership($userId);
+        $this->login_user->has_active_ptw_portal_access = $userId > 0
+            && !empty($this->login_user->is_ptw_applicant_only_identity)
+            && $this->Users_model->has_active_ptw_applicant_portal_membership($userId);
+    }
+
+    /**
+     * Defense-in-depth for public-capable actions that must never expose their
+     * internal authenticated view to a portal-only identity. Anonymous public
+     * visitors and genuine internal/client accounts remain eligible for the
+     * action's normal authorization checks.
+     */
+    protected function access_only_non_external_portal_identity(): void
+    {
+        $isAuthenticated = (int) ($this->login_user->id ?? 0) > 0;
+        $isExternalPortalIdentity = !empty($this->login_user->is_vendor_only_identity)
+            || !empty($this->login_user->is_gate_pass_only_identity)
+            || !empty($this->login_user->is_ptw_applicant_only_identity);
+
+        if ($isAuthenticated && $isExternalPortalIdentity) {
+            app_redirect('forbidden');
+        }
+    }
+
+    private function _redirect_external_dashboard(bool $redirect): void
+    {
+        if (!$redirect) {
+            return;
+        }
+
+        $isExternalPortalIdentity = !empty($this->login_user->is_vendor_only_identity)
+            || !empty($this->login_user->is_gate_pass_only_identity)
+            || !empty($this->login_user->is_ptw_applicant_only_identity);
+        $hasActiveExternalAccess = !empty($this->login_user->has_active_vendor_portal_access)
+            || !empty($this->login_user->has_active_gate_pass_portal_access)
+            || !empty($this->login_user->has_active_ptw_portal_access);
+
+        // Revoking the final external membership terminates existing sessions
+        // on their next request. This prevents old notifications or the shared
+        // account surface from remaining reachable after access is withdrawn.
+        if ($isExternalPortalIdentity && !$hasActiveExternalAccess) {
+            $this->Users_model->sign_out();
+            app_redirect("signin");
+        }
+
+        $controller = strtolower((new \ReflectionClass($this))->getShortName());
+        if (!$isExternalPortalIdentity || $controller !== "dashboard") {
+            return;
+        }
+
+        if (!empty($this->login_user->has_active_vendor_portal_access)) {
+            app_redirect("vendor_portal");
+        }
+        if (!empty($this->login_user->has_active_gate_pass_portal_access)) {
+            app_redirect("gate_pass_portal");
+        }
+        if (!empty($this->login_user->has_active_ptw_portal_access)) {
+            app_redirect("ptw_portal");
+        }
+
+        app_redirect("forbidden");
     }
 
     //initialize the login user's permissions with readable format
@@ -124,6 +292,236 @@ protected function has_active_tender_assignment(string $table): bool
     )->getRow();
 
     return (bool) $row;
+}
+
+/**
+ * Company-bearing tender master assignments are the authorization boundary
+ * for internal tender data. A broad role permission grants the module action;
+ * one of these active assignments grants access to a particular company.
+ */
+private const TENDER_COMPANY_ASSIGNMENT_TABLES = [
+    "tender_department_users",
+    "tender_department_manager_users",
+    "tender_finance_users",
+    "tender_procurement_users",
+    "tender_procurement_manager_users",
+    "tender_committee_users",
+    "tender_technical_users",
+    "tender_commercial_users",
+];
+
+protected function tender_assignment_tables_for_section(string $section): array
+{
+    $map = [
+        "requests" => ["tender_department_users"],
+        "finance_inbox" => ["tender_finance_users"],
+        "procurement" => ["tender_procurement_users"],
+        "procurement_manager_inbox" => ["tender_procurement_manager_users"],
+        "committee" => ["tender_committee_users"],
+        "technical_eval" => ["tender_technical_users"],
+        "commercial_eval" => ["tender_commercial_users"],
+        // These controllers currently grant module access only to procurement
+        // and, for reports, procurement managers. Do not let an unrelated
+        // technical/commercial assignment satisfy their company boundary.
+        "reports" => ["tender_procurement_users", "tender_procurement_manager_users"],
+        "clarifications" => ["tender_procurement_users"],
+    ];
+
+    return $this->normalize_tender_assignment_tables($map[$section] ?? []);
+}
+
+protected function can_access_tender_company(int $company_id, string $section): bool
+{
+    if (!empty($this->login_user->is_admin)) {
+        return true;
+    }
+    if ($company_id < 1 || empty($this->login_user->id)) {
+        return false;
+    }
+
+    $tables = $this->tender_assignment_tables_for_section($section);
+    if (!$tables) {
+        return false;
+    }
+
+    $db = db_connect();
+    $users = $db->prefixTable("users");
+    $parts = [];
+    $params = [];
+    foreach ($tables as $index => $table) {
+        $pivot = $db->prefixTable($table);
+        $alias = "tender_company_access_" . $index;
+        $user_alias = "tender_company_user_" . $index;
+        $parts[] = "SELECT {$alias}.id
+                    FROM {$pivot} {$alias}
+                    INNER JOIN {$users} {$user_alias}
+                       ON {$user_alias}.id={$alias}.user_id
+                      AND {$user_alias}.deleted=0
+                      AND {$user_alias}.status='active'
+                    WHERE {$alias}.deleted=0
+                      AND {$alias}.status='active'
+                      AND {$alias}.user_id=?
+                      AND {$alias}.company_id=?";
+        $params[] = (int) $this->login_user->id;
+        $params[] = $company_id;
+    }
+
+    $row = $db->query(
+        "SELECT company_access.id FROM (" . implode(" UNION ALL ", $parts) . ") company_access LIMIT 1",
+        $params
+    )->getRow();
+
+    return (bool) $row;
+}
+
+/**
+ * SQL predicate for list queries. The company expression must be a trusted
+ * column expression supplied by a controller, never request input.
+ */
+protected function tender_company_scope_sql(
+    string $company_expression,
+    string $section,
+    array &$params
+): string {
+    if (!empty($this->login_user->is_admin)) {
+        return "1=1";
+    }
+
+    $tables = $this->tender_assignment_tables_for_section($section);
+    if (!$tables || empty($this->login_user->id)) {
+        return "1=0";
+    }
+
+    $db = db_connect();
+    $users = $db->prefixTable("users");
+    $conditions = [];
+    foreach ($tables as $index => $table) {
+        $pivot = $db->prefixTable($table);
+        $alias = "tender_scope_" . $index;
+        $user_alias = "tender_scope_user_" . $index;
+        $conditions[] = "EXISTS (
+            SELECT 1
+            FROM {$pivot} {$alias}
+            INNER JOIN {$users} {$user_alias}
+               ON {$user_alias}.id={$alias}.user_id
+              AND {$user_alias}.deleted=0
+              AND {$user_alias}.status='active'
+            WHERE {$alias}.deleted=0
+              AND {$alias}.status='active'
+              AND {$alias}.user_id=?
+              AND {$alias}.company_id={$company_expression}
+        )";
+        $params[] = (int) $this->login_user->id;
+    }
+
+    return "(" . implode(" OR ", $conditions) . ")";
+}
+
+protected function require_tender_company_access(int $company_id, string $section): void
+{
+    if (!$this->can_access_tender_company($company_id, $section)) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+protected function can_access_tender_id(int $tender_id, string $section): bool
+{
+    if ($tender_id < 1) {
+        return false;
+    }
+
+    $db = db_connect();
+    $tenders = $db->prefixTable("tenders");
+    $requests = $db->prefixTable("tender_requests");
+    $row = $db->query(
+        "SELECT COALESCE(tender_scope.company_id, request_scope.company_id) AS company_id
+         FROM {$tenders} tender_scope
+         LEFT JOIN {$requests} request_scope
+           ON request_scope.id=tender_scope.tender_request_id
+          AND request_scope.deleted=0
+         WHERE tender_scope.id=?
+           AND tender_scope.deleted=0
+         LIMIT 1",
+        [$tender_id]
+    )->getRow();
+
+    return $row
+        ? $this->can_access_tender_company((int) ($row->company_id ?? 0), $section)
+        : false;
+}
+
+protected function require_tender_request_scope(int $request_id, string $section): object
+{
+    $db = db_connect();
+    $requests = $db->prefixTable("tender_requests");
+    $request = $db->query(
+        "SELECT request_scope.*
+         FROM {$requests} request_scope
+         WHERE request_scope.id=?
+           AND request_scope.deleted=0
+         LIMIT 1",
+        [$request_id]
+    )->getRow();
+
+    if (!$request) {
+        show_404();
+        exit;
+    }
+
+    $this->require_tender_company_access((int) ($request->company_id ?? 0), $section);
+    return $request;
+}
+
+protected function require_tender_scope(int $tender_id, string $section): object
+{
+    $db = db_connect();
+    $tenders = $db->prefixTable("tenders");
+    $requests = $db->prefixTable("tender_requests");
+    $tender = $db->query(
+        "SELECT tender_scope.*,
+                COALESCE(tender_scope.company_id, request_scope.company_id) AS authorization_company_id
+         FROM {$tenders} tender_scope
+         LEFT JOIN {$requests} request_scope
+           ON request_scope.id=tender_scope.tender_request_id
+          AND request_scope.deleted=0
+         WHERE tender_scope.id=?
+           AND tender_scope.deleted=0
+         LIMIT 1",
+        [$tender_id]
+    )->getRow();
+
+    if (!$tender) {
+        show_404();
+        exit;
+    }
+
+    $this->require_tender_company_access(
+        (int) ($tender->authorization_company_id ?? 0),
+        $section
+    );
+    return $tender;
+}
+
+/**
+ * When a request and tender ID arrive together, they must describe the same
+ * immutable parent-child relationship. Never trust either submitted ID alone.
+ */
+protected function require_tender_request_pair(object $tender, int $request_id): void
+{
+    if ($request_id > 0
+        && (int) ($tender->tender_request_id ?? 0) !== $request_id) {
+        app_redirect("forbidden");
+        exit;
+    }
+}
+
+private function normalize_tender_assignment_tables(array $tables): array
+{
+    return array_values(array_intersect(
+        array_values(array_unique($tables)),
+        self::TENDER_COMPANY_ASSIGNMENT_TABLES
+    ));
 }
 
 protected function access_only_tender(string $section, string $action)
@@ -726,7 +1124,7 @@ protected function access_only_pod_reports()
             $permissions = array();
             $user_permissions = $this->Users_model->get_access_info($to_user_id)->permissions;
             if ($user_permissions) {
-                $user_permissions = unserialize($user_permissions);
+                $user_permissions = safe_unserialize($user_permissions);
                 $permissions = is_array($user_permissions) ? $user_permissions : array();
             }
 
@@ -804,7 +1202,7 @@ protected function access_only_pod_reports()
         $symbol_array = array();
 
         $conversion_rate = get_setting("conversion_rate");
-        $conversion_rate = @unserialize($conversion_rate);
+        $conversion_rate = @safe_unserialize($conversion_rate);
         if (!($conversion_rate && is_array($conversion_rate) && count($conversion_rate))) {
             //no settings found
             return json_encode($symbol_array);
@@ -2413,16 +2811,17 @@ protected function validate_operational_password(string $password, string $passw
         return ["success" => false, "message" => app_lang("password_is_required")];
     }
 
-    if (preg_match('/\s/', $password)) {
-        return ["success" => false, "message" => app_lang("password_no_spaces")];
-    }
-
     if ($password_confirm === "") {
         return ["success" => false, "message" => app_lang("password_confirm_required")];
     }
 
     if ($password !== $password_confirm) {
         return ["success" => false, "message" => app_lang("passwords_do_not_match")];
+    }
+
+    $policyErrors = $this->Users_model->password_policy_errors($password);
+    if ($policyErrors) {
+        return ["success" => false, "message" => implode(" ", $policyErrors)];
     }
 
     return ["success" => true];
@@ -2467,6 +2866,73 @@ protected function resolve_operational_assignment_user(array $options = [], $cur
         return $password_validation;
     }
 
+    $is_own_password_change = $password !== ""
+        && $current_user_id > 0
+        && $current_user_id === (int) ($this->login_user->id ?? 0);
+    $auth_security = null;
+    if ($is_own_password_change) {
+        $auth_security = new Auth_security_model();
+        $ip_hash = $auth_security->ip_hash((string) $this->request->getIPAddress());
+        $throttle_key = "operational_password_change_{$current_user_id}_{$ip_hash}";
+        $throttler = service("throttler");
+
+        if (!$throttler->check($throttle_key, 5, 300)) {
+            $this->response->setStatusCode(429);
+            $auth_security->audit(
+                "password_change_failed",
+                "denied",
+                $current_user_id,
+                "",
+                ["channel" => "operational_assignment", "reason" => "rate_limited"]
+            );
+            return [
+                "success" => false,
+                "message" => "Too many password attempts. Please wait and try again.",
+            ];
+        }
+
+        $current_password = (string) $this->request->getPost("current_password");
+        if ($current_password === ""
+            || !$this->Users_model->verify_user_password(
+                $current_user_id,
+                $current_password
+            )) {
+            $auth_security->audit(
+                "password_change_failed",
+                "denied",
+                $current_user_id,
+                "",
+                [
+                    "channel" => "operational_assignment",
+                    "reason" => "current_password_invalid",
+                ]
+            );
+            return [
+                "success" => false,
+                "message" => "Unable to change the password with the supplied credentials.",
+            ];
+        }
+
+        if (hash_equals($current_password, $password)) {
+            $auth_security->audit(
+                "password_change_failed",
+                "denied",
+                $current_user_id,
+                "",
+                [
+                    "channel" => "operational_assignment",
+                    "reason" => "password_reuse",
+                ]
+            );
+            return [
+                "success" => false,
+                "message" => "The new password must be different from the current password.",
+            ];
+        }
+
+        $throttler->remove($throttle_key);
+    }
+
     $user_data = [
         "email" => $email,
         "first_name" => $first_name,
@@ -2489,7 +2955,12 @@ protected function resolve_operational_assignment_user(array $options = [], $cur
             return ["success" => false, "message" => app_lang("error_occurred")];
         }
 
-        return ["success" => true, "user_id" => $current_user_id, "existing_user" => false];
+        return [
+            "success" => true,
+            "user_id" => $current_user_id,
+            "existing_user" => false,
+            "own_password_changed" => $is_own_password_change,
+        ];
     }
 
     $user_data = array_merge($user_data, [
@@ -2565,8 +3036,30 @@ protected function save_operational_user_assignment($model, string $table, array
 
     $this->db->transComplete();
 
+    $own_password_changed = !empty($resolved["own_password_changed"]);
     if ($this->db->transStatus() === false || !$save_id) {
+        if ($own_password_changed) {
+            // Users_model advances the in-memory session version inside its
+            // nested transaction. If this surrounding transaction rolls back,
+            // discard that tentative value and fail closed; the user must sign
+            // in again with the still-current database version.
+            $this->session->remove("auth_session_version");
+        }
         return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
+    }
+
+    if ($own_password_changed) {
+        $this->session->regenerate(true);
+        $auth_security = new Auth_security_model();
+        $auth_security->audit(
+            "password_changed",
+            "success",
+            (int) $resolved["user_id"],
+            $auth_security->identity_hash(
+                (string) ($this->login_user->email ?? "")
+            ),
+            ["channel" => "operational_assignment"]
+        );
     }
 
     return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved")]);

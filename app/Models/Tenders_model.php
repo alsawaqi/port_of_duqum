@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
 use CodeIgniter\I18n\Time;
 
 class Tenders_model extends Crud_model
@@ -33,28 +34,11 @@ class Tenders_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("tenders");
-        $columns = [
-            "procurement_manager_action" => "ALTER TABLE `$table` ADD COLUMN `procurement_manager_action` VARCHAR(50) DEFAULT NULL AFTER `procurement_manager_status`",
-            "procurement_manager_payload" => "ALTER TABLE `$table` ADD COLUMN `procurement_manager_payload` LONGTEXT DEFAULT NULL AFTER `procurement_manager_comment`",
-        ];
-
-        foreach ($columns as $column => $sql) {
-            if (!$this->_column_exists($table, $column)) {
-                $this->db->query($sql);
-            }
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tenders" => ["procurement_manager_action", "procurement_manager_payload"],
+        ], "tender procurement-manager change handling");
 
         self::$procurement_manager_change_schema_checked = true;
-    }
-
-    private function _column_exists(string $table, string $column): bool
-    {
-        $row = $this->db->query(
-            "SHOW COLUMNS FROM `$table` LIKE " . $this->db->escape($column)
-        )->getRow();
-
-        return (bool) $row;
     }
 
     public function ensure_specific_vendor_target_schema(): void
@@ -63,26 +47,10 @@ class Tenders_model extends Crud_model
             return;
         }
 
-        $target = $this->db->prefixTable("tender_target_specialties");
-        $target_vendors = $this->db->prefixTable("tender_target_vendors");
-
-        if (!$this->_column_exists($target, "vendor_grade_id")) {
-            $this->db->query("ALTER TABLE `$target` ADD COLUMN `vendor_grade_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `vendor_group_id`");
-        }
-
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS `$target_vendors` (
-                `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                `tender_id` BIGINT(20) UNSIGNED NOT NULL,
-                `vendor_id` BIGINT(20) UNSIGNED NOT NULL,
-                `created_by` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `created_at` DATETIME DEFAULT NULL,
-                `deleted` INT(11) NOT NULL DEFAULT 0,
-                PRIMARY KEY (`id`),
-                KEY `idx_tender_target_vendors_tender` (`tender_id`, `deleted`),
-                KEY `idx_tender_target_vendors_vendor` (`vendor_id`, `deleted`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_target_specialties" => ["vendor_grade_id"],
+            "tender_target_vendors" => ["id", "tender_id", "vendor_id", "created_by", "created_at", "deleted"],
+        ], "specific-vendor tender targeting");
 
         self::$specific_vendor_target_schema_checked = true;
     }
@@ -93,27 +61,13 @@ class Tenders_model extends Crud_model
             return;
         }
 
-        $invites = $this->db->prefixTable("tender_invited_vendors");
-        if (!$this->_column_exists($invites, "invite_status")) {
-            self::$vendor_participation_approval_schema_checked = true;
-            return;
-        }
-
-        $column = $this->db->query(
-            "SHOW COLUMNS FROM `$invites` LIKE " . $this->db->escape("invite_status")
-        )->getRow();
-        $type = strtolower((string) ($column->Type ?? ""));
-
-        if (
-            strpos($type, "pending_approval") === false
-            || strpos($type, "approved") === false
-            || strpos($type, "rejected") === false
-        ) {
-            $this->db->query(
-                "ALTER TABLE `$invites`
-                 MODIFY COLUMN `invite_status` ENUM('sent','delivered','opened','declined','pending_approval','approved','rejected') NOT NULL DEFAULT 'sent'"
-            );
-        }
+        Runtime_schema_guard::requireColumnDefinitionContains(
+            $this->db,
+            "tender_invited_vendors",
+            "invite_status",
+            ["pending_approval", "approved", "rejected"],
+            "vendor tender participation approvals"
+        );
 
         self::$vendor_participation_approval_schema_checked = true;
     }
@@ -124,10 +78,9 @@ class Tenders_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("tenders");
-        if (!$this->_column_exists($table, "tender_fee")) {
-            $this->db->query("ALTER TABLE `$table` ADD COLUMN `tender_fee` DECIMAL(15,3) DEFAULT NULL AFTER `brief_description`");
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tenders" => ["tender_fee"],
+        ], "tender fees");
 
         self::$tender_fee_schema_checked = true;
     }
@@ -138,34 +91,16 @@ class Tenders_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("tenders");
-        $created_columns = false;
-        $columns = [
-            "evaluation_method" => "ALTER TABLE `$table` ADD COLUMN `evaluation_method` ENUM('separate','combined') NOT NULL DEFAULT 'separate' AFTER `tender_type`",
-            "technical_weight" => "ALTER TABLE `$table` ADD COLUMN `technical_weight` TINYINT(3) UNSIGNED NOT NULL DEFAULT 70 AFTER `evaluation_method`",
-            "commercial_weight" => "ALTER TABLE `$table` ADD COLUMN `commercial_weight` TINYINT(3) UNSIGNED NOT NULL DEFAULT 30 AFTER `technical_weight`",
-        ];
-
-        foreach ($columns as $column => $sql) {
-            if (!$this->_column_exists($table, $column)) {
-                $this->db->query($sql);
-                $created_columns = true;
-            }
-        }
-
-        if ($created_columns) {
-            $requests = $this->db->prefixTable("tender_requests");
-            $this->db->query(
-                "UPDATE `$table` t
-                 INNER JOIN `$requests` req
-                    ON req.id = t.tender_request_id
-                   AND req.deleted = 0
-                 SET t.evaluation_method = COALESCE(req.evaluation_method, t.evaluation_method),
-                     t.technical_weight = COALESCE(req.technical_weight, t.technical_weight),
-                     t.commercial_weight = COALESCE(req.commercial_weight, t.commercial_weight)
-                 WHERE t.deleted = 0"
-            );
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tenders" => ["evaluation_method", "technical_weight", "commercial_weight"],
+        ], "weighted tender evaluation");
+        Runtime_schema_guard::requireColumnDefinitionContains(
+            $this->db,
+            "tenders",
+            "evaluation_method",
+            ["separate", "combined"],
+            "weighted tender evaluation"
+        );
 
         self::$tender_evaluation_weight_schema_checked = true;
     }
@@ -176,26 +111,12 @@ class Tenders_model extends Crud_model
             return;
         }
 
-        $fee_payments = $this->db->prefixTable("tender_fee_payments");
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS `$fee_payments` (
-                `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                `tender_id` BIGINT(20) UNSIGNED NOT NULL,
-                `vendor_id` BIGINT(20) UNSIGNED NOT NULL,
-                `amount` DECIMAL(15,3) NOT NULL DEFAULT 0.000,
-                `currency` VARCHAR(10) NOT NULL DEFAULT 'OMR',
-                `status` VARCHAR(50) NOT NULL DEFAULT 'paid',
-                `payment_reference` VARCHAR(100) DEFAULT NULL,
-                `paid_at` DATETIME DEFAULT NULL,
-                `created_by` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `created_at` DATETIME DEFAULT NULL,
-                `updated_at` DATETIME DEFAULT NULL,
-                `deleted` INT(11) NOT NULL DEFAULT 0,
-                PRIMARY KEY (`id`),
-                KEY `idx_tender_fee_payments_tender_vendor` (`tender_id`, `vendor_id`, `deleted`),
-                KEY `idx_tender_fee_payments_status` (`status`, `deleted`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_fee_payments" => [
+                "id", "tender_id", "vendor_id", "amount", "currency", "status",
+                "payment_reference", "paid_at", "created_by", "created_at", "updated_at", "deleted",
+            ],
+        ], "tender fee payments");
 
         self::$tender_fee_payments_schema_checked = true;
     }
@@ -221,28 +142,12 @@ class Tenders_model extends Crud_model
 
     private function ensure_workflow_history_table(): void
     {
-        $table = $this->db->prefixTable("tender_workflow_history");
-
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS `$table` (
-                `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                `tender_id` bigint(20) UNSIGNED NOT NULL,
-                `action_type` varchar(50) NOT NULL DEFAULT 'stage_override',
-                `from_status` varchar(50) DEFAULT NULL,
-                `to_status` varchar(50) DEFAULT NULL,
-                `from_stage` varchar(50) DEFAULT NULL,
-                `to_stage` varchar(50) DEFAULT NULL,
-                `open_until` datetime DEFAULT NULL,
-                `reason` text DEFAULT NULL,
-                `details` text DEFAULT NULL,
-                `created_by` bigint(20) UNSIGNED DEFAULT NULL,
-                `created_at` datetime DEFAULT NULL,
-                `deleted` tinyint(1) NOT NULL DEFAULT 0,
-                PRIMARY KEY (`id`),
-                KEY `idx_tender_workflow_history_tender` (`tender_id`),
-                KEY `idx_tender_workflow_history_action` (`action_type`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_workflow_history" => [
+                "id", "tender_id", "action_type", "from_status", "to_status", "from_stage",
+                "to_stage", "open_until", "reason", "details", "created_by", "created_at", "deleted",
+            ],
+        ], "tender workflow history");
     }
 
     private function record_auto_workflow_history(string $source_sql, array $source_params, ?string $to_status, ?string $to_stage, string $details, string $now): void
@@ -276,13 +181,30 @@ class Tenders_model extends Crud_model
         );
     }
 
-    public function auto_close_expired_tenders(): int
+    public function auto_progress_workflow(bool $scheduledInvocation = false): int
     {
-        return $this->auto_progress_workflow();
-    }
+        // Fail closed if application code accidentally invokes this mutation
+        // while rendering or handling a user request. The authenticated cron
+        // controller is the sole production caller that opts in explicitly.
+        if (!$scheduledInvocation) {
+            return 0;
+        }
 
-    public function auto_progress_workflow(): int
-    {
+        $driver = strtolower((string) ($this->db->DBDriver ?? ''));
+        $usesMysqlLock = in_array($driver, ['mysqli', 'mysql'], true);
+        $lockName = 'podc_tender_auto_' . substr(hash('sha256', (string) $this->db->database), 0, 32);
+        if ($usesMysqlLock) {
+            $lock = $this->db->query('SELECT GET_LOCK(?, 0) AS acquired', [$lockName])->getRow();
+            if ((int) ($lock->acquired ?? 0) !== 1) {
+                return 0;
+            }
+        }
+
+        $transactionActive = false;
+        try {
+            $this->db->transBegin();
+            $transactionActive = true;
+
         $t = $this->db->prefixTable("tenders");
         $tb = $this->db->prefixTable("tender_bids");
         $tbo = $this->db->prefixTable("tender_bid_openings");
@@ -450,7 +372,25 @@ class Tenders_model extends Crud_model
         );
         $affected += max(0, (int) $this->db->affectedRows());
 
-        return $affected;
+            if ($this->db->transStatus() === false || !$this->db->transCommit()) {
+                throw new \RuntimeException('Tender workflow progression transaction failed.');
+            }
+            $transactionActive = false;
+
+            return $affected;
+        } catch (\Throwable $exception) {
+            if ($transactionActive) {
+                $this->db->transRollback();
+            }
+            log_message('error', 'Tender workflow auto-progression failed: {exception}', [
+                'exception' => $exception,
+            ]);
+            return 0;
+        } finally {
+            if ($usesMysqlLock) {
+                $this->db->query('SELECT RELEASE_LOCK(?)', [$lockName]);
+            }
+        }
     }
 
     public function start_technical_review_after_opening(int $tender_id, int $actor_id, ?string $technical_end_at = null): bool
@@ -515,8 +455,6 @@ class Tenders_model extends Crud_model
 
     public function get_by_request_id(int $tender_request_id)
     {
-        $this->auto_progress_workflow();
-
         $t = $this->db->prefixTable("tenders");
 
         $sql = "SELECT * FROM $t
@@ -528,8 +466,6 @@ class Tenders_model extends Crud_model
 
     public function get_vendor_visible_tenders(int $vendor_id)
     {
-        $this->auto_progress_workflow();
-
         $now = $this->get_tender_business_now();
         $t = $this->db->prefixTable("tenders");
         $tiv = $this->db->prefixTable("tender_invited_vendors");
@@ -605,7 +541,14 @@ class Tenders_model extends Crud_model
                                         OR source_check.vendor_sub_category_id = target.vendor_sub_category_id
                                   )
                              ) THEN 'specialty'
-                        WHEN target.id IS NULL AND $t.tender_type = 'open' THEN 'open'
+                        WHEN target.id IS NULL
+                             AND NOT EXISTS (
+                                SELECT 1
+                                FROM $ttv any_target_vendor
+                                WHERE any_target_vendor.tender_id = $t.id
+                                  AND any_target_vendor.deleted = 0
+                             )
+                             AND $t.tender_type = 'open' THEN 'open'
                         ELSE 'eligible'
                     END AS eligibility_source
                 FROM $t
@@ -667,6 +610,12 @@ class Tenders_model extends Crud_model
                                 (
                                     (
                                         target.id IS NULL
+                                        AND NOT EXISTS (
+                                            SELECT 1
+                                            FROM $ttv any_target_vendor
+                                            WHERE any_target_vendor.tender_id = $t.id
+                                              AND any_target_vendor.deleted = 0
+                                        )
                                         AND $t.tender_type = 'open'
                                     )
                                     OR (
@@ -711,8 +660,6 @@ class Tenders_model extends Crud_model
     }
     public function get_vendor_visible_tender(int $tender_id, int $vendor_id)
     {
-        $this->auto_progress_workflow();
-
         $now = $this->get_tender_business_now();
         $t = $this->db->prefixTable("tenders");
         $tiv = $this->db->prefixTable("tender_invited_vendors");
@@ -788,7 +735,14 @@ class Tenders_model extends Crud_model
                                         OR source_check.vendor_sub_category_id = target.vendor_sub_category_id
                                   )
                              ) THEN 'specialty'
-                        WHEN target.id IS NULL AND $t.tender_type = 'open' THEN 'open'
+                        WHEN target.id IS NULL
+                             AND NOT EXISTS (
+                                SELECT 1
+                                FROM $ttv any_target_vendor
+                                WHERE any_target_vendor.tender_id = $t.id
+                                  AND any_target_vendor.deleted = 0
+                             )
+                             AND $t.tender_type = 'open' THEN 'open'
                         ELSE 'eligible'
                     END AS eligibility_source
                 FROM $t
@@ -851,6 +805,12 @@ class Tenders_model extends Crud_model
                                 (
                                     (
                                         target.id IS NULL
+                                        AND NOT EXISTS (
+                                            SELECT 1
+                                            FROM $ttv any_target_vendor
+                                            WHERE any_target_vendor.tender_id = $t.id
+                                              AND any_target_vendor.deleted = 0
+                                        )
                                         AND $t.tender_type = 'open'
                                     )
                                     OR (
@@ -898,8 +858,6 @@ class Tenders_model extends Crud_model
 
     public function is_vendor_submission_open($tender): bool
     {
-        $this->auto_progress_workflow();
-
         if (!$tender) {
             return false;
         }

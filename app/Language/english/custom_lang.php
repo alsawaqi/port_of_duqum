@@ -198,6 +198,8 @@ $lang["add_vendor_document_type"] = "Add Vendor Document Type";
 $lang["ptw_master"] = "PTW Master";
 $lang["ptw_hsse_users"] = "PTW HSSE Users";
 $lang["add_ptw_hsse_user"] = "Add PTW HSSE User";
+$lang["ptw_applicant_users"] = "PTW Applicant Users";
+$lang["add_ptw_applicant_user"] = "Add PTW Applicant User";
 $lang["ptw_hsse_inbox"] = "PTW HSSE Inbox";
 $lang["ptw_application_details"] = "PTW Application Details";
 $lang["hsse_review_history"] = "HSSE Review History";
@@ -692,7 +694,8 @@ $lang["login_user"] = "Login User";
 $lang["vendor_login_user_help"] = "Portal login details for the vendor account owner";
 $lang["toggle_password_visibility"] = "Toggle password visibility";
 $lang["password_security_hint"] = "Use a strong password for better security.";
-$lang["vendor_password_reuse_hint"] = "New users must enter a password. Existing gate pass or portal users can leave this blank and keep their current password.";
+$lang["vendor_password_reuse_hint"] = "Enter a password. For an existing account, enter its current password to prove ownership; for a new email, this creates the account password.";
+$lang["vendor_admin_password_reuse_hint"] = "Leave blank when reusing an existing staff email. A password is required only when creating a new account.";
 $lang["vendor_email_belongs_to_non_staff_user"] = "This email belongs to a client or non-staff account and cannot be used for vendor portal access.";
 $lang["user_already_registered_as_vendor"] = "This user is already linked to a vendor account.";
 $lang["guest_vendor_documents_help"] = "Upload the required registration documents. You can add more documents after the account is created.";
@@ -727,6 +730,7 @@ $lang["vendor_unblocked_successfully"] = "Vendor unblocked successfully.";
 $lang["vendor_is_not_blocked"] = "This vendor is not blocked.";
 $lang["record_not_found"] = "Record not found.";
 $lang["sort"] = "Sort";
+$lang["password_not_sent_by_email"] = "Not sent by email. Use the password you chose, or use Forgot password to create a new one.";
 
 
 return $lang;

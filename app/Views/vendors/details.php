@@ -133,6 +133,14 @@
                 {
                     title: "<?php echo app_lang('active'); ?>",
                     class: "text-center w10p"
+                },
+                {
+                    title: "Portal access",
+                    class: "text-center"
+                },
+                {
+                    title: "<i data-feather='menu' class='icon-16'></i>",
+                    class: "text-center option w100"
                 }
             ]
         });

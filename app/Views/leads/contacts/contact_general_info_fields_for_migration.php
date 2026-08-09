@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <input type="hidden" name="contact_id[]" value="<?php echo $model_info->id; ?>" />
 <div class="form-group">
     <div class="row">
@@ -166,11 +167,18 @@ if (!get_setting("disable_client_login")) {
                         "name" => "login_password-$model_info->id",
                         "class" => "form-control",
                         "placeholder" => app_lang('password'),
+                        "autocomplete" => "new-password",
+                        "data-rule-minlength" => $passwordPolicy->passwordMinLength,
+                        "data-rule-maxlength" => $passwordPolicy->passwordMaxLength,
                         "style" => "z-index:auto;"
                     ));
                     ?>
                     <label for="password-<?php echo $model_info->id; ?>" class="input-group-text mb0 clickable" id="generate_password-<?php echo $model_info->id; ?>"><span data-feather="key" class="icon-16"></span> <?php echo app_lang('generate'); ?></label>
                 </div>
+                <small class="text-muted">
+                    Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                    characters with uppercase, lowercase, number, and special character.
+                </small>
             </div>
             <div class="col-md-1 p0">
                 <a href="#" id="show_hide_password-<?php echo $model_info->id; ?>" class="btn btn-default" title="<?php echo app_lang('show_text'); ?>"><span data-feather="eye" class="icon-16"></span></a>
@@ -219,7 +227,7 @@ if (!get_setting("disable_client_login")) {
 <script type="text/javascript">
     $(document).ready(function() {
         $("#generate_password-<?php echo $model_info->id; ?>").click(function() {
-            $("#login_password-<?php echo $model_info->id; ?>").val(getRndomString(8));
+            $("#login_password-<?php echo $model_info->id; ?>").val(getRndomString(12) + "aA1!");
             $('#login_password-<?php echo $model_info->id; ?>').trigger('change');
         });
         $("#show_hide_password-<?php echo $model_info->id; ?>").click(function() {

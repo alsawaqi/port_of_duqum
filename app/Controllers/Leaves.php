@@ -134,7 +134,7 @@ class Leaves extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "leave");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         if ($duration === "multiple_days") {
 
@@ -510,7 +510,7 @@ class Leaves extends Security_Controller {
         if ($id) {
             validate_numeric_value($id);
             $leave_info = $this->Leave_applications_model->get_one($id);
-            $files = unserialize($leave_info->files);
+            $files = safe_unserialize($leave_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

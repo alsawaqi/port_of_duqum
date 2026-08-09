@@ -15,6 +15,9 @@ use App\Models\Gate_passes_model;
 use App\Models\Gate_pass_scan_log_model;
 use App\Models\Gate_pass_blocked_visitors_model;
 use App\Libraries\Pdf;
+use App\Libraries\Payments\Eservice_payment_manager;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 class Gate_pass_portal extends Security_Controller
 {
@@ -476,6 +479,7 @@ $view_data["currency_dropdown"] = $currency_dropdown;
      */
     function export_my_requests_csv()
     {
+        helper('csv_security');
         $list = $this->Gate_pass_requests_model->get_details([
             "requester_id" => (int)$this->login_user->id,
         ])->getResult();
@@ -485,9 +489,9 @@ $view_data["currency_dropdown"] = $currency_dropdown;
         $this->response->setHeader("Content-Disposition", "attachment; filename=\"" . $filename . "\"");
 
         $fh = fopen("php://temp", "r+");
-        fputcsv($fh, ["reference", "created_at", "company", "department", "purpose", "status", "stage", "visit_from", "visit_to", "fee_amount", "currency"]);
+        fputcsv($fh, csv_safe_row(["reference", "created_at", "company", "department", "purpose", "status", "stage", "visit_from", "visit_to", "fee_amount", "currency"]));
         foreach ($list as $r) {
-            fputcsv($fh, [
+            fputcsv($fh, csv_safe_row([
                 $r->reference ?? "",
                 gate_pass_request_created_at_pick($r) ?? "",
                 $r->company_name ?? "",
@@ -499,7 +503,7 @@ $view_data["currency_dropdown"] = $currency_dropdown;
                 $r->visit_to ?? "",
                 (string)($r->fee_amount ?? ""),
                 (string)($r->currency ?? ""),
-            ]);
+            ]));
         }
         rewind($fh);
         $body = stream_get_contents($fh);
@@ -882,8 +886,8 @@ function calc_fee_preview()
         $relPath = $visitor->{$field};
         $relPath = preg_replace("#\.\.+#", "", (string)$relPath);
         $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
+        $fullPath = $this->_resolve_gate_upload_path($relPath, 'gate_pass_visitors');
+        if (!$fullPath) {
             show_404();
         }
 
@@ -920,8 +924,8 @@ function calc_fee_preview()
         }
         $relPath = preg_replace("#\.\.+#", "", (string)$relPath);
         $relPath = ltrim($relPath, "/");
-        $fullPath = WRITEPATH . "uploads/" . $relPath;
-        if (!is_file($fullPath)) {
+        $fullPath = $this->_resolve_gate_upload_path($relPath, 'gate_pass_vehicles');
+        if (!$fullPath) {
             show_404();
         }
 
@@ -939,6 +943,23 @@ function calc_fee_preview()
             ->setHeader("Content-Type", $mime)
             ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
             ->setBody(file_get_contents($fullPath));
+    }
+
+    private function _resolve_gate_upload_path(string $relative, string $prefix): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        $prefix = trim($prefix, '/') . '/';
+        if (!str_starts_with($relative, $prefix)) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/' . rtrim($prefix, '/'));
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $root = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+        return str_starts_with($candidateCheck, $root) ? $candidate : null;
     }
 
     /**
@@ -1002,6 +1023,9 @@ function calc_fee_preview()
 
         $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
         if (!$request || $request->deleted) {
+            return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
+        }
+        if (!$this->_can_view_request_details($request)) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
         }
         if (!$this->_gate_pass_request_is_issued($request)) {
@@ -1492,10 +1516,7 @@ HTML;
         echo json_encode(["success" => true, "message" => app_lang("record_saved"), "id" => $request_id]);
     }
 
-    /**
-     * Placeholder for payment: marks request as commercial_approved.
-     * To be replaced by payment gateway integration.
-     */
+    /** Begin a fail-closed hosted checkout; only the signed webhook settles it. */
     function save_payment()
     {
         $this->validate_submitted_data([
@@ -1530,24 +1551,22 @@ HTML;
             return;
         }
 
-        $update = ["status" => "commercial_approved", "stage" => "security"];
-        $this->Gate_pass_requests_model->ci_save($update, $request_id);
+        $return_url = get_uri("gate_pass_portal/request_details/" . $request_id);
+        $payments = new Eservice_payment_manager($this->db);
+        $result = $payments->start(
+            Eservice_payment_manager::GATE_PASS_FEE,
+            $request_id,
+            null,
+            (int)$this->login_user->id,
+            (string)$request->fee_amount,
+            "Gate pass fee " . ((string)($request->reference ?? "#" . $request_id)),
+            $return_url . "?payment=processing&session_id={CHECKOUT_SESSION_ID}",
+            $return_url . "?payment=cancelled"
+        );
+        $status_code = (int)($result["status_code"] ?? 500);
+        unset($result["status_code"]);
 
-        $approval_data = [
-            "gate_pass_request_id" => $request_id,
-            "stage" => "commercial",
-            "decision" => "approved",
-            "comment" => "Payment recorded (portal).",
-            "decided_by" => $this->login_user->id,
-            "decided_at" => get_current_utc_time(),
-            "ip_address" => $this->request->getIPAddress(),
-            "user_agent" => substr($this->request->getUserAgent()->getAgentString(), 0, 500),
-        ];
-        $this->Gate_pass_request_approvals_model->ci_save(gate_pass_clean_approval_data_for_save($approval_data));
-
-        gate_pass_audit_log((int)$this->login_user->id, $request_id, "payment_recorded", app_lang("gate_pass_audit_detail_payment_recorded"));
-
-        echo json_encode(["success" => true, "message" => app_lang("payment_recorded"), "id" => $request_id]);
+        return $this->response->setStatusCode($status_code)->setJSON($result);
     }
 
     // ---------- Visitors under request ----------
@@ -1559,6 +1578,9 @@ HTML;
         if (!$request || $request->deleted) {
             echo json_encode(["data" => []]);
             return;
+        }
+        if (!$this->_can_view_request_details($request)) {
+            return $this->response->setStatusCode(403)->setJSON(["data" => []]);
         }
 
         $is_owner = (int)$request->requester_id === (int)$this->login_user->id;
@@ -1578,7 +1600,39 @@ HTML;
 
     function check_blocked_visitor()
     {
-        $id_number = trim((string) ($this->request->getGet("id_number") ?: $this->request->getPost("id_number")));
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON(["blocked" => false, "message" => app_lang("forbidden")]);
+        }
+
+        $requestId = (int) $this->request->getPost("gate_pass_request_id");
+        $request = $this->Gate_pass_requests_model->get_details(["id" => $requestId])->getRow();
+        if (!$request
+            || (int) $request->requester_id !== (int) $this->login_user->id
+            || !gate_pass_requester_can_edit_request($request)
+        ) {
+            return $this->response->setStatusCode(403)->setJSON([
+                "blocked" => false,
+                "message" => app_lang("forbidden"),
+            ]);
+        }
+
+        $throttler = service("throttler");
+        $ipHash = hash("sha256", (string) $this->request->getIPAddress());
+        $throttleKey = "gate_pass_block_lookup_" . (int) $this->login_user->id . "_" . $ipHash;
+        if (!$throttler->check($throttleKey, 20, 60)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader("Retry-After", (string) max(1, $throttler->getTokenTime()))
+                ->setJSON(["blocked" => false, "message" => "Too many lookup attempts."]);
+        }
+
+        $id_number = trim((string) $this->request->getPost("id_number"));
+        if ($id_number === "" || mb_strlen($id_number) > 100) {
+            return $this->response->setStatusCode(422)->setJSON(["blocked" => false]);
+        }
         $blocked = $this->Gate_pass_blocked_visitors_model->find_active_by_id_number($id_number);
 
         if (!$blocked) {
@@ -1619,7 +1673,13 @@ HTML;
             ]);
         }
 
-        $model_info = $id ? $this->Gate_pass_request_visitors_model->get_details(["id" => $id])->getRow() : null;
+        $model_info = $id ? $this->Gate_pass_request_visitors_model->get_details([
+            "id" => $id,
+            "gate_pass_request_id" => $request_id,
+        ])->getRow() : null;
+        if ($id && !$model_info) {
+            app_redirect("forbidden");
+        }
 
         $view_data["model_info"] = $model_info;
         $view_data["gate_pass_request_id"] = $request_id;
@@ -1653,7 +1713,16 @@ HTML;
             return;
         }
 
-        $existing = $id ? $this->Gate_pass_request_visitors_model->get_details(["id" => $id])->getRow() : null;
+        $existing = $id ? $this->Gate_pass_request_visitors_model->get_details([
+            "id" => $id,
+            "gate_pass_request_id" => $request_id,
+        ])->getRow() : null;
+        if ($id && !$existing) {
+            return $this->response->setStatusCode(403)->setJSON([
+                "success" => false,
+                "message" => app_lang("forbidden"),
+            ]);
+        }
 
         $nationality = trim((string) $this->request->getPost("nationality"));
         $phone = trim((string) $this->request->getPost("phone"));
@@ -1722,9 +1791,6 @@ HTML;
 
         $upload_dir_rel = "gate_pass_visitors/request_" . $request_id . "/";
         $upload_dir = WRITEPATH . "uploads/" . $upload_dir_rel;
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $attachment_fields = [
             "id_attachment_path",
@@ -1732,15 +1798,37 @@ HTML;
             "photo_attachment_path",
             "driving_license_attachment_path"
         ];
-        foreach ($attachment_fields as $field) {
-            $file = $this->request->getFile($field);
-            if ($file && $file->isValid() && !$file->hasMoved()) {
-                $new_name = $field . "_" . uniqid("", true) . "." . $file->getExtension();
-                $file->move($upload_dir, $new_name);
-                $data[$field] = $upload_dir_rel . $new_name;
-            } elseif ($existing && !empty($existing->{$field})) {
-                $data[$field] = $existing->{$field};
+        try {
+            $uploadSecurity = new Upload_security();
+            foreach ($attachment_fields as $fieldToValidate) {
+                $fileToValidate = $this->request->getFile($fieldToValidate);
+                if ($fileToValidate && $fileToValidate->isValid() && !$fileToValidate->hasMoved()) {
+                    $uploadSecurity->validateUploadedFile(
+                        $fileToValidate,
+                        Upload_security::CONTEXT_SECURITY_DOCUMENT
+                    );
+                }
             }
+            foreach ($attachment_fields as $field) {
+                $file = $this->request->getFile($field);
+                if ($file && $file->isValid() && !$file->hasMoved()) {
+                    $stored = $uploadSecurity->storeUploadedFile(
+                        $file,
+                        $upload_dir,
+                        Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                        $field . '_'
+                    );
+                    $data[$field] = $upload_dir_rel . $stored['stored_name'];
+                } elseif ($existing && !empty($existing->{$field})) {
+                    $data[$field] = $existing->{$field};
+                }
+            }
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Gate-pass visitor attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
         }
 
         $idPath = trim((string) ($data["id_attachment_path"] ?? ""));
@@ -1956,6 +2044,9 @@ HTML;
         if (!$request || $request->deleted) {
             return $this->response->setJSON(["data" => []]);
         }
+        if (!$this->_can_view_request_details($request)) {
+            return $this->response->setStatusCode(403)->setJSON(["data" => []]);
+        }
 
         $is_owner = (int)$request->requester_id === (int)$this->login_user->id;
         $reqType = strtolower(trim((string)($request->request_type ?? "both")));
@@ -2008,7 +2099,13 @@ HTML;
             ]);
         }
 
-        $model_info = $id ? $this->Gate_pass_request_vehicles_model->get_details(["id" => $id])->getRow() : null;
+        $model_info = $id ? $this->Gate_pass_request_vehicles_model->get_details([
+            "id" => $id,
+            "gate_pass_request_id" => $request_id,
+        ])->getRow() : null;
+        if ($id && !$model_info) {
+            app_redirect("forbidden");
+        }
 
         $view_data["model_info"] = $model_info;
         $view_data["gate_pass_request_id"] = $request_id;
@@ -2056,7 +2153,16 @@ HTML;
             return;
         }
 
-        $existing = $id ? $this->Gate_pass_request_vehicles_model->get_details(["id" => $id])->getRow() : null;
+        $existing = $id ? $this->Gate_pass_request_vehicles_model->get_details([
+            "id" => $id,
+            "gate_pass_request_id" => $request_id,
+        ])->getRow() : null;
+        if ($id && !$existing) {
+            return $this->response->setStatusCode(403)->setJSON([
+                "success" => false,
+                "message" => app_lang("forbidden"),
+            ]);
+        }
 
         $data = array_merge([
             "gate_pass_request_id" => $request_id,
@@ -2067,14 +2173,23 @@ HTML;
 
         $upload_dir_rel = "gate_pass_vehicles/request_" . $request_id . "/";
         $upload_dir = WRITEPATH . "uploads/" . $upload_dir_rel;
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
         $mulFile = $this->request->getFile("mulkiyah_attachment_path");
         if ($mulFile && $mulFile->isValid() && !$mulFile->hasMoved()) {
-            $new_name = "mulkiyah_" . uniqid("", true) . "." . $mulFile->getExtension();
-            $mulFile->move($upload_dir, $new_name);
-            $data["mulkiyah_attachment_path"] = $upload_dir_rel . $new_name;
+            try {
+                $stored = (new Upload_security())->storeUploadedFile(
+                    $mulFile,
+                    $upload_dir,
+                    Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                    'mulkiyah_'
+                );
+            } catch (UploadSecurityException $e) {
+                log_message('notice', 'Gate-pass vehicle attachment rejected.');
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => app_lang('invalid_file_type'),
+                ]);
+            }
+            $data["mulkiyah_attachment_path"] = $upload_dir_rel . $stored['stored_name'];
         } elseif ($existing && !empty($existing->mulkiyah_attachment_path)) {
             $data["mulkiyah_attachment_path"] = $existing->mulkiyah_attachment_path;
         }

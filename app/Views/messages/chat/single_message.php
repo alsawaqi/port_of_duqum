@@ -1,5 +1,5 @@
 <?php
-$files = unserialize($reply_info->files);
+$files = safe_unserialize($reply_info->files);
 $total_files = count($files);
 
 $download_caption = "";

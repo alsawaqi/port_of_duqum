@@ -32,18 +32,12 @@ $doc_link = static function ($doc_id, $label) {
     );
 };
 
-$signature_src = static function ($path) {
-    $path = trim((string) $path);
-    if ($path === "") {
+$signature_src = static function ($signature) {
+    $entry_id = (int) ($signature->id ?? 0);
+    if (!$entry_id || empty($signature->signature_image_path)) {
         return "";
     }
-
-    $full_path = WRITEPATH . "uploads/" . ltrim($path, "/");
-    if (!is_file($full_path)) {
-        return "";
-    }
-
-    return "data:image/png;base64," . base64_encode(file_get_contents($full_path));
+    return get_uri("tender_committee_opening_inbox/signature_image/" . $entry_id);
 };
 
 $role_label = static function ($role) {
@@ -184,7 +178,7 @@ foreach ($bid_summary as $bid) {
                                     break;
                                 }
                             }
-                            $image_src = $signed_row ? $signature_src($signed_row->signature_image_path ?? "") : "";
+                            $image_src = $signed_row ? $signature_src($signed_row) : "";
                             ?>
                             <div class="opening-signature-item">
                                 <div>

@@ -1,6 +1,8 @@
 <?php
 
 use App\Libraries\Google;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 /**
  * get a human readable file size format from bytes 
@@ -189,9 +191,171 @@ if (!function_exists('is_viewable_video_file')) {
  * @param file $_FILES
  * @return void
  */
+if (!function_exists('secure_upload_configured_extensions')) {
+
+    function secure_upload_configured_extensions(string $context): ?array {
+        if ($context !== Upload_security::CONTEXT_GENERIC) {
+            return null;
+        }
+
+        $configured = array_filter(array_map(
+            'trim',
+            explode(',', strtolower((string)get_setting(accepted_file_formats)))
+        ));
+
+        return $configured ?: null;
+    }
+}
+
+if (!function_exists('secure_upload_context_token')) {
+
+    function secure_upload_context_token(string $context, int $ttl = 900): string {
+        $session = service('session');
+        $secret = (string)$session->get('secure_upload_context_secret');
+        if ($secret === '') {
+            $secret = bin2hex(random_bytes(32));
+            $session->set('secure_upload_context_secret', $secret);
+        }
+
+        $payload = base64_encode(json_encode([
+            context => $context,
+            user_id => (int)$session->get(user_id),
+            expires => time() + max(60, min($ttl, 3600)),
+            nonce => bin2hex(random_bytes(12)),
+        ], JSON_UNESCAPED_SLASHES));
+
+        return rtrim(strtr($payload, '+/', '-_'), '=')
+            . '.' . hash_hmac('sha256', $payload, $secret);
+    }
+}
+
+if (!function_exists('verify_secure_upload_context_token')) {
+
+    function verify_secure_upload_context_token(string $token, string $context): bool {
+        $parts = explode('.', $token, 2);
+        if (count($parts) !== 2) {
+            return false;
+        }
+
+        $session = service('session');
+        $secret = (string)$session->get('secure_upload_context_secret');
+        $encoded = strtr($parts[0], '-_', '+/');
+        $encoded .= str_repeat('=', (4 - strlen($encoded) % 4) % 4);
+        $payload = base64_decode($encoded, true);
+        $data = $payload === false ? null : json_decode($payload, true);
+
+        return $secret !== ''
+            && is_array($data)
+            && hash_equals(hash_hmac('sha256', (string)$payload, $secret), $parts[1])
+            && ($data['context'] ?? '') === $context
+            && (int)($data['user_id'] ?? 0) === (int)$session->get('user_id')
+            && (int)($data['expires'] ?? 0) >= time();
+    }
+}
+
+if (!function_exists('register_secure_temp_upload')) {
+
+    function register_secure_temp_upload(string $originalName, array $metadata, string $context): void {
+        $session = service('session');
+        $secret = (string)$session->get('secure_upload_context_secret');
+        if ($secret === '') {
+            secure_upload_context_token($context);
+            $secret = (string)$session->get('secure_upload_context_secret');
+        }
+
+        $entry = [
+            original_name => $originalName,
+            path => (string)($metadata['path'] ?? ''),
+            context => $context,
+            size_bytes => (int)($metadata['size_bytes'] ?? 0),
+            expires => time() + 1800,
+        ];
+        $entry['signature'] = hash_hmac('sha256', json_encode($entry), $secret);
+        $uploads = (array)$session->get('secure_temp_uploads');
+        $uploads[hash('sha256', $originalName)] = $entry;
+        $session->set('secure_temp_uploads', $uploads);
+    }
+}
+
+if (!function_exists('resolve_secure_temp_upload')) {
+
+    function resolve_secure_temp_upload(string $originalName): ?array {
+        $session = service('session');
+        $uploads = (array)$session->get('secure_temp_uploads');
+        $entry = $uploads[hash('sha256', $originalName)] ?? null;
+        $secret = (string)$session->get('secure_upload_context_secret');
+        if (!is_array($entry) || $secret === '') {
+            return null;
+        }
+
+        $signature = (string)($entry['signature'] ?? '');
+        unset($entry['signature']);
+        $path = (string)($entry['path'] ?? '');
+        $writeRoot = realpath(WRITEPATH);
+        $resolved = $path !== '' ? realpath($path) : false;
+        $insideWritable = $writeRoot !== false && $resolved !== false
+            && str_starts_with(
+                strtolower(str_replace('\\', '/', $resolved)),
+                strtolower(rtrim(str_replace('\\', '/', $writeRoot), '/') . '/')
+            );
+
+        if (!hash_equals(hash_hmac('sha256', json_encode($entry), $secret), $signature)
+            || (int)($entry['expires'] ?? 0) < time()
+            || ($entry['original_name'] ?? '') !== $originalName
+            || !$insideWritable
+            || !is_file($resolved)
+        ) {
+            return null;
+        }
+
+        $entry['path'] = $resolved;
+        return $entry;
+    }
+}
+
+if (!function_exists('forget_secure_temp_upload')) {
+
+    function forget_secure_temp_upload(string $originalName): void {
+        $session = service('session');
+        $uploads = (array)$session->get('secure_temp_uploads');
+        unset($uploads[hash('sha256', $originalName)]);
+        $session->set('secure_temp_uploads', $uploads);
+    }
+}
+
 if (!function_exists('upload_file_to_temp')) {
 
-    function upload_file_to_temp($upload_to_local = false) {
+    function upload_file_to_temp($upload_to_local = false, string $context = Upload_security::CONTEXT_GENERIC) {
+        $session = service('session');
+        $userId = (int)$session->get('user_id');
+        if ($userId < 1) {
+            throw new UploadSecurityException('Authentication is required for this upload.');
+        }
+
+        $file = service('request')->getFile('file');
+        if (!$file) {
+            throw new UploadSecurityException('No upload was received.');
+        }
+
+        // New temporary objects remain beneath writable. Remote storage is
+        // handled later by move_temp_file from this protected local source.
+        $security = new Upload_security();
+        $metadata = $security->storeUploadedFile(
+            $file,
+            WRITEPATH . 'uploads/secure_temp/user_' . $userId,
+            $context,
+            'tmp_',
+            secure_upload_configured_extensions($context)
+        );
+        register_secure_temp_upload($metadata['original_name'], $metadata, $context);
+
+        return [
+            'file_name' => $metadata['original_name'],
+            'size_bytes' => $metadata['size_bytes'],
+            'detected_mime' => $metadata['detected_mime'],
+        ];
+
+        /* Retained only as unreachable migration history.
         if (!empty($_FILES)) {
             $file = get_array_value($_FILES, "file");
 
@@ -233,6 +397,7 @@ if (!function_exists('upload_file_to_temp')) {
                 copy($temp_file, $target_file);
             }
         }
+        */
     }
 }
 
@@ -250,13 +415,62 @@ if (!function_exists('upload_file_to_temp')) {
  */
 if (!function_exists('move_temp_file')) {
 
-    function move_temp_file($file_name, $target_path, $related_to = "", $source_path = NULL, $static_file_name = "", $file_content = "", $direct_upload = false, $file_size = 0, $upload_to_local = false) {
+    function move_temp_file($file_name, $target_path, $related_to = "", $source_path = NULL, $static_file_name = "", $file_content = "", $direct_upload = false, $file_size = 0, $upload_to_local = false, ?string $security_context = null) {
         //to make the file name unique we'll add a prefix
-        $filename_prefix = $related_to . "_" . uniqid("file") . "-";
+        $safeRelatedTo = preg_replace('/[^a-z0-9_-]+/i', '', (string)$related_to);
+        $filename_prefix = $safeRelatedTo . '_file' . bin2hex(random_bytes(16)) . '-';
+        $securityContext = $security_context ?: ($related_to === 'pasted_image'
+            ? Upload_security::CONTEXT_IMAGE
+            : Upload_security::CONTEXT_GENERIC);
+        $security = new Upload_security();
+        $hasFileContent = is_string($file_content) ? $file_content !== "" : $file_content !== null;
+        if ($hasFileContent) {
+            $contentMetadata = $security->validateUntrustedBytes(
+                (string)$file_content,
+                (string)$file_name,
+                $securityContext,
+                secure_upload_configured_extensions($securityContext)
+            );
+            $file_size = (int)$contentMetadata["size_bytes"];
+        } else {
+            $security->validateClientClaim(
+                (string)$file_name,
+                max(1, (int)$file_size),
+                $securityContext,
+                secure_upload_configured_extensions($securityContext)
+            );
+        }
+        $secureTemp = null;
+
+        if (!$source_path) {
+            $secureTemp = resolve_secure_temp_upload((string)$file_name);
+            if ($secureTemp) {
+                $source_path = $secureTemp['path'];
+                $file_size = (int)$secureTemp['size_bytes'];
+                if (!$security_context) {
+                    $securityContext = (string)$secureTemp['context'];
+                }
+                $direct_upload = true;
+            }
+        }
 
         //if not provide any source path we'll find the default path
         if (!$source_path) {
             $source_path = getcwd() . "/" . get_setting("temp_file_path") . $file_name;
+        }
+
+        if (!$hasFileContent
+            && !starts_with((string)$source_path, 'data')
+            && (!$secureTemp || $security_context)
+        ) {
+            $actualSize = is_file($source_path) ? (int)filesize($source_path) : 0;
+            $security->validatePath(
+                (string)$source_path,
+                (string)$file_name,
+                $actualSize,
+                $securityContext,
+                secure_upload_configured_extensions($securityContext)
+            );
         }
 
         //remove unsupported values from the file name
@@ -302,7 +516,7 @@ if (!function_exists('move_temp_file')) {
             $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
             $google = new Google();
-            if ($file_name == "avatar.png" || $file_name == "site-logo.".$file_ext || $file_name == "invoice-logo.png" || $file_name == "estimate-logo.png" || $file_name == "order-logo.png" || $file_name == "favicon.png" || $related_to == "imap_ticket" || $related_to == "pasted_image" || $file_content || $direct_upload) {
+            if ($file_name == "avatar.png" || $file_name == "site-logo.".$file_ext || $file_name == "invoice-logo.png" || $file_name == "estimate-logo.png" || $file_name == "order-logo.png" || $file_name == "favicon.png" || $related_to == "imap_ticket" || $related_to == "pasted_image" || $hasFileContent || $direct_upload) {
                 //directly upload to the main directory
 
                 if (!$file_size && $source_path) {
@@ -326,7 +540,7 @@ if (!function_exists('move_temp_file')) {
                 copy(getcwd() . "/" . get_setting("system_file_path") . "index.html", $target_path . "index.html");
             }
 
-            if ($file_content) {
+            if ($hasFileContent) {
                 //check if it's the contents of file
                 file_put_contents($target_path . $new_filename, $file_content);
 
@@ -348,6 +562,13 @@ if (!function_exists('move_temp_file')) {
             }
 
             $files_data = array("file_name" => $new_filename);
+        }
+
+        if ($secureTemp) {
+            if (is_file($source_path)) {
+                @unlink($source_path);
+            }
+            forget_secure_temp_upload((string)$file_name);
         }
 
         if ($files_data && count($files_data)) {
@@ -434,21 +655,81 @@ if (!function_exists('get_source_url_of_file')) {
 if (!function_exists("get_source_url_of_google_drive_file")) {
 
     function get_source_url_of_google_drive_file($file_id = "", $view_type = "", $show_full_size_thumbnail = false, $file_name = "") {
-        if ($view_type == "raw") {
-            //get raw file url
-            return "https://drive.google.com/uc?id=$file_id";
-        } else if ($view_type == "thumbnail" || ($view_type != "thumbnail" && get_setting("disable_google_preview"))) {
-            //show thumnail url as preview url, if the google viewer is disabled
-            $size = $show_full_size_thumbnail ? "0" : "700";
-            return "https://drive.google.com/thumbnail?id=$file_id&sz=s$size";
-        } else {
-
-            // Replace any character that is NOT in the allowed list with '-'
-            $file_name = preg_replace('/[^' . get_setting('permittedURIChars') . ']+/i', '-', $file_name);
-
-            //preview
-            return get_uri("uploader/stream_google_drive_file/" . $file_id . "/" . $file_name . "/full");
+        $file_id = trim((string) $file_id);
+        if (preg_match('/\A[A-Za-z0-9_-]{10,200}\z/D', $file_id) !== 1) {
+            return "";
         }
+
+        // All Drive content is kept private. The application issues a short-
+        // lived, account-bound capability only after an authorized page has
+        // resolved the underlying record.
+        $file_name = preg_replace('/[^' . get_setting('permittedURIChars') . ']+/i', '-', (string) $file_name);
+        $file_name = trim((string) $file_name, '-');
+        if ($file_name === '') {
+            $file_name = 'document';
+        }
+        $suffix = $view_type === 'raw' ? 'raw' : ($view_type === 'thumbnail' ? 'thumbnail' : 'full');
+        $expires = time() + 300;
+        $user_id = (int) service('session')->get('user_id');
+        if ($user_id < 1) {
+            return "";
+        }
+        $signature = make_google_drive_stream_signature($file_id, $file_name, $suffix, $expires, $user_id);
+
+        return get_uri("uploader/stream_google_drive_file/" . $file_id . "/" . $file_name . "/" . $suffix)
+            . "?expires=" . $expires . "&signature=" . rawurlencode($signature);
+    }
+}
+
+if (!function_exists('make_google_drive_stream_signature')) {
+    function make_google_drive_stream_signature(
+        string $file_id,
+        string $file_name,
+        string $suffix,
+        int $expires,
+        int $user_id
+    ): string {
+        $key = trim((string) getenv('PODC_FILE_STREAM_HMAC_KEY'));
+        if (str_starts_with($key, 'base64:')) {
+            $decoded = base64_decode(substr($key, 7), true);
+            $key = $decoded === false ? '' : $decoded;
+        }
+        if (strlen($key) < 32) {
+            if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
+                throw new \RuntimeException('PODC_FILE_STREAM_HMAC_KEY must contain at least 32 random bytes.');
+            }
+            $key = hash('sha256', (string) config('App')->encryption_key . '|google-drive-stream', true);
+        }
+
+        return hash_hmac(
+            'sha256',
+            implode("\n", [$file_id, $file_name, $suffix, (string) $expires, (string) $user_id]),
+            $key
+        );
+    }
+}
+
+if (!function_exists('verify_google_drive_stream_signature')) {
+    function verify_google_drive_stream_signature(
+        string $signature,
+        string $file_id,
+        string $file_name,
+        string $suffix,
+        int $expires,
+        int $user_id
+    ): bool {
+        if (
+            $expires < time()
+            || $expires > time() + 600
+            || preg_match('/\A[a-f0-9]{64}\z/D', strtolower($signature)) !== 1
+        ) {
+            return false;
+        }
+
+        return hash_equals(
+            make_google_drive_stream_signature($file_id, $file_name, $suffix, $expires, $user_id),
+            strtolower($signature)
+        );
     }
 }
 
@@ -638,11 +919,25 @@ if (!function_exists('validate_post_file')) {
  */
 if (!function_exists('is_valid_file_to_upload')) {
 
-    function is_valid_file_to_upload($file_name = "") {
+    function is_valid_file_to_upload($file_name = '', string $context = Upload_security::CONTEXT_GENERIC) {
 
         if (!$file_name)
             return false;
 
+        try {
+            (new Upload_security())->validateClientClaim(
+                (string)$file_name,
+                1,
+                $context,
+                secure_upload_configured_extensions($context)
+            );
+            return true;
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Upload preflight rejected a file name.');
+            return false;
+        }
+
+        /* Legacy extension-only validation retired.
         $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
         //disable the php file uploading strictly
@@ -656,6 +951,7 @@ if (!function_exists('is_valid_file_to_upload')) {
         if (in_array($file_ext, $file_formates)) {
             return true;
         }
+        */
     }
 }
 
@@ -744,7 +1040,7 @@ if (!function_exists("get_system_files_setting_value")) {
     function get_system_files_setting_value($setting_name = "") {
         $setting_value = get_setting($setting_name);
         if ($setting_value) {
-            $setting_as_array = @unserialize($setting_value);
+            $setting_as_array = @safe_unserialize($setting_value);
             if (is_array($setting_as_array)) {
                 return array($setting_as_array);
             } else {
@@ -767,7 +1063,7 @@ if (!function_exists('prepare_attachment_of_files')) {
         $result = array();
         if ($serialized_file_data) {
 
-            $files = unserialize($serialized_file_data);
+            $files = safe_unserialize($serialized_file_data);
             $file_path = getcwd() . '/' . $directory_path;
 
             foreach ($files as $file) {
@@ -797,7 +1093,7 @@ if (!function_exists('update_saved_files')) {
 
     function update_saved_files($file_path, $serialized_file_data, $new_files_array) {
         if ($serialized_file_data && $file_path) {
-            $files_array = unserialize($serialized_file_data);
+            $files_array = safe_unserialize($serialized_file_data);
             $request = \Config\Services::request();
 
             //is deleted any file?
@@ -875,7 +1171,7 @@ if (!function_exists('update_file_indexes')) {
 
     function update_file_indexes($old_files = "", $new_files_array = array()) {
         if (isset($old_files) && $old_files && $new_files_array) {
-            $old_files_array = unserialize($old_files);
+            $old_files_array = safe_unserialize($old_files);
             if (count($old_files_array)) {
                 $final_files_array = array();
 
@@ -893,7 +1189,7 @@ if (!function_exists('update_file_indexes')) {
 if (!function_exists('get_store_item_image')) {
 
     function get_store_item_image($files) {
-        $files = @unserialize($files);
+        $files = @safe_unserialize($files);
         if ($files && is_array($files) && count($files)) {
             $first_file = get_array_value($files, 0);
             return get_source_url_of_file($first_file, get_setting("timeline_file_path"), "thumbnail");

@@ -1,0 +1,24 @@
+Options -Indexes
+
+# Uploaded content is data, never executable code or configuration.
+<IfModule mod_authz_core.c>
+    <FilesMatch "(?i)(^\.|\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$)">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "(?i)(^\.|\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$)">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+RemoveHandler .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+RemoveType .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+
+<IfModule mod_headers.c>
+    <FilesMatch "(?i)\.(?:html?|svg|xml)$">
+        Header set Content-Disposition "attachment"
+        Header set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+</IfModule>

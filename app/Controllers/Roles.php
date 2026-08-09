@@ -49,7 +49,7 @@ class Roles extends Security_Controller {
             }
             $view_data['client_groups_dropdown'] = json_encode($client_groups_dropdown);
 
-            $permissions = $view_data['model_info']->permissions ? unserialize($view_data['model_info']->permissions) : "";
+            $permissions = $view_data['model_info']->permissions ? safe_unserialize($view_data['model_info']->permissions) : "";
 
             if (!$permissions) {
                 $permissions = array();
@@ -273,7 +273,7 @@ foreach ($gate_pass_sections as $section) {
 }
 
 // PTW Master (granular: view/create/update/delete per section)
-$ptw_sections = array('hsse_users', 'hmo_users', 'terminal_users', 'request_list', 'hazard_documents', 'ppe', 'preparation', 'reasons');
+$ptw_sections = array('applicant_users', 'hsse_users', 'hmo_users', 'terminal_users', 'request_list', 'hazard_documents', 'ppe', 'preparation', 'reasons');
 foreach ($ptw_sections as $section) {
     $view_data['can_view_ptw_' . $section]   = get_array_value($permissions, 'can_view_ptw_' . $section);
     $view_data['can_create_ptw_' . $section] = get_array_value($permissions, 'can_create_ptw_' . $section);
@@ -408,7 +408,7 @@ foreach ($ptw_sections as $section) {
         } else {
             //is not an admin user, fetch data
             $role_info = $this->Roles_model->get_one($id);
-            $permissions = unserialize($role_info->permissions);
+            $permissions = safe_unserialize($role_info->permissions);
 
             $can_manage_all_kinds_of_settings = get_array_value($permissions, "can_manage_all_kinds_of_settings");
             $can_manage_user_role_and_permissions = get_array_value($permissions, "can_manage_user_role_and_permissions");
@@ -583,7 +583,7 @@ foreach ($ptw_sections as $section) {
         }
 
         // PTW Master (granular)
-        $ptw_sections = array('hsse_users', 'hmo_users', 'terminal_users', 'request_list', 'hazard_documents', 'ppe', 'preparation', 'reasons');
+        $ptw_sections = array('applicant_users', 'hsse_users', 'hmo_users', 'terminal_users', 'request_list', 'hazard_documents', 'ppe', 'preparation', 'reasons');
         $ptw_permissions = array();
         foreach ($ptw_sections as $section) {
             $ptw_permissions['can_view_ptw_' . $section]   = $this->request->getPost('can_view_ptw_' . $section);

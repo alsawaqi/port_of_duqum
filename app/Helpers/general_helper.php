@@ -71,7 +71,7 @@ if (!function_exists('get_avatar')) {
         } else if ($image === "github") {
             return base_url("assets/images/github_logo.png");
         } else if ($image) {
-            $file = @unserialize($image);
+            $file = @safe_unserialize($image);
             if (is_array($file)) {
                 return get_source_url_of_file($file, get_setting("profile_image_path") . "/", "thumbnail");
             } else {
@@ -1078,74 +1078,26 @@ if (!function_exists('log_notification')) {
 
     function log_notification($event, $options = array(), $user_id = 0) {
         $ci = new Security_Controller(false);
+        $data = array(
+            "event" => encode_id($event, "notification")
+        );
 
-        //send response to notification processor
-        if (get_setting("log_direct_notifications")) {
-            //send direct notification to the url
-            $data = array(
-                "event" => encode_id($event, "notification")
-            );
-
-            if ($user_id) {
-                $data["user_id"] = $user_id;
-            } else if ($user_id === "0") {
-                $data["user_id"] = $user_id; //if user id is 0 (string) we'll assume that it's system bot 
-            } else if (isset($ci->login_user->id)) {
-                $data["user_id"] = $ci->login_user->id;
-            }
-
-            foreach ($options as $key => $value) {
-                if ($value) {
-                    $value = urlencode($value);
-                }
-                $data[$key] = $value;
-            }
-
-            $notification_processor = new Notification_processor();
-            $notification_processor->create_notification($data);
-        } else {
-            //use curl to send request
-            $url = get_uri("notification_processor/create_notification");
-
-            $req = "event=" . encode_id($event, "notification");
-
-            if ($user_id) {
-                $req .= "&user_id=" . $user_id;
-            } else if ($user_id === "0") {
-                $req .= "&user_id=" . $user_id; //if user id is 0 (string) we'll assume that it's system bot 
-            } else if (isset($ci->login_user->id)) {
-                $req .= "&user_id=" . $ci->login_user->id;
-            }
-
-
-            foreach ($options as $key => $value) {
-                if ($value) {
-                    $value = urlencode($value);
-                }
-
-                $req .= "&$key=$value";
-            }
-
-
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_HEADER, 0);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $req);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 1);
-
-            if (get_setting("add_useragent_to_curl")) {
-                curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 6.1; rv:19.0) Gecko/20100101 Firefox/19.0");
-            }
-
-            curl_exec($ch);
-            if (curl_errno($ch)) {
-                $error_msg = curl_error($ch);
-                log_message('error', 'CURL error on log_notification: ' . $error_msg);
-            }
-            curl_close($ch);
+        if ($user_id) {
+            $data["user_id"] = $user_id;
+        } else if ($user_id === "0") {
+            $data["user_id"] = $user_id; //string zero represents the system bot
+        } else if (isset($ci->login_user->id)) {
+            $data["user_id"] = $ci->login_user->id;
         }
+
+        // This array is produced by trusted application code. The processor
+        // applies its own strict field/type allowlist before using it.
+        foreach ($options as $key => $value) {
+            $data[$key] = $value;
+        }
+
+        $notification_processor = new Notification_processor();
+        return $notification_processor->create_notification($data);
     }
 }
 
@@ -1268,7 +1220,7 @@ if (!function_exists('update_custom_fields_changes')) {
 
                 //we have to combine with the existing changes of activity logs
                 $activity_log = $ci->Activity_logs_model->get_one($activity_log_id);
-                $activity_logs_changes = unserialize($activity_log->changes ? $activity_log->changes : "");
+                $activity_logs_changes = safe_unserialize($activity_log->changes ? $activity_log->changes : "");
                 if (is_array($activity_logs_changes)) {
                     foreach ($activity_logs_changes as $key => $value) {
                         $before_changes[$key] = array("from" => get_array_value($value, "from"), "to" => get_array_value($value, "to"));
@@ -1332,7 +1284,7 @@ if (!function_exists("get_file_from_setting")) {
             if ($setting_value) {
                 $file_path = $file_path ? $file_path : get_setting("system_file_path");
 
-                $file = @unserialize($setting_value);
+                $file = @safe_unserialize($setting_value);
                 if (is_array($file)) {
 
                     //show full size thumbnail for signin page background
@@ -1396,7 +1348,7 @@ if (!function_exists("make_random_string")) {
         $random_string = '';
 
         for ($i = 0; $i < $length; $i++) {
-            $random_string .= $characters[rand(0, $characters_length - 1)];
+            $random_string .= $characters[random_int(0, $characters_length - 1)];
         }
 
         return $random_string;
@@ -1581,7 +1533,7 @@ if (!function_exists('validate_invoice_verification_code')) {
 
     function validate_invoice_verification_code($code = "", $given_invoice_data = array()) {
         if ($code) {
-            if (strlen($code) !== 10) {
+            if (preg_match('/^(?:[A-Za-z0-9]{10}|[A-Za-z0-9]{32})$/D', (string)$code) !== 1) {
                 return false;
             }
 
@@ -1590,7 +1542,12 @@ if (!function_exists('validate_invoice_verification_code')) {
             $verification_info = $Verification_model->get_details($options)->getRow();
 
             if ($verification_info && $verification_info->id) {
-                $existing_invoice_data = unserialize($verification_info->params);
+                $existing_invoice_data = @safe_unserialize(
+                    (string)$verification_info->params
+                );
+                if (!is_array($existing_invoice_data)) {
+                    return false;
+                }
 
                 //existing data
                 $existing_invoice_id = get_array_value($existing_invoice_data, "invoice_id");
@@ -1780,7 +1737,7 @@ if (!function_exists('prepare_contract_view')) {
             $parser_data["APP_TITLE"] = get_setting("app_title");
             $parser_data["PROJECT_TITLE"] = $contract_info->project_title;
 
-            $signer_info = @unserialize($contract_info->meta_data);
+            $signer_info = @safe_unserialize($contract_info->meta_data);
             if (!($signer_info && is_array($signer_info))) {
                 $signer_info = array();
             }
@@ -1796,7 +1753,7 @@ if (!function_exists('prepare_contract_view')) {
                 }
 
                 if (get_array_value($signer_info, "signature")) {
-                    $signature_file = @unserialize(get_array_value($signer_info, "signature"));
+                    $signature_file = @safe_unserialize(get_array_value($signer_info, "signature"));
                     $signature_file_name = get_array_value($signature_file, "file_name");
                     $signature_file = get_source_url_of_file($signature_file, get_setting("timeline_file_path"), "thumbnail");
                     $parser_data["CLIENT_SIGNATURE"] = '<img class="signature-image" src="' . $signature_file . '" alt="' . $signature_file_name . '" />';
@@ -1818,7 +1775,7 @@ if (!function_exists('prepare_contract_view')) {
                 $parser_data["STAFF_SIGNING_DATE"] = format_to_relative_time(get_array_value($signer_info, "staff_signed_date"));
 
                 if (get_array_value($signer_info, "staff_signature")) {
-                    $signature_file = @unserialize(get_array_value($signer_info, "staff_signature"));
+                    $signature_file = @safe_unserialize(get_array_value($signer_info, "staff_signature"));
                     $signature_file_name = get_array_value($signature_file, "file_name");
                     $signature_file = get_source_url_of_file($signature_file, get_setting("timeline_file_path"), "thumbnail");
                     $parser_data["STAFF_SIGNATURE"] = '<img class="signature-image" src="' . $signature_file . '" alt="' . $signature_file_name . '" />';
@@ -2841,7 +2798,7 @@ if (!function_exists('get_company_logo')) {
         $only_file_path = get_setting('only_file_path');
 
         if (isset($company_info->logo) && $company_info->logo) {
-            $file = unserialize($company_info->logo);
+            $file = safe_unserialize($company_info->logo);
             if (is_array($file)) {
                 $file = get_array_value($file, 0);
 
@@ -3951,6 +3908,13 @@ if (!function_exists('gate_pass_scan_visitor_ids_to_log')) {
             return [null];
         }
 
+        // A visitor-specific QR is authority for that visitor only. Do not
+        // allow a crafted POST body to use one person's pass to record movement
+        // for another visitor on the same request.
+        if ($assigned_visitor_id && isset($valid_ids[(int)$assigned_visitor_id])) {
+            return [(int)$assigned_visitor_id];
+        }
+
         $resolved = [];
         foreach ($posted_visitor_ids as $id) {
             $id = (int)$id;
@@ -3959,11 +3923,30 @@ if (!function_exists('gate_pass_scan_visitor_ids_to_log')) {
             }
         }
 
-        if (!$resolved && $assigned_visitor_id && isset($valid_ids[(int)$assigned_visitor_id])) {
-            $resolved[(int)$assigned_visitor_id] = (int)$assigned_visitor_id;
-        }
-
         return array_values($resolved);
+    }
+}
+
+if (!function_exists('gate_pass_scan_transition')) {
+    function gate_pass_scan_transition(?string $previous_action, string $requested_action): array
+    {
+        $previous = strtolower(trim((string)$previous_action));
+        $requested = strtolower(trim($requested_action));
+        if (!in_array($previous, ['', 'entry', 'exit'], true)) {
+            return ['allowed' => false, 'code' => 'invalid_action', 'message' => 'The requested gate movement is invalid.'];
+        }
+        if ($requested === 'check') {
+            return ['allowed' => true, 'code' => 'ok', 'message' => 'Gate pass check may be recorded.'];
+        }
+        if ($requested === 'entry') {
+            $allowed = $previous !== 'entry';
+            return ['allowed' => $allowed, 'code' => $allowed ? 'ok' : 'already_inside', 'message' => $allowed ? 'Gate entry may be recorded.' : 'Entry was already recorded. Record an exit before another entry.'];
+        }
+        if ($requested === 'exit') {
+            $allowed = $previous === 'entry';
+            return ['allowed' => $allowed, 'code' => $allowed ? 'ok' : 'not_inside', 'message' => $allowed ? 'Gate exit may be recorded.' : 'An exit cannot be recorded before a valid entry.'];
+        }
+        return ['allowed' => false, 'code' => 'invalid_action', 'message' => 'The requested gate movement is invalid.'];
     }
 }
 

@@ -21,8 +21,9 @@ class Pay_invoice extends App_Controller {
             show_404();
         }
 
-        // verification code should be 10 characters
-        if (strlen($verification_code) !== 10) {
+        // Accept existing 10-character links during migration; newly issued
+        // invoice capabilities are 32 alphanumeric characters.
+        if (preg_match('/^(?:[A-Za-z0-9]{10}|[A-Za-z0-9]{32})$/D', $verification_code) !== 1) {
             show_404();
         }
 
@@ -32,7 +33,10 @@ class Pay_invoice extends App_Controller {
             show_404();
         }
 
-        $invoice_data = unserialize($verification_info->params);
+        $invoice_data = safe_unserialize((string)$verification_info->params);
+        if (!is_array($invoice_data)) {
+            show_404();
+        }
 
         $invoice_id = get_array_value($invoice_data, "invoice_id");
         $client_id = get_array_value($invoice_data, "client_id");
@@ -85,8 +89,9 @@ class Pay_invoice extends App_Controller {
             } else {
                 echo json_encode(array('success' => false, 'message' => app_lang('error_occurred')));
             }
-        } catch (\Exception $ex) {
-            echo json_encode(array("success" => false, "message" => $ex->getMessage()));
+        } catch (\Throwable $ex) {
+            log_message('warning', 'PUBLIC STRIPE INVOICE CHECKOUT REJECTED: {class}', ['class' => get_class($ex)]);
+            echo json_encode(array("success" => false, "message" => app_lang('error_occurred')));
         }
     }
 
@@ -104,25 +109,43 @@ class Pay_invoice extends App_Controller {
             } else {
                 echo json_encode(array('success' => false, 'message' => app_lang('error_occurred')));
             }
-        } catch (\Exception $ex) {
-            echo json_encode(array("success" => false, "message" => $ex->getMessage()));
+        } catch (\Throwable $ex) {
+            log_message('warning', 'PUBLIC PAYPAL INVOICE CHECKOUT REJECTED: {class}', ['class' => get_class($ex)]);
+            echo json_encode(array("success" => false, "message" => app_lang('error_occurred')));
         }
     }
 
     private function _log($text = "") {
         if ($text && get_setting("enable_public_pay_invoice_logging")) {
-            error_log(date('[Y-m-d H:i e] ') . $text . PHP_EOL, 3, "public_pay_invoice_logs.txt");
+            // Use the protected application logger; never create a payment log
+            // beside index.php where a web server could expose it.
+            log_message('info', 'PUBLIC INVOICE ACCESS: {context}', [
+                'context' => mb_substr((string)$text, 0, 250),
+            ]);
         }
     }
 
     function get_paytm_checksum_hash() {
-        $paytm = new Paytm();
-        $payment_data = $paytm->get_paytm_checksum_hash($this->request->getPost("input_data"), $this->request->getPost("verification_data"));
-
-        if ($payment_data) {
-            echo json_encode(array("success" => true, "checksum_hash" => get_array_value($payment_data, "checksum_hash"), "payment_verification_code" => get_array_value($payment_data, "payment_verification_code")));
-        } else {
-            echo json_encode(array("success" => false, "message" => app_lang("paytm_checksum_hash_error_message")));
+        if (!get_setting("client_can_pay_invoice_without_login")) {
+            app_redirect("forbidden");
+        }
+        try {
+            $requestData = $this->request->getPost('payment_request');
+            if (!is_array($requestData)) {
+                throw new \InvalidArgumentException('Invalid invoice payment request.');
+            }
+            $paymentData = (new Paytm())->get_paytm_checksum_hash($requestData);
+            echo json_encode([
+                'success' => true,
+                'checksum_hash' => $paymentData['checksum_hash'],
+                'payment_verification_code' => $paymentData['payment_verification_code'],
+                'input_data' => $paymentData['input_data'],
+            ]);
+        } catch (\Throwable $exception) {
+            log_message('warning', 'PUBLIC PAYTM CHECKOUT CREATION REJECTED: {class}', [
+                'class' => get_class($exception),
+            ]);
+            echo json_encode(['success' => false, 'message' => app_lang('error_occurred')]);
         }
     }
 }

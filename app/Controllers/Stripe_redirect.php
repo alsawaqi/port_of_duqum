@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Libraries\Stripe;
+use Throwable;
 
 //don't extend this controller from Pre_loader 
 //because this will be called by Stripe 
@@ -20,59 +21,32 @@ class Stripe_redirect extends App_Controller {
     }
 
     function index($payment_verification_code = "") {
-        if (!$payment_verification_code) {
+        if (preg_match('/^[a-f0-9]{32}$/D', $payment_verification_code) !== 1) {
             show_404();
         }
 
-        $stripe_ipn_info = $this->Stripe_ipn_model->get_one_payment_where($payment_verification_code);
-        if (!$stripe_ipn_info) {
+        try {
+            $result = $this->stripe->settle_invoice_attempt($payment_verification_code);
+        } catch (Throwable $exception) {
+            log_message('warning', 'STRIPE INVOICE REDIRECT REJECTED: {class}', [
+                'class' => get_class($exception),
+            ]);
             show_404();
         }
 
-        $payment = $this->stripe->is_valid_ipn($stripe_ipn_info);
-        if (!$payment) {
-            show_404();
-        }
-
-        //so, the payment is valid
-        //save the payment
-        $invoice_id = $stripe_ipn_info->invoice_id;
-
-        $invoice_payment_data = array(
-            "invoice_id" => $invoice_id,
-            "payment_date" => get_current_utc_time(),
-            "payment_method_id" => $stripe_ipn_info->payment_method_id,
-            "note" => "",
-            "amount" => $payment->amount / 100,
-            "transaction_id" => $payment->id,
-            "created_at" => get_current_utc_time(),
-            "created_by" => $stripe_ipn_info->contact_user_id,
-        );
-
-        //the payment could be saved by webhook, check that first
-        $existing = $this->Invoice_payments_model->get_one_where(array("transaction_id" => $payment->id));
-        if (!$existing->id) {
-            $invoice_payment_id = $this->Invoice_payments_model->ci_save($invoice_payment_data);
-
-            //as receiving payment for the invoice, we'll remove the 'draft' status from the invoice 
-            $this->Invoices_model->update_invoice_status($invoice_id);
-
-            log_notification("invoice_payment_confirmation", array("invoice_payment_id" => $invoice_payment_id, "invoice_id" => $invoice_id), "0");
-
-            log_notification("invoice_online_payment_received", array("invoice_payment_id" => $invoice_payment_id, "invoice_id" => $invoice_id), $stripe_ipn_info->contact_user_id);
-
-            //delete the ipn data
-            $this->Stripe_ipn_model->delete($stripe_ipn_info->id);
-        }
-
-        $verification_code = $stripe_ipn_info->verification_code;
-        if ($verification_code) {
-            $redirect_to = "pay_invoice/index/$verification_code";
+        $invoiceId = (int)$result['invoice_id'];
+        $verificationCode = (string)$result['verification_code'];
+        if (!$result['success']) {
+            $this->session->setFlashdata('error_message', app_lang('error_occurred'));
         } else {
-            $redirect_to = "invoices/preview/$invoice_id";
+            $this->session->setFlashdata('success_message', app_lang('payment_success_message'));
+        }
+        if ($verificationCode !== '') {
+            $redirect_to = "pay_invoice/index/$verificationCode";
+        } else {
+            $redirect_to = "invoices/preview/$invoiceId";
         }
 
-        $this->session->setFlashdata("success_message", app_lang("payment_success_message"));
         app_redirect($redirect_to);
     }
 

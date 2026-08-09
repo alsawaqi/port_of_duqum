@@ -282,31 +282,28 @@ trait GeneratorTrait
         return $namespace . $directoryString . str_replace('/', '\\', $class);
     }
 
-    /**
-     * Normalize input classname.
-     */
     private function normalizeInputClassName(): string
     {
         // Gets the class name from input.
         $class = $this->params[0] ?? CLI::getSegment(2);
 
         if ($class === null && $this->hasClassName) {
-            // @codeCoverageIgnoreStart
-            $nameLang = $this->classNameLang !== ''
+            $nameField = $this->classNameLang !== ''
                 ? $this->classNameLang
                 : 'CLI.generator.className.default';
-            $class = CLI::prompt(lang($nameLang), null, 'required');
+            $class = CLI::prompt(lang($nameField), null, 'required');
+
+            // Reassign the class name to the params array in case
+            // the class name is requested again
+            $this->params[0] = $class;
             CLI::newLine();
-            // @codeCoverageIgnoreEnd
         }
 
         helper('inflector');
 
         $component = singular($this->component);
 
-        /**
-         * @see https://regex101.com/r/a5KNCR/2
-         */
+        /** @see https://regex101.com/r/a5KNCR/2 */
         $pattern = sprintf('/([a-z][a-z0-9_\/\\\\]+)(%s)$/i', $component);
 
         if (preg_match($pattern, $class, $matches) === 1) {

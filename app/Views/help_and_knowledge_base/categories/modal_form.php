@@ -101,7 +101,7 @@
                 <div class=" col-md-9">
 
                     <?php if ($model_info->banner_image) {
-                        $banner_image = unserialize($model_info->banner_image);
+                        $banner_image = safe_unserialize($model_info->banner_image);
                     ?>
                         <div class="float-start mr15">
                             <img id="banner-image-preview" style="max-width: 100px; max-height: 80px;" src="<?php echo get_source_url_of_file($banner_image, get_setting("timeline_file_path"), "thumbnail"); ?>" alt="..." />

@@ -651,6 +651,109 @@ class Notifications_model extends Crud_model {
     }
 
 
+    /**
+     * Build the same role-less external identity boundary used by Users_model.
+     * The condition is embedded only in the "all team members" recipient arm;
+     * explicit workflow notifications continue to reach their intended users.
+     */
+    private function external_portal_only_identity_condition($users_table) {
+        $external_membership_tables = [
+            "vendor_users",
+            "gate_pass_users",
+            "ptw_applicant_users",
+        ];
+        $operational_assignment_tables = [
+            "gate_pass_commercial_users",
+            "gate_pass_department_users",
+            "gate_pass_rop_users",
+            "gate_pass_security_users",
+            "ptw_hmo_users",
+            "ptw_hsse_users",
+            "ptw_terminal_users",
+            "tender_commercial_users",
+            "tender_committee_users",
+            "tender_department_manager_users",
+            "tender_department_users",
+            "tender_finance_users",
+            "tender_procurement_manager_users",
+            "tender_procurement_users",
+            "tender_technical_users",
+        ];
+
+        $external_memberships = [];
+        foreach ($external_membership_tables as $table) {
+            if (!$this->db->tableExists($table)) {
+                continue;
+            }
+
+            $membership_table = $this->db->prefixTable($table);
+            $external_memberships[] = "EXISTS (SELECT 1 FROM $membership_table AS external_membership"
+                . " WHERE external_membership.user_id=$users_table.id"
+                . " AND external_membership.deleted=0)";
+        }
+
+        if (!$external_memberships) {
+            return "1=0";
+        }
+
+        $operational_assignments = [];
+        foreach ($operational_assignment_tables as $table) {
+            if (!$this->db->tableExists($table)) {
+                continue;
+            }
+
+            $assignment_table = $this->db->prefixTable($table);
+            $operational_assignments[] = "EXISTS (SELECT 1 FROM $assignment_table AS operational_assignment"
+                . " WHERE operational_assignment.user_id=$users_table.id"
+                . " AND operational_assignment.deleted=0"
+                . " AND operational_assignment.status='active')";
+        }
+
+        $condition = "($users_table.user_type='staff'"
+            . " AND COALESCE($users_table.is_admin, 0)=0"
+            . " AND COALESCE($users_table.role_id, 0)=0"
+            . " AND (" . implode(" OR ", $external_memberships) . ")";
+        if ($operational_assignments) {
+            $condition .= " AND NOT (" . implode(" OR ", $operational_assignments) . ")";
+        }
+
+        return $condition . ")";
+    }
+
+    private function is_external_portal_only_identity($user_id) {
+        $user_id = (int) $user_id;
+        if ($user_id < 1) {
+            return false;
+        }
+
+        $users_model = model("App\\Models\\Users_model");
+        $user = $users_model->get_one($user_id);
+        if (!$user
+            || empty($user->id)
+            || (string) ($user->user_type ?? "") !== "staff"
+            || !empty($user->is_admin)
+            || (int) ($user->role_id ?? 0) !== 0) {
+            return false;
+        }
+
+        return $users_model->is_vendor_only_identity($user_id, $user)
+            || $users_model->is_gate_pass_only_identity($user_id, $user)
+            || $users_model->is_ptw_applicant_only_identity($user_id, $user);
+    }
+
+    /**
+     * Hide pre-existing broad staff announcements that may already contain an
+     * external portal user's id in notifications.notify_to.
+     */
+    private function announcement_notification_visibility_condition($user_id, $notifications_table, $announcements_table) {
+        if (!$this->is_external_portal_only_identity($user_id)) {
+            return "";
+        }
+
+        return " AND (COALESCE($notifications_table.announcement_id, 0)=0"
+            . " OR FIND_IN_SET('all_members', COALESCE($announcements_table.share_with, ''))=0)";
+    }
+
     private function prepare_announcement_receipients_query($announcements_table, $clients_table, $users_table, $announcement_id = 0) {
         if (!$announcement_id) {
             return false;
@@ -668,7 +771,10 @@ class Notifications_model extends Crud_model {
         $announcement_share_with = explode(",", $announcement_info->share_with);
 
         if (in_array("all_members", $announcement_share_with)) { // has 'all_members' access
-            $or_query_array[] = " ($users_table.user_type='staff' AND $users_table.status='active' AND $users_table.deleted=0) ";
+            $external_portal_only = $this->external_portal_only_identity_condition($users_table);
+            $or_query_array[] = " ($users_table.user_type='staff' AND $users_table.status='active'"
+                . " AND $users_table.deleted=0"
+                . " AND NOT ($external_portal_only)) ";
         }
 
         if (in_array("all_clients", $announcement_share_with)) { // has 'all_clients' access
@@ -752,7 +858,7 @@ class Notifications_model extends Crud_model {
             //check if user has permission to this ticket type
             $permissions = null;
             if ($user->permissions) {
-                $permissions = unserialize($user->permissions);
+                $permissions = safe_unserialize($user->permissions);
                 $permissions = is_array($permissions) ? $permissions : array();
 
                 $ticket_permission = get_array_value($permissions, "ticket");
@@ -777,7 +883,7 @@ class Notifications_model extends Crud_model {
 
     private function notify_to_this_user_for_this_task($task_info, $user) {
         if ($user->user_type === "staff" && !$user->is_admin && $task_info->context === "project") {
-            $permissions = $user->permissions ? unserialize($user->permissions) : array();
+            $permissions = $user->permissions ? safe_unserialize($user->permissions) : array();
             $permissions = is_array($permissions) ? $permissions : array();
 
             //check project permission
@@ -809,7 +915,7 @@ class Notifications_model extends Crud_model {
     //check if the user can access this project
     private function notify_to_this_user_for_this_project($project_info, $user) {
         if ($user->user_type === "staff" && !$user->is_admin) {
-            $permissions = $user->permissions ? unserialize($user->permissions) : array();
+            $permissions = $user->permissions ? safe_unserialize($user->permissions) : array();
             $permissions = is_array($permissions) ? $permissions : array();
 
             //check project permission
@@ -834,7 +940,7 @@ class Notifications_model extends Crud_model {
         if ($user->user_type === "staff" && !$user->is_admin) {
             //check if user has restriction to view all estimates/no estimates at all
             if ($user->permissions) {
-                $permissions = unserialize($user->permissions);
+                $permissions = safe_unserialize($user->permissions);
                 $permissions = is_array($permissions) ? $permissions : array();
 
                 $estimate_permission = get_array_value($permissions, "estimate");
@@ -850,7 +956,7 @@ class Notifications_model extends Crud_model {
     //check if the user has restriction on timeline
     private function notify_to_this_user_for_this_post($post_info, $user) {
         if ($user->user_type === "staff" && $user->permissions) {
-            $permissions = unserialize($user->permissions);
+            $permissions = safe_unserialize($user->permissions);
             $permissions = is_array($permissions) ? $permissions : array();
 
             if (get_array_value($permissions, "timeline_permission") === "no") {
@@ -885,7 +991,7 @@ class Notifications_model extends Crud_model {
         }
 
         //check if user has restriction to view all clients/leads
-        $permissions = unserialize($user->permissions);
+        $permissions = safe_unserialize($user->permissions);
         $permissions = is_array($permissions) ? $permissions : array();
 
         $client_permission = get_array_value($permissions, "client");
@@ -965,6 +1071,10 @@ class Notifications_model extends Crud_model {
         $proposal_comments_table = $this->db->prefixTable('proposal_comments');
         $reminder_logs_table = $this->db->prefixTable('reminder_logs');
 
+        $announcement_visibility = $this->announcement_notification_visibility_condition(
+            $user_id, $notifications_table, $announcements_table
+        );
+
         $sql = "SELECT SQL_CALC_FOUND_ROWS $notifications_table.*, CONCAT($users_table.first_name, ' ', $users_table.last_name) AS user_name, $users_table.image AS user_image,
                  $projects_table.title AS project_title,
                  $project_comments_table.description AS project_comment_title,
@@ -1021,6 +1131,7 @@ class Notifications_model extends Crud_model {
             WHERE $invoices_table.deleted=0
         ) AS payment_invoice_table ON payment_invoice_table.id=$invoice_payments_table.invoice_id
         WHERE $notifications_table.deleted=0 AND FIND_IN_SET($user_id, $notifications_table.notify_to) != 0
+        $announcement_visibility
         ORDER BY $notifications_table.id DESC LIMIT $offset, $limit";
 
         $data = new \stdClass();
@@ -1118,21 +1229,44 @@ class Notifications_model extends Crud_model {
     }
 
     function count_notifications($user_id, $last_notification_checke_at = "0") {
+        $user_id = (int) $user_id;
+        $last_notification_checke_at = (string) $last_notification_checke_at;
+        $lastCheck = \DateTimeImmutable::createFromFormat(
+            "Y-m-d H:i:s",
+            $last_notification_checke_at,
+            new \DateTimeZone("UTC")
+        );
+        if (!$lastCheck || $lastCheck->format("Y-m-d H:i:s") !== $last_notification_checke_at) {
+            $last_notification_checke_at = "1970-01-01 00:00:00";
+        }
+
         $notifications_table = $this->db->prefixTable('notifications');
+        $announcements_table = $this->db->prefixTable('announcements');
+        $announcement_visibility = $this->announcement_notification_visibility_condition(
+            $user_id, $notifications_table, $announcements_table
+        );
 
         //we alos update the user's online status
         $users_table = $this->db->prefixTable('users');
         $now = get_current_utc_time();
 
-        $this->db->query("UPDATE $users_table SET $users_table.last_online = '$now' WHERE $users_table.id=$user_id");
+        $this->db->query(
+            "UPDATE $users_table SET $users_table.last_online = ? WHERE $users_table.id = ?",
+            [$now, $user_id]
+        );
 
         //find notifications
         $sql = "SELECT COUNT($notifications_table.id) AS total_notifications
         FROM $notifications_table
-        WHERE $notifications_table.deleted=0 AND FIND_IN_SET($user_id, $notifications_table.notify_to) != 0 AND FIND_IN_SET($user_id, $notifications_table.read_by) = 0
-        AND timestamp($notifications_table.created_at)>timestamp('$last_notification_checke_at')";
+        LEFT JOIN $announcements_table ON $announcements_table.id=$notifications_table.announcement_id
+        WHERE $notifications_table.deleted=0 AND FIND_IN_SET(?, $notifications_table.notify_to) != 0 AND FIND_IN_SET(?, $notifications_table.read_by) = 0
+        AND timestamp($notifications_table.created_at)>timestamp(?)
+        $announcement_visibility";
 
-        $result = $this->db->query($sql);
+        $result = $this->db->query(
+            $sql,
+            [$user_id, $user_id, $last_notification_checke_at]
+        );
         if ($result->resultID->num_rows) {
             return $result->getRow()->total_notifications;
         }
@@ -1143,19 +1277,30 @@ class Notifications_model extends Crud_model {
     function set_notification_status_as_read($notification_id, $user_id = 0) {
         $notifications_table = $this->db->prefixTable('notifications');
 
-        $notification_id = $this->_get_clean_value($notification_id);
-        $user_id = $this->_get_clean_value($user_id);
-
-        $where = "";
-        if ($notification_id) {
-            $where = " AND $notifications_table.id=$notification_id";
+        $notification_id = (int) $notification_id;
+        $user_id = (int) $user_id;
+        if ($notification_id < 0 || $user_id < 1) {
+            return false;
         }
 
-        $sql = "UPDATE $notifications_table SET $notifications_table.read_by = CONCAT($notifications_table.read_by,',',$user_id)
-        WHERE FIND_IN_SET($user_id, $notifications_table.read_by) = 0 $where";
-        return $this->db->query($sql);
-    }
+        $parameters = [$user_id, $user_id, $user_id, $user_id];
+        $id_condition = "";
+        if ($notification_id) {
+            $id_condition = " AND $notifications_table.id = ?";
+            $parameters[] = $notification_id;
+        }
 
+        $sql = "UPDATE $notifications_table
+            SET $notifications_table.read_by = CASE
+                WHEN TRIM(BOTH ',' FROM COALESCE($notifications_table.read_by, '')) = '' THEN CAST(? AS CHAR)
+                ELSE CONCAT(TRIM(BOTH ',' FROM $notifications_table.read_by), ',', ?)
+            END
+            WHERE $notifications_table.deleted = 0
+              AND FIND_IN_SET(?, COALESCE($notifications_table.notify_to, '')) != 0
+              AND FIND_IN_SET(?, COALESCE($notifications_table.read_by, '')) = 0
+              $id_condition";
+        return $this->db->query($sql, $parameters);
+    }
     function get_to_user_name($notification_id = 0) {
         $notifications_table = $this->db->prefixTable('notifications');
         $users_table = $this->db->prefixTable('users');

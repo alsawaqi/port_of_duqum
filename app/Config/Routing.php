@@ -96,6 +96,9 @@ class Routing extends BaseRouting
      */
     public bool $autoRoute = false;
 
+    /** No controller filter attributes are used by this legacy application. */
+    public bool $useControllerAttributes = false;
+
     /**
      * For Defined Routes.
      * If TRUE, will enable the use of the 'prioritize' option

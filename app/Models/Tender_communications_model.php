@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Tender_communications_model extends Crud_model
 {
     protected $table = null;
@@ -20,89 +22,22 @@ class Tender_communications_model extends Crud_model
             return;
         }
 
-        $communications = $this->db->prefixTable("tender_communications");
-        $attachments = $this->db->prefixTable("tender_communication_attachments");
-
-        if (!$this->_column_exists($communications, "clarification_scope")) {
-            $this->db->query("ALTER TABLE `$communications` ADD COLUMN `clarification_scope` VARCHAR(50) NOT NULL DEFAULT 'general' AFTER `type`");
-        }
-        if (!$this->_column_exists($communications, "tender_bid_id")) {
-            $this->db->query("ALTER TABLE `$communications` ADD COLUMN `tender_bid_id` BIGINT(20) UNSIGNED DEFAULT NULL AFTER `vendor_id`");
-        }
-        if (!$this->_column_exists($communications, "internal_audience")) {
-            $this->db->query("ALTER TABLE `$communications` ADD COLUMN `internal_audience` VARCHAR(50) DEFAULT NULL AFTER `clarification_scope`");
-        }
-
-        $this->_ensure_type_column_accepts_internal_values($communications);
-
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS `$attachments` (
-                `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                `communication_id` BIGINT(20) UNSIGNED NOT NULL,
-                `tender_id` BIGINT(20) UNSIGNED NOT NULL,
-                `vendor_id` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `disk` VARCHAR(50) NOT NULL DEFAULT 'local',
-                `path` VARCHAR(500) NOT NULL,
-                `original_name` VARCHAR(255) DEFAULT NULL,
-                `mime_type` VARCHAR(255) DEFAULT NULL,
-                `size_bytes` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `uploaded_by` BIGINT(20) UNSIGNED DEFAULT NULL,
-                `created_at` DATETIME DEFAULT NULL,
-                `deleted` INT(11) NOT NULL DEFAULT 0,
-                PRIMARY KEY (`id`),
-                KEY `idx_tender_comm_att_communication` (`communication_id`, `deleted`),
-                KEY `idx_tender_comm_att_tender_vendor` (`tender_id`, `vendor_id`, `deleted`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_communications" => ["clarification_scope", "tender_bid_id", "internal_audience", "type"],
+            "tender_communication_attachments" => [
+                "id", "communication_id", "tender_id", "vendor_id", "disk", "path",
+                "original_name", "mime_type", "size_bytes", "uploaded_by", "created_at", "deleted",
+            ],
+        ], "tender clarifications and attachments");
+        Runtime_schema_guard::requireColumnProperties(
+            $this->db,
+            "tender_communications",
+            "type",
+            ["types" => ["varchar"]],
+            "tender clarification routing"
         );
 
         self::$clarification_scope_attachment_schema_checked = true;
-    }
-
-    private function _ensure_type_column_accepts_internal_values(string $communications): void
-    {
-        $column = $this->db->query(
-            "SHOW COLUMNS FROM `$communications` LIKE " . $this->db->escape("type")
-        )->getRow();
-
-        $type = strtolower((string) ($column->Type ?? ""));
-        if ($type !== "" && strpos($type, "varchar") !== 0) {
-            $this->db->query("ALTER TABLE `$communications` MODIFY COLUMN `type` VARCHAR(50) NOT NULL DEFAULT 'clarification'");
-        }
-
-        $this->db->query(
-            "UPDATE `$communications`
-             SET `type` = CONCAT(COALESCE(NULLIF(`internal_audience`, ''), `clarification_scope`), '_clarification_request')
-             WHERE deleted = 0
-               AND (`type` IS NULL OR `type` = '')
-               AND COALESCE(NULLIF(`internal_audience`, ''), `clarification_scope`) IN ('technical', 'commercial')
-               AND (parent_id IS NULL OR parent_id = 0)"
-        );
-
-        $this->db->query(
-            "UPDATE `$communications` child
-             INNER JOIN `$communications` root
-                ON root.id = child.parent_id
-               AND root.deleted = 0
-             SET child.`type` = CONCAT(COALESCE(NULLIF(root.`internal_audience`, ''), root.`clarification_scope`), '_clarification_response')
-             WHERE child.deleted = 0
-               AND (child.`type` IS NULL OR child.`type` = '')
-               AND COALESCE(NULLIF(root.`internal_audience`, ''), root.`clarification_scope`) IN ('technical', 'commercial')"
-        );
-
-        $this->db->query(
-            "UPDATE `$communications`
-             SET `type` = 'clarification'
-             WHERE `type` IS NULL OR `type` = ''"
-        );
-    }
-
-    private function _column_exists(string $table, string $column): bool
-    {
-        $row = $this->db->query(
-            "SHOW COLUMNS FROM `$table` LIKE " . $this->db->escape($column)
-        )->getRow();
-
-        return (bool) $row;
     }
 
     public static function clarification_scope_options(): array

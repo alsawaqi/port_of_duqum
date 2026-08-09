@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Models\Tender_communications_model;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 
 class Tender_clarifications extends Security_Controller
 {
@@ -21,9 +23,15 @@ class Tender_clarifications extends Security_Controller
         $this->_access_clarifications_view();
         $tbl = $this->db->prefixTable("tender_communications");
         $t = $this->db->prefixTable("tenders");
+        $tr = $this->db->prefixTable("tender_requests");
         $params = [];
         $scope_sql = $this->_scope_filter_sql("root", $params);
         $assignment_sql = $this->_tender_assignment_sql($t, $params);
+        $company_scope_sql = $this->tender_company_scope_sql(
+            "COALESCE($t.company_id, $tr.company_id)",
+            "clarifications",
+            $params
+        );
         $root_types = Tender_communications_model::get_clarification_root_types();
         $root_type_placeholders = implode(",", array_fill(0, count($root_types), "?"));
         $params = array_merge($root_types, $params);
@@ -39,10 +47,15 @@ class Tender_clarifications extends Security_Controller
              FROM $tbl root
              INNER JOIN $t
                 ON $t.id = root.tender_id
+               AND $t.deleted = 0
+             LEFT JOIN $tr
+                ON $tr.id = $t.tender_request_id
+               AND $tr.deleted = 0
              WHERE root.deleted = 0
                AND root.type IN ($root_type_placeholders)
                $scope_sql
                $assignment_sql
+               AND $company_scope_sql
                AND (root.parent_id IS NULL OR root.parent_id = 0)
              GROUP BY
                 root.tender_id,
@@ -64,6 +77,7 @@ class Tender_clarifications extends Security_Controller
             show_404();
         }
         $this->_access_clarifications_view($tender_id);
+        $this->require_tender_scope($tender_id, "clarifications");
 
         $tender = $this->_get_tender($tender_id);
         if (!$tender) {
@@ -138,10 +152,11 @@ class Tender_clarifications extends Security_Controller
             show_404();
         }
         $this->_access_clarifications_view($tender_id);
+        $this->require_tender_scope($tender_id, "clarifications");
 
         $tender = $this->_get_tender($tender_id);
         $vendor = $this->_get_vendor($vendor_id);
-        if (!$tender || !$vendor) {
+        if (!$tender || !$vendor || !$this->_vendor_participates_in_tender($tender_id, $vendor_id)) {
             show_404();
         }
 
@@ -206,8 +221,13 @@ class Tender_clarifications extends Security_Controller
         ) {
             show_404();
         }
+        $this->_access_clarifications_view((int) $clarification->tender_id);
+        $this->require_tender_scope((int) $clarification->tender_id, "clarifications");
 
         if ((int) ($clarification->vendor_id ?? 0) > 0) {
+            if (!$this->_vendor_participates_in_tender((int) $clarification->tender_id, (int) $clarification->vendor_id)) {
+                show_404();
+            }
             app_redirect("tender_clarifications/vendor/" . (int) $clarification->tender_id . "/" . (int) $clarification->vendor_id);
         }
 
@@ -218,6 +238,7 @@ class Tender_clarifications extends Security_Controller
 
         $replies = $this->Tender_communications_model->get_details([
             "parent_id" => (int) $clarification->id,
+            "tender_id" => (int) $clarification->tender_id,
         ])->getResult();
         $message_ids = array_merge([(int) $clarification->id], array_map(fn($reply) => (int) $reply->id, $replies));
 
@@ -267,7 +288,43 @@ class Tender_clarifications extends Security_Controller
                 "message" => "No vendor clarification thread was found for this tender."
             ]);
         }
+        if (
+            !in_array(strtolower((string) ($clarification->type ?? "")), Tender_communications_model::get_clarification_root_types(), true)
+            || (!in_array((int) ($clarification->parent_id ?? 0), [0], true) && $clarification->parent_id !== null)
+            || ($tender_id > 0 && $tender_id !== (int) $clarification->tender_id)
+            || ($vendor_id > 0 && (int) ($clarification->vendor_id ?? 0) > 0 && $vendor_id !== (int) $clarification->vendor_id)
+            || !$this->_clarification_bid_matches_thread($clarification)
+        ) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "The clarification thread does not match the submitted tender or vendor."
+            ]);
+        }
         $this->_access_clarifications_reply((int) $clarification->tender_id, (string) ($clarification->clarification_scope ?? "general"));
+        $this->require_tender_scope((int) $clarification->tender_id, "clarifications");
+        if (
+            (int) ($clarification->vendor_id ?? 0) > 0
+            && !$this->_vendor_participates_in_tender((int) $clarification->tender_id, (int) $clarification->vendor_id)
+        ) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "The clarification vendor is not a participant in this tender."
+            ]);
+        }
+
+        $user_id = (int) ($this->login_user->id ?? 0);
+        $ip_hash = hash("sha256", (string) $this->request->getIPAddress());
+        $throttle_key = "tender_clarification_reply_{$user_id}_{$ip_hash}";
+        $throttler = service("throttler");
+        if (!$throttler->check($throttle_key, 10, 60)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader("Retry-After", (string) max(1, $throttler->getTokenTime()))
+                ->setJSON([
+                    "success" => false,
+                    "message" => "Too many clarification replies. Please wait and try again.",
+                ]);
+        }
 
         $now = date("Y-m-d H:i:s");
         $is_technical_request = strtolower((string) ($clarification->type ?? "")) === "technical_clarification_request";
@@ -278,6 +335,15 @@ class Tender_clarifications extends Security_Controller
             : (in_array($visibility, ["technical", "commercial"], true) ? $visibility . "_clarification_response" : "response");
         $selected_vendor_id = (int) $this->request->getPost("reply_vendor_id");
         $reply_vendor_id = $visibility === "all" ? null : ((int) $clarification->vendor_id ?: ($selected_vendor_id ?: null));
+        if (
+            ($visibility === "vendor" && !$reply_vendor_id)
+            || ($reply_vendor_id && !$this->_vendor_participates_in_tender((int) $clarification->tender_id, (int) $reply_vendor_id))
+        ) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Select a vendor that participates in this tender."
+            ]);
+        }
         $clarification_scope = Tender_communications_model::normalize_clarification_scope($this->request->getPost("clarification_scope") ?: ($clarification->clarification_scope ?? "general"));
         if ($visibility === "technical" || $is_technical_request) {
             $clarification_scope = "technical";
@@ -312,7 +378,15 @@ class Tender_clarifications extends Security_Controller
             ]);
         }
 
-        $this->_save_clarification_files((int) $saved, (int) $clarification->tender_id, $reply_vendor_id);
+        try {
+            $this->_save_clarification_files((int) $saved, (int) $clarification->tender_id, $reply_vendor_id);
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Internal clarification attachment rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        }
 
         $tbl = $this->db->prefixTable("tender_communications");
         $root_types = Tender_communications_model::get_clarification_root_types();
@@ -380,12 +454,26 @@ class Tender_clarifications extends Security_Controller
         }
 
         $this->_access_clarifications_view((int) $attachment->tender_id);
+        $this->require_tender_scope((int) $attachment->tender_id, "clarifications");
         if (!$this->_can_access_clarification_scope((int) $attachment->tender_id, (string) ($attachment->clarification_scope ?? "general"))) {
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $communication = $this->Tender_communications_model->get_details([
+            "id" => (int) ($attachment->communication_id ?? 0),
+            "tender_id" => (int) $attachment->tender_id,
+        ])->getRow();
+        $expected_path_prefix = "tender_clarifications/tender_" . (int) $attachment->tender_id
+            . "/communication_" . (int) ($attachment->communication_id ?? 0) . "/";
+        if (
+            !$communication
+            || !str_starts_with(str_replace(chr(92), "/", ltrim((string) $attachment->path, "/")), $expected_path_prefix)
+        ) {
+            show_404();
+        }
+
+        $full_path = $this->_resolve_clarification_attachment_path((string)$attachment->path);
+        if (!$full_path) {
             show_404();
         }
 
@@ -428,14 +516,88 @@ class Tender_clarifications extends Security_Controller
         return $this->db->query(
             "SELECT DISTINCT $v.id, $v.vendor_name
              FROM (
-                SELECT vendor_id FROM $tiv WHERE deleted=0 AND tender_id=?
+                SELECT vendor_id
+                FROM $tiv
+                WHERE deleted=0
+                  AND tender_id=?
+                  AND invite_status IN ('sent', 'delivered', 'opened', 'approved')
                 UNION
-                SELECT vendor_id FROM $tb WHERE deleted=0 AND tender_id=?
+                SELECT vendor_id
+                FROM $tb
+                WHERE deleted=0
+                  AND tender_id=?
+                  AND status<>'draft'
              ) src
              INNER JOIN $v ON $v.id=src.vendor_id AND $v.deleted=0
              ORDER BY $v.vendor_name ASC",
             [$tender_id, $tender_id]
         )->getResult();
+    }
+
+    private function _vendor_participates_in_tender(int $tender_id, int $vendor_id): bool
+    {
+        if (!$tender_id || !$vendor_id) {
+            return false;
+        }
+
+        $tiv = $this->db->prefixTable("tender_invited_vendors");
+        $tb = $this->db->prefixTable("tender_bids");
+        $row = $this->db->query(
+            "SELECT (
+                EXISTS (
+                    SELECT 1
+                    FROM $tiv invite_scope
+                    WHERE invite_scope.deleted=0
+                      AND invite_scope.tender_id=?
+                      AND invite_scope.vendor_id=?
+                      AND invite_scope.invite_status IN ('sent', 'delivered', 'opened', 'approved')
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM $tb bid_scope
+                    WHERE bid_scope.deleted=0
+                      AND bid_scope.tender_id=?
+                      AND bid_scope.vendor_id=?
+                      AND bid_scope.status<>'draft'
+                )
+             ) AS participates",
+            [$tender_id, $vendor_id, $tender_id, $vendor_id]
+        )->getRow();
+
+        return (int) ($row->participates ?? 0) === 1;
+    }
+
+    private function _clarification_bid_matches_thread(object $clarification): bool
+    {
+        $bid_id = (int) ($clarification->tender_bid_id ?? 0);
+        if (!$bid_id) {
+            return true;
+        }
+
+        $tender_id = (int) ($clarification->tender_id ?? 0);
+        $vendor_id = (int) ($clarification->vendor_id ?? 0);
+        if (!$tender_id) {
+            return false;
+        }
+
+        $tb = $this->db->prefixTable("tender_bids");
+        $params = [$bid_id, $tender_id];
+        $vendor_sql = "";
+        if ($vendor_id > 0) {
+            $vendor_sql = " AND vendor_id=?";
+            $params[] = $vendor_id;
+        }
+
+        return (bool) $this->db->query(
+            "SELECT id
+             FROM $tb
+             WHERE id=?
+               AND tender_id=?
+               AND deleted=0
+               $vendor_sql
+             LIMIT 1",
+            $params
+        )->getRow();
     }
 
     private function _access_clarifications_view(int $tender_id = 0): void
@@ -549,6 +711,22 @@ class Tender_clarifications extends Security_Controller
         return (bool) $row;
     }
 
+    private function _resolve_clarification_attachment_path(string $relative): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', $relative), '/');
+        if (!str_starts_with($relative, 'tender_clarifications/')) {
+            return null;
+        }
+        $root = realpath(WRITEPATH . 'uploads/tender_clarifications');
+        $candidate = realpath(WRITEPATH . 'uploads/' . $relative);
+        if (!$root || !$candidate || !is_file($candidate)) {
+            return null;
+        }
+        $root = strtolower(rtrim(str_replace('\\', '/', $root), '/') . '/');
+        $candidateCheck = strtolower(str_replace('\\', '/', $candidate));
+        return str_starts_with($candidateCheck, $root) ? $candidate : null;
+    }
+
     private function _save_clarification_files(int $communication_id, int $tender_id, ?int $vendor_id): void
     {
         $files = method_exists($this->request, "getFileMultiple")
@@ -564,31 +742,28 @@ class Tender_clarifications extends Security_Controller
         }
 
         $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
-        }
 
         $saved_files = [];
+        $security = new Upload_security();
         foreach ($files as $file) {
             if (!$file || !$file->isValid() || $file->hasMoved()) {
                 continue;
             }
 
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("tc_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
+            $stored = $security->storeUploadedFile(
+                $file,
+                $upload_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                'tc_'
+            );
+            $new_name = $stored['stored_name'];
 
             $saved_files[] = [
                 "disk" => "local",
                 "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
+                "original_name" => $stored['original_name'],
+                "mime_type" => $stored['detected_mime'],
+                "size_bytes" => $stored['size_bytes'],
             ];
         }
 

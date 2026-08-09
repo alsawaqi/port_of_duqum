@@ -13,6 +13,14 @@ use CodeIgniter\Config\BaseConfig;
 class Encryption extends BaseConfig
 {
     /**
+     * Old keys may be supplied through the secret manager during controlled
+     * rotation; no previous key is committed to source.
+     *
+     * @var list<string>|string
+     */
+    public array|string $previousKeys = [];
+
+    /**
      * --------------------------------------------------------------------------
      * Encryption Key Starter
      * --------------------------------------------------------------------------

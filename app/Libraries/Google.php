@@ -18,13 +18,13 @@ class Google {
     }
 
     //authorize connection
-    public function authorize() {
+    public function authorize(string $state) {
         $client = $this->_get_client_credentials();
-        $this->_check_access_token($client, true);
+        $this->_check_access_token($client, true, $state);
     }
 
     //check access token
-    private function _check_access_token($client, $redirect_to_settings = false) {
+    private function _check_access_token($client, $redirect_to_settings = false, string $state = '') {
         //load previously authorized token from database, if it exists.
         $accessToken = get_setting("google_drive_oauth_access_token");
         if (get_setting("google_drive_authorized") && $accessToken && !$redirect_to_settings) {
@@ -41,6 +41,10 @@ class Google {
                     app_redirect("settings/integration/google_drive");
                 }
             } else {
+                if (!$redirect_to_settings || $state === '') {
+                    throw new \RuntimeException('Google Drive authorization is required.');
+                }
+                $client->setState($state);
                 $authUrl = $client->createAuthUrl();
                 app_redirect($authUrl, true);
             }
@@ -150,8 +154,8 @@ class Google {
                 $ids = get_setting($setting_name);
             }
 
-            if (!empty($ids) && is_array(@unserialize($ids))) {
-                $final_ids = unserialize($ids);
+            if (!empty($ids) && is_array(@safe_unserialize($ids))) {
+                $final_ids = safe_unserialize($ids);
             }
 
             $final_ids[$name] = $id;
@@ -200,7 +204,7 @@ class Google {
     private function _get_saved_folder_id($path) {
         $save_ids = get_setting("google_drive_folder_ids");
         if ($save_ids && $path) {
-            $ids = unserialize($save_ids);
+            $ids = safe_unserialize($save_ids);
             return get_array_value($ids, $path); //path could be folder name
         }
     }
@@ -212,7 +216,7 @@ class Google {
             $stored_ids = get_setting("google_drive_temp_file_ids");
         }
 
-        $ids = $stored_ids ? unserialize($stored_ids) : array();
+        $ids = $stored_ids ? safe_unserialize($stored_ids) : array();
 
         $file_id = null;
         //for temp file id, remove old one
@@ -353,8 +357,6 @@ class Google {
             return false;
         }
 
-        $this->_make_file_as_public($service, $google_drive_file_id);
-
         //save id's for temp files
         if ($folder_name == "temp") {
             $this->_save_id($file_name, $google_drive_file_id, "file");
@@ -455,16 +457,6 @@ class Google {
         return null;
     }
 
-
-    //make drive file as public
-    private function _make_file_as_public($service, $file_id = "") {
-        $permission = new \Google_Service_Drive_Permission(array(
-            'type' => 'anyone',
-            'role' => 'reader'
-        ));
-
-        $service->permissions->create($file_id, $permission);
-    }
 
     //move temp files to permanent directory 
     public function move_temp_file($file_name, $new_filename, $folder_name) {

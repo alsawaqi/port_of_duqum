@@ -1,0 +1,15 @@
+Options -Indexes
+
+# Plugin PHP is loaded internally by the application; no plugin-side script or
+# configuration artifact should ever be executed or downloaded directly.
+<IfModule mod_authz_core.c>
+    <FilesMatch "(?i)(^\.|\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$)">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "(?i)(^\.|\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$)">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>

@@ -3154,6 +3154,8 @@ $lang['add_vendor_document_type'] = 'إضافة نوع مستند مورد';
 $lang['ptw_master'] = 'إدارة تصاريح العمل';
 $lang['ptw_hsse_users'] = 'مستخدمو HSSE لتصاريح العمل';
 $lang['add_ptw_hsse_user'] = 'إضافة مستخدم HSSE لتصاريح العمل';
+$lang['ptw_applicant_users'] = 'مستخدمو طلبات تصاريح العمل';
+$lang['add_ptw_applicant_user'] = 'إضافة مستخدم لطلبات تصاريح العمل';
 $lang['ptw_hsse_inbox'] = 'وارد HSSE لتصاريح العمل';
 $lang['ptw_application_details'] = 'تفاصيل طلب تصريح العمل';
 $lang['hsse_review_history'] = 'سجل مراجعات HSSE';
@@ -3559,7 +3561,8 @@ $lang['password_confirm'] = 'تأكيد كلمة المرور';
 $lang['password_confirm_required'] = 'تأكيد كلمة المرور مطلوب.';
 $lang['passwords_do_not_match'] = 'كلمة المرور وتأكيدها غير متطابقين.';
 $lang['password_security_hint'] = 'استخدم كلمة مرور قوية لتحسين الأمان.';
-$lang['vendor_password_reuse_hint'] = 'يجب على المستخدم الجديد إدخال كلمة مرور. أما مستخدمو تصاريح الدخول أو البوابة الحاليون فيمكنهم تركها فارغة واستخدام كلمة المرور الحالية.';
+$lang['vendor_password_reuse_hint'] = 'أدخل كلمة المرور. إذا كان البريد الإلكتروني مرتبطًا بحساب موجود، فأدخل كلمة المرور الحالية لإثبات ملكية الحساب؛ وإذا كان البريد جديدًا، فستُستخدم هذه الكلمة لإنشاء الحساب.';
+$lang['vendor_admin_password_reuse_hint'] = 'اترك كلمة المرور فارغة عند استخدام بريد موظف مسجل مسبقًا. تكون كلمة المرور مطلوبة فقط عند إنشاء حساب جديد.';
 $lang['vendor_email_belongs_to_non_staff_user'] = 'هذا البريد الإلكتروني مرتبط بحساب عميل أو حساب غير موظف ولا يمكن استخدامه للدخول إلى بوابة الموردين.';
 $lang['user_already_registered_as_vendor'] = 'هذا المستخدم مرتبط بالفعل بحساب مورد.';
 $lang['guest_vendor_documents_help'] = 'ارفع مستندات التسجيل المطلوبة. يمكنك إضافة المزيد بعد إنشاء الحساب.';
@@ -3676,5 +3679,7 @@ $lang["vendor_unblocked_successfully"] = "تم إلغاء حظر المورد ب
 $lang["vendor_is_not_blocked"] = "هذا المورد غير محظور.";
 $lang["record_not_found"] = "لم يتم العثور على السجل.";
 $lang["sort"] = "الترتيب";
+
+$lang["password_not_sent_by_email"] = "لا يتم إرسال كلمة المرور عبر البريد الإلكتروني. استخدم كلمة المرور التي اخترتها أو استخدم خيار نسيت كلمة المرور لإنشاء كلمة مرور جديدة.";
 
 return $lang;

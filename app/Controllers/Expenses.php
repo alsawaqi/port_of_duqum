@@ -176,7 +176,7 @@ class Expenses extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "expense");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $recurring = $this->request->getPost('recurring') ? 1 : 0;
         $expense_date = $this->request->getPost('expense_date');
@@ -273,7 +273,7 @@ class Expenses extends Security_Controller {
             //delete the files
             $file_path = get_setting("timeline_file_path");
             if ($expense_info->files) {
-                $files = unserialize($expense_info->files);
+                $files = safe_unserialize($expense_info->files);
 
                 foreach ($files as $file) {
                     delete_app_files($file_path, array($file));
@@ -388,7 +388,7 @@ class Expenses extends Security_Controller {
         $files_link = "";
         $file_download_link = "";
         if ($data->files) {
-            $files = unserialize($data->files);
+            $files = safe_unserialize($data->files);
             if (count($files)) {
                 foreach ($files as $key => $value) {
                     $file_name = get_array_value($value, "file_name");
@@ -437,7 +437,7 @@ class Expenses extends Security_Controller {
         if ($id) {
             $this->validate_expense_access($id);
             $expense_info = $this->Expenses_model->get_one($id);
-            $files = unserialize($expense_info->files);
+            $files = safe_unserialize($expense_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

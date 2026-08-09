@@ -10,7 +10,7 @@
 
     <?php if (!$session) { ?>
         <div class="alert alert-warning">No active opening session exists yet.</div>
-        <button type="button" class="btn btn-primary" id="generate-3key-btn" data-tender-id="<?php echo (int) $tender->id; ?>" data-opening-stage="<?php echo esc($opening_stage ?? "commercial"); ?>">
+        <button type="button" class="btn btn-primary" id="generate-3key-btn" data-tender-id="<?php echo (int) $tender->id; ?>" data-opening-stage="<?php echo esc($opening_stage ?? "technical"); ?>">
             Generate 3-Key Codes
         </button>
     <?php } else { ?>
@@ -26,47 +26,50 @@
 
         <?php if (($session->status ?? "") === "codes_generated") { ?>
             <div class="mb-3">
-                <strong>Your code:</strong>
-                <?php if (($my_role ?? "") === "chairman") { ?>
-                    <span class="badge bg-dark"><?php echo esc($session->chairman_code); ?></span>
-                <?php } elseif (($my_role ?? "") === "secretary") { ?>
-                    <span class="badge bg-dark"><?php echo esc($session->secretary_code); ?></span>
-                <?php } elseif (($my_role ?? "") === "itc_member") { ?>
-                    <span class="badge bg-dark"><?php echo esc($session->member_code); ?></span>
-                <?php } ?>
-            </div>
-
-            <div class="mb-3">
                 <div>Chairman confirmed: <?php echo ($confirm_map["chairman"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
                 <div>Secretary confirmed: <?php echo ($confirm_map["secretary"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
                 <div>Member confirmed: <?php echo ($confirm_map["itc_member"] ?? 0) >= 1 ? "Yes" : "No"; ?></div>
             </div>
 
-            <?php echo form_open(get_uri("tender_committee_opening_inbox/confirm_codes"), ["id" => "tender-3key-confirm-form", "class" => "general-form"]); ?>
-            <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
-            <input type="hidden" name="opening_stage" value="<?php echo esc($opening_stage ?? "technical"); ?>" />
+            <?php if (($confirm_map[$my_role ?? ""] ?? 0) >= 1) { ?>
+                <div class="alert alert-success">Your assigned role code has already been confirmed.</div>
+            <?php } elseif (!empty($code_unavailable) || empty($my_code)) { ?>
+                <div class="alert alert-danger">
+                    Your assigned role code cannot be retrieved securely. Ask an authorized committee member to regenerate the opening codes or contact the system administrator.
+                </div>
+            <?php } else { ?>
+                <div class="mb-3">
+                    <strong>Your assigned role code:</strong>
+                    <span class="badge bg-dark font-monospace" aria-label="Your assigned role code"><?php echo esc($my_code); ?></span>
+                </div>
 
-            <div class="form-group">
-                <label>Chairman Code</label>
-                <input type="text" name="chairman_code" class="form-control" required>
-            </div>
+                <?php echo form_open(get_uri("tender_committee_opening_inbox/confirm_codes"), ["id" => "tender-3key-confirm-form", "class" => "general-form"]); ?>
+                <input type="hidden" name="tender_id" value="<?php echo (int) $tender->id; ?>" />
+                <input type="hidden" name="opening_stage" value="<?php echo esc($opening_stage ?? "technical"); ?>" />
 
-            <div class="form-group">
-                <label>Secretary Code</label>
-                <input type="text" name="secretary_code" class="form-control" required>
-            </div>
+                <div class="form-group">
+                    <label for="opening-code-input">Confirm your assigned role code</label>
+                    <input
+                        id="opening-code-input"
+                        type="password"
+                        name="opening_code"
+                        class="form-control"
+                        inputmode="numeric"
+                        pattern="[0-9]{6}"
+                        minlength="6"
+                        maxlength="6"
+                        autocomplete="one-time-code"
+                        spellcheck="false"
+                        required>
+                </div>
 
-            <div class="form-group">
-                <label>Member Code</label>
-                <input type="text" name="member_code" class="form-control" required>
-            </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
+                    <button type="submit" class="btn btn-primary">Confirm My Code</button>
+                </div>
 
-            <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
-                <button type="submit" class="btn btn-primary">Confirm Codes</button>
-            </div>
-
-            <?php echo form_close(); ?>
+                <?php echo form_close(); ?>
+            <?php } ?>
         <?php } else { ?>
             <h5 class="mb10">Bid Package Summary</h5>
             <div class="table-responsive mb15">
@@ -174,9 +177,10 @@ $(document).ready(function () {
             } else {
                 appAlert.error(r.message || "Error", {duration: 3000});
             }
-        }).fail(function () {
+        }).fail(function (xhr) {
             appLoader.hide();
-            appAlert.error("Request failed. Please try again.", {duration: 3000});
+            var r = tryParseResponse(xhr.responseText || "");
+            appAlert.error(r.message || "Request failed. Please try again.", {duration: 3000});
         });
     });
 

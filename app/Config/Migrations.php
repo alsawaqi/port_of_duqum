@@ -49,4 +49,7 @@ class Migrations extends BaseConfig
      * - Y_m_d_His_
      */
     public string $timestampFormat = 'Y-m-d-His_';
+
+    /** Prevent concurrent deployment processes from racing migrations. */
+    public bool $lock = true;
 }

@@ -88,7 +88,7 @@ $doc_button = function ($doc_id, string $label) {
                             <th>Description</th>
                             <th>UOM</th>
                             <th>Qty</th>
-                            <th>Brand</th>
+                            <th>Part No (Optional)</th>
                             <th>Vendor Unit Price</th>
                             <th>Line Total</th>
                         </tr>
@@ -100,7 +100,7 @@ $doc_button = function ($doc_id, string $label) {
                                 <td><?php echo esc($item->description ?? "-"); ?></td>
                                 <td><?php echo esc($item->uom ?? "-"); ?></td>
                                 <td><?php echo $item->qty !== null ? number_format((float) $item->qty, 3) : "-"; ?></td>
-                                <td><?php echo esc($item->brand ?? "-"); ?></td>
+                                <td><?php echo esc($item->part_no ?? ($item->brand ?? "-")); ?></td>
                                 <td>
                                     <?php echo $item->vendor_unit_price !== null && $item->vendor_unit_price !== "" ? number_format((float) $item->vendor_unit_price, 3) : "-"; ?>
                                 </td>
@@ -113,7 +113,7 @@ $doc_button = function ($doc_id, string $label) {
                 </table>
             </div>
         <?php } else { ?>
-            <div class="alert alert-light mb0">No RFQ/RFP item prices were submitted for this bid.</div>
+            <div class="alert alert-light mb0">No tender item prices were submitted for this bid.</div>
         <?php } ?>
     </div>
 

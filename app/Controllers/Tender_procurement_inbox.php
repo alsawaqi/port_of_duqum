@@ -22,6 +22,9 @@ use App\Models\Tender_team_members_model;
 use App\Models\Tender_technical_users_model;
 use App\Models\Tenders_model;
 use App\Libraries\Tender_testing_stage;
+use App\Libraries\Runtime_schema_guard;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
 use CodeIgniter\I18n\Time;
 
 class Tender_procurement_inbox extends Security_Controller
@@ -88,12 +91,22 @@ class Tender_procurement_inbox extends Security_Controller
     public function list_data()
     {
         $this->access_only_tender("procurement", "view");
-        $this->Tenders_model->auto_progress_workflow();
 
         $req = $this->db->prefixTable("tender_requests");
         $t = $this->db->prefixTable("tenders");
         $companies = $this->db->prefixTable("companies");
         $departments = $this->db->prefixTable("departments");
+        $scope_params = [];
+        $tender_scope = $this->tender_company_scope_sql(
+            "COALESCE(t.company_id, req.company_id)",
+            "procurement",
+            $scope_params
+        );
+        $request_scope = $this->tender_company_scope_sql(
+            "req.company_id",
+            "procurement",
+            $scope_params
+        );
 
         $sql = "SELECT
                     t.id AS tender_id,
@@ -124,6 +137,7 @@ class Tender_procurement_inbox extends Security_Controller
                 LEFT JOIN $departments department
                     ON department.id = COALESCE(t.department_id, req.department_id)
                 WHERE t.deleted = 0
+                  AND $tender_scope
 
                 UNION ALL
 
@@ -152,6 +166,7 @@ class Tender_procurement_inbox extends Security_Controller
                 LEFT JOIN $departments department ON department.id = req.department_id
                 WHERE req.deleted = 0
                   AND req.status = 'committee_approved'
+                  AND $request_scope
                   AND NOT EXISTS (
                         SELECT 1
                         FROM $t
@@ -160,7 +175,7 @@ class Tender_procurement_inbox extends Security_Controller
                   )
                 ORDER BY created_at DESC, tender_id DESC, tender_request_id DESC";
 
-        $list = $this->db->query($sql)->getResult();
+        $list = $this->db->query($sql, $scope_params)->getResult();
         $result = [];
 
         foreach ($list as $row) {
@@ -335,10 +350,23 @@ class Tender_procurement_inbox extends Security_Controller
 
     private function _get_tender_form_data(int $request_id = 0, int $tender_id = 0): array
     {
+        if ($request_id) {
+            $this->require_tender_request_scope($request_id, "procurement");
+        }
+        $authorized_tender = null;
+        if ($tender_id) {
+            $authorized_tender = $this->require_tender_scope($tender_id, "procurement");
+            $this->require_tender_request_pair($authorized_tender, $request_id);
+        }
+
         $request = $request_id ? $this->Tender_requests_model->get_details(["id" => $request_id])->getRow() : null;
         $tender = $tender_id ? $this->_get_tender_by_id($tender_id) : null;
         if (!$tender && $request) {
             $tender = $this->Tenders_model->get_by_request_id((int) $request->id);
+            if ($tender) {
+                $authorized_tender = $this->require_tender_scope((int) $tender->id, "procurement");
+                $this->require_tender_request_pair($authorized_tender, (int) $request->id);
+            }
         }
 
         $company_id = (int) ($tender->company_id ?? $request->company_id ?? 0);
@@ -378,9 +406,7 @@ class Tender_procurement_inbox extends Security_Controller
         if ($tender && !empty($tender->id)) {
             $selected_specific_vendors = $this->_get_selected_target_vendors((int) $tender->id);
             $target = $this->_get_latest_target_rule((int) $tender->id);
-            if (!empty($selected_specific_vendors)) {
-                $selected_target_mode = "specific_vendors";
-            } elseif ($target) {
+            if ($target) {
                 if ((int) ($target->vendor_group_id ?? 0) > 0) {
                     $selected_target_mode = "group";
                     $selected_vendor_group_id = (int) $target->vendor_group_id;
@@ -402,6 +428,11 @@ class Tender_procurement_inbox extends Security_Controller
                         [(int) $target->vendor_sub_category_id]
                     )->getRow();
                 }
+            }
+            if (!empty($selected_specific_vendors)) {
+                $selected_target_mode = $selected_vendor_group_id > 0
+                    ? "group_and_specific_vendors"
+                    : "specific_vendors";
             }
         }
 
@@ -468,18 +499,36 @@ class Tender_procurement_inbox extends Security_Controller
 
         $tender_id = (int) $this->request->getPost("tender_id");
         $tender_request_id = (int) $this->request->getPost("tender_request_id");
+        if ($tender_request_id) {
+            $this->require_tender_request_scope($tender_request_id, "procurement");
+        }
         $request = $tender_request_id ? $this->Tender_requests_model->get_details(["id" => $tender_request_id])->getRow() : null;
         if ($request && ($request->status ?? "") !== "committee_approved") {
             return $this->response->setJSON(["success" => false, "message" => "Only committee approved requests can be processed."]);
         }
 
+        $authorized_existing = null;
+        if ($tender_id) {
+            $authorized_existing = $this->require_tender_scope($tender_id, "procurement");
+            $this->require_tender_request_pair($authorized_existing, $tender_request_id);
+        }
         $existing = $tender_id ? $this->_get_tender_by_id($tender_id) : null;
         if (!$existing && $tender_request_id) {
             $existing = $this->Tenders_model->get_by_request_id($tender_request_id);
+            if ($existing) {
+                $authorized_existing = $this->require_tender_scope((int) $existing->id, "procurement");
+                $this->require_tender_request_pair($authorized_existing, $tender_request_id);
+            }
         }
         if ($existing && !$tender_request_id && !empty($existing->tender_request_id)) {
             $tender_request_id = (int) $existing->tender_request_id;
             $request = $this->Tender_requests_model->get_details(["id" => $tender_request_id])->getRow();
+        }
+        if ($existing && $tender_request_id) {
+            $this->require_tender_request_pair(
+                $authorized_existing ?: $this->require_tender_scope((int) $existing->id, "procurement"),
+                $tender_request_id
+            );
         }
 
         if ($existing && !empty($existing->id)) {
@@ -529,6 +578,16 @@ class Tender_procurement_inbox extends Security_Controller
         if (!$company_id || !$department_id) {
             return $this->response->setJSON(["success" => false, "message" => "Company and department are required."]);
         }
+        if ($request && (int) ($request->company_id ?? 0) !== $company_id) {
+            app_redirect("forbidden");
+            exit;
+        }
+        if ($authorized_existing
+            && (int) ($authorized_existing->authorization_company_id ?? 0) !== $company_id) {
+            app_redirect("forbidden");
+            exit;
+        }
+        $this->require_tender_company_access($company_id, "procurement");
 
         $release_at = $this->_normalize_tender_datetime($this->request->getPost("release_at"), "start");
         $document_purchase_deadline = $this->_normalize_tender_datetime($this->request->getPost("document_purchase_deadline"), "end");
@@ -567,13 +626,18 @@ class Tender_procurement_inbox extends Security_Controller
         $technical_eval_deadline = $new_milestones["technical_eval_deadline"];
         $commercial_eval_deadline = $new_milestones["commercial_eval_deadline"];
 
+        $workday_error = $this->_validate_tender_workdays($new_milestones);
+        if ($workday_error) {
+            return $this->response->setJSON(["success" => false, "message" => $workday_error]);
+        }
+
         $schedule_error = $testing_workflow_stage ? null : $this->_validate_tender_schedule($new_milestones);
         if ($schedule_error) {
             return $this->response->setJSON(["success" => false, "message" => $schedule_error]);
         }
 
         $target_mode = strtolower(trim((string) $this->request->getPost("target_mode")));
-        if (!in_array($target_mode, ["specialty", "group", "specific_vendors", "grade"], true)) {
+        if (!in_array($target_mode, ["specialty", "group", "specific_vendors", "group_and_specific_vendors", "grade"], true)) {
             $target_mode = "specialty";
         }
 
@@ -620,15 +684,15 @@ class Tender_procurement_inbox extends Security_Controller
         $request_selected_vendors = $request ? $this->Tender_request_vendors_model->get_selected_vendors((int) $request->id) : [];
         $has_request_selected_vendors = count($request_selected_vendors) > 0;
         $has_specialty_target = $target_mode === "specialty" && $vendor_category_id > 0;
-        $has_group_target = $target_mode === "group" && $vendor_group_id > 0;
-        $has_specific_vendor_target = $target_mode === "specific_vendors" && !empty($specific_vendor_ids);
+        $has_group_target = in_array($target_mode, ["group", "group_and_specific_vendors"], true) && $vendor_group_id > 0;
+        $has_specific_vendor_target = in_array($target_mode, ["specific_vendors", "group_and_specific_vendors"], true) && !empty($specific_vendor_ids);
         $has_grade_target = $target_mode === "grade" && $vendor_grade_id > 0;
         $use_request_selected_vendors = $has_request_selected_vendors && !$has_specialty_target && !$has_group_target && !$has_specific_vendor_target && !$has_grade_target;
 
-        if ($target_mode === "group" && !$has_group_target) {
+        if (in_array($target_mode, ["group", "group_and_specific_vendors"], true) && !$has_group_target) {
             return $this->response->setJSON(["success" => false, "message" => "Please select a vendor group."]);
         }
-        if ($target_mode === "specific_vendors" && !$has_specific_vendor_target) {
+        if (in_array($target_mode, ["specific_vendors", "group_and_specific_vendors"], true) && !$has_specific_vendor_target) {
             return $this->response->setJSON(["success" => false, "message" => "Please add at least one specific vendor."]);
         }
         if ($target_mode === "grade" && !$has_grade_target) {
@@ -690,7 +754,23 @@ class Tender_procurement_inbox extends Security_Controller
         $this->_save_target_rule($tender_id, $target_mode, $vendor_category_id, $vendor_sub_category_id, $vendor_group_id, $vendor_grade_id, $specific_vendor_ids);
         $this->Tender_bid_requirements_model->sync_requirements($tender_id, $required_sections);
         $this->_sync_rfq_data($tender_id);
-        $this->_save_tender_documents($tender_id);
+        try {
+            $this->_save_tender_documents($tender_id);
+        } catch (UploadSecurityException $e) {
+            $this->db->transRollback();
+            log_message('notice', 'Tender source document upload rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'Tender source document storage failed.');
+            return $this->response->setStatusCode(500)->setJSON([
+                'success' => false,
+                'message' => app_lang('error_occurred'),
+            ]);
+        }
 
         if ($this->_has_any_posted_team_selection($posted_team_ids)) {
             $this->_sync_tender_teams_from_post($tender_id, $posted_team_ids);
@@ -702,6 +782,8 @@ class Tender_procurement_inbox extends Security_Controller
             $invited_count = $this->_sync_invites_from_request($tender_id, (int) $request->id);
         } elseif ($has_specialty_target) {
             $invited_count = $this->_sync_invites_by_specialty($tender_id, $vendor_category_id, $vendor_sub_category_id);
+        } elseif ($target_mode === "group_and_specific_vendors") {
+            $invited_count = $this->_sync_invites_by_group_and_specific_vendors($tender_id, $vendor_group_id, $specific_vendor_ids);
         } elseif ($has_group_target) {
             $invited_count = $this->_sync_invites_by_vendor_group($tender_id, $vendor_group_id);
         } elseif ($has_specific_vendor_target) {
@@ -782,6 +864,9 @@ class Tender_procurement_inbox extends Security_Controller
 
         $tender_id = (int) $this->request->getPost("tender_id");
         $tender_request_id = (int) $this->request->getPost("tender_request_id");
+        if ($tender_request_id) {
+            $this->require_tender_request_scope($tender_request_id, "procurement");
+        }
         $tender = $tender_id ? $this->_get_tender_by_id($tender_id) : null;
         if (!$tender && $tender_request_id) {
             $tender = $this->Tenders_model->get_by_request_id($tender_request_id);
@@ -790,6 +875,8 @@ class Tender_procurement_inbox extends Security_Controller
         if (!$tender || empty($tender->id)) {
             return $this->response->setJSON(["success" => false, "message" => "Create the tender first."]);
         }
+        $authorized_tender = $this->require_tender_scope((int) $tender->id, "procurement");
+        $this->require_tender_request_pair($authorized_tender, $tender_request_id);
 
         $publish_error = $this->_validate_tender_can_publish((int) $tender->id, (string) ($tender->tender_type ?? "open"));
         if ($publish_error) {
@@ -808,12 +895,104 @@ class Tender_procurement_inbox extends Security_Controller
         ]);
     }
 
+    public function preview_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+
+        return $this->template->view(
+            "tender_procurement_manager_inbox/file_preview",
+            $this->_make_tender_document_preview_data(
+                $context["doc"],
+                $context["full_path"],
+                get_uri("tender_procurement_inbox/view_tender_document/" . (int) $id)
+            )
+        );
+    }
+
+    public function view_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_tender_document_file($context["doc"], $context["full_path"], false);
+    }
+
+    public function download_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_tender_document_file($context["doc"], $context["full_path"], true);
+    }
+
     public function delete_document()
     {
         $this->validate_submitted_data(["id" => "required|numeric"]);
         $this->access_only_tender("procurement", "update");
-        $this->Tender_documents_model->ci_save(["deleted" => 1], (int) $this->request->getPost("id"));
+        $document_id = (int) $this->request->getPost("id");
+        $document = $this->Tender_documents_model->get_one($document_id);
+        if (!$document || (int) ($document->deleted ?? 0) === 1) {
+            show_404();
+        }
+        $this->require_tender_scope((int) ($document->tender_id ?? 0), "procurement");
+        $this->Tender_documents_model->ci_save(["deleted" => 1], $document_id);
         return $this->response->setJSON(["success" => true, "message" => "Document deleted."]);
+    }
+
+    private function _get_accessible_tender_document_context(int $id): array
+    {
+        $this->access_only_tender("procurement", "view");
+        if (!$id) {
+            show_404();
+        }
+
+        $doc = $this->Tender_documents_model->get_one($id);
+        if (!$doc || (int) ($doc->deleted ?? 0) === 1 || !$this->_get_tender_by_id((int) ($doc->tender_id ?? 0))) {
+            show_404();
+        }
+        $this->require_tender_scope((int) $doc->tender_id, "procurement");
+
+        $full_path = $this->_resolve_tender_document_path($doc);
+        if (!$full_path || !is_file($full_path)) {
+            show_404();
+        }
+
+        return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _resolve_tender_document_path($doc): ?string
+    {
+        $relative = ltrim(str_replace('\\', '/', (string)($doc->path ?? '')), '/');
+        return (new Upload_security())->resolveStoredFile($relative, 'tender_documents');
+    }
+
+    private function _make_tender_document_preview_data($doc, string $full_path, string $file_url): array
+    {
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = strtolower((string) ($mime ?: "application/octet-stream"));
+        $image_mimes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+
+        return [
+            "file_url" => $file_url,
+            "is_image_file" => in_array($mime, $image_mimes, true),
+            "is_iframe_preview_available" => $mime === "application/pdf",
+            "is_google_preview_available" => false,
+            "is_viewable_video_file" => false,
+            "is_google_drive_file" => false,
+        ];
+    }
+
+    private function _serve_tender_document_file($doc, string $full_path, bool $download)
+    {
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = $mime ?: "application/octet-stream";
+        $name = str_replace(["\r", "\n", '"'], "", (string) ($doc->original_name ?: basename($full_path)));
+        $inline_mimes = ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+        $inline = !$download && in_array(strtolower($mime), $inline_mimes, true);
+
+        $response = $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setContentType($mime, "")
+            ->setHeader("X-Content-Type-Options", "nosniff");
+
+        return $inline ? $response->inline() : $response;
     }
 
     public function award()
@@ -822,7 +1001,7 @@ class Tender_procurement_inbox extends Security_Controller
         $this->access_only_tender("procurement", "update");
 
         $tender_id = (int) $this->request->getPost("tender_id");
-        $this->Tenders_model->auto_progress_workflow();
+        $this->require_tender_scope($tender_id, "procurement");
         $tender = $this->_get_tender_by_id($tender_id);
         if (!$tender) {
             return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
@@ -864,6 +1043,7 @@ class Tender_procurement_inbox extends Security_Controller
         $this->access_only_tender("procurement", "update");
 
         $tender_id = (int) $this->request->getPost("tender_id");
+        $this->require_tender_scope($tender_id, "procurement");
         $tender = $this->_get_tender_by_id($tender_id);
         if (!$tender) {
             return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
@@ -903,6 +1083,7 @@ class Tender_procurement_inbox extends Security_Controller
         $this->access_only_tender("procurement", "create");
 
         $source_tender_id = (int) $this->request->getPost("tender_id");
+        $this->require_tender_scope($source_tender_id, "procurement");
         $source = $this->_get_tender_by_id($source_tender_id);
         if (!$source) {
             return $this->response->setJSON(["success" => false, "message" => "Source tender not found."]);
@@ -976,34 +1157,14 @@ class Tender_procurement_inbox extends Security_Controller
 
     private function _ensure_tender_site_visit_columns(): void
     {
-        $table = $this->db->prefixTable("tenders");
-        $columns = [
-            "site_visit_location" => "ALTER TABLE `$table` ADD COLUMN `site_visit_location` VARCHAR(255) DEFAULT NULL AFTER `site_visit_at`",
-            "site_visit_instructions" => "ALTER TABLE `$table` ADD COLUMN `site_visit_instructions` TEXT DEFAULT NULL AFTER `site_visit_location`",
-            "site_visit_mandatory" => "ALTER TABLE `$table` ADD COLUMN `site_visit_mandatory` TINYINT(1) NOT NULL DEFAULT 0 AFTER `site_visit_instructions`",
-        ];
-
-        foreach ($columns as $column => $sql) {
-            if (!$this->_column_exists($table, $column)) {
-                $this->db->query($sql);
-            }
-        }
-    }
-
-    private function _column_exists(string $table, string $column): bool
-    {
-        $row = $this->db->query(
-            "SHOW COLUMNS FROM `$table` LIKE " . $this->db->escape($column)
-        )->getRow();
-
-        return (bool) $row;
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tenders" => ["site_visit_location", "site_visit_instructions", "site_visit_mandatory"],
+        ], "tender site visits");
     }
 
     private function _sync_rfq_data(int $tender_id): void
     {
         $detail = [
-            "rfq_no" => trim((string) $this->request->getPost("rfq_no")) ?: null,
-            "rfq_date" => $this->_date_or_null($this->request->getPost("rfq_date")),
             "pr_no" => trim((string) $this->request->getPost("pr_no")) ?: null,
             "delivery_location" => trim((string) $this->request->getPost("delivery_location")) ?: null,
             "incoterm" => trim((string) $this->request->getPost("incoterm")) ?: null,
@@ -1021,8 +1182,11 @@ class Tender_procurement_inbox extends Security_Controller
         $uoms = (array) $this->request->getPost("rfq_item_uom");
         $qtys = (array) $this->request->getPost("rfq_item_qty");
         $prices = (array) $this->request->getPost("rfq_item_unit_price");
-        $brands = (array) $this->request->getPost("rfq_item_brand");
-        $max = max(count($sr), count($descriptions), count($uoms), count($qtys), count($prices), count($brands));
+        $part_numbers = (array) $this->request->getPost("rfq_item_part_no");
+        if (!$part_numbers) {
+            $part_numbers = (array) $this->request->getPost("rfq_item_brand");
+        }
+        $max = max(count($sr), count($descriptions), count($uoms), count($qtys), count($prices), count($part_numbers));
 
         for ($i = 0; $i < $max; $i++) {
             $rows[] = [
@@ -1031,7 +1195,7 @@ class Tender_procurement_inbox extends Security_Controller
                 "uom" => $uoms[$i] ?? "",
                 "qty" => $qtys[$i] ?? "",
                 "unit_price" => $prices[$i] ?? "",
-                "brand" => $brands[$i] ?? "",
+                "part_no" => $part_numbers[$i] ?? "",
             ];
         }
 
@@ -1051,14 +1215,38 @@ class Tender_procurement_inbox extends Security_Controller
 
     private function _save_tender_documents(int $tender_id): void
     {
-        $target_path = getcwd() . "/files/tender_files/" . $tender_id . "/";
-        if (!is_dir($target_path)) {
-            @mkdir($target_path, 0755, true);
-        }
+        $target_path = (new Upload_security())->prepareStorageDirectory(
+            WRITEPATH . 'uploads/tender_documents/tender_' . $tender_id
+        ) . DIRECTORY_SEPARATOR;
 
         $files = $this->request->getPost("files");
         if (!$files || !is_array($files) || !get_array_value($files, 0)) {
             return;
+        }
+
+        // Validate every source before moving any file, avoiding partial tender
+        // document sets when a later item is malicious or malformed.
+        $validatedTemps = [];
+        $security = new Upload_security();
+        foreach ($files as $serialToValidate) {
+            $serialToValidate = (int)$serialToValidate;
+            if (!$serialToValidate) {
+                continue;
+            }
+            $nameToValidate = (string)$this->request->getPost('file_name_' . $serialToValidate);
+            if ($nameToValidate === '') {
+                continue;
+            }
+            $secureTemp = resolve_secure_temp_upload($nameToValidate);
+            if (!$secureTemp) {
+                throw new UploadSecurityException('The secure temporary upload is missing or expired.');
+            }
+            $validatedTemps[$serialToValidate] = $security->validatePath(
+                $secureTemp['path'],
+                $nameToValidate,
+                (int)$secureTemp['size_bytes'],
+                Upload_security::CONTEXT_SECURITY_DOCUMENT
+            );
         }
 
         foreach ($files as $serial) {
@@ -1086,18 +1274,35 @@ class Tender_procurement_inbox extends Security_Controller
                 continue;
             }
 
-            $file_info = move_temp_file($original_name, $target_path, "tender_doc", null, "", "", false, $file_size, true);
+            if (isset($validatedTemps[$serial])) {
+                $file_size = (int)$validatedTemps[$serial]['size_bytes'];
+            }
+
+            $file_info = move_temp_file(
+                $original_name,
+                $target_path,
+                'tender_doc',
+                null,
+                '',
+                '',
+                false,
+                $file_size,
+                true,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT
+            );
             if (!$file_info || !get_array_value($file_info, "file_name")) {
-                continue;
+                throw new UploadSecurityException('The tender document could not be stored.');
             }
 
             $stored_name = get_array_value($file_info, "file_name");
-            $this->Tender_documents_model->ci_save([
+            $storedFullPath = $target_path . $stored_name;
+            @chmod($storedFullPath, 0640);
+            $documentId = $this->Tender_documents_model->ci_save([
                 "tender_id" => $tender_id,
                 "doc_type" => $doc_type,
                 "title" => $title_input ?: null,
                 "disk" => "local",
-                "path" => "files/tender_files/" . $tender_id . "/" . $stored_name,
+                "path" => "tender_documents/tender_" . $tender_id . "/" . $stored_name,
                 "original_name" => $original_name,
                 "size_bytes" => $file_size ?: null,
                 "time_limited" => $time_limited,
@@ -1106,6 +1311,10 @@ class Tender_procurement_inbox extends Security_Controller
                 "created_at" => date("Y-m-d H:i:s"),
                 "deleted" => 0,
             ]);
+            if (!$documentId) {
+                @unlink($storedFullPath);
+                throw new \RuntimeException('The tender document record could not be saved.');
+            }
         }
     }
 
@@ -1240,6 +1449,28 @@ class Tender_procurement_inbox extends Security_Controller
         return null;
     }
 
+    private function _validate_tender_workdays(array $dates): ?string
+    {
+        $labels = $this->_tender_milestone_labels();
+        foreach ($labels as $field => $label) {
+            if (empty($dates[$field])) {
+                continue;
+            }
+
+            $timestamp = strtotime((string) $dates[$field]);
+            if ($timestamp === false) {
+                continue;
+            }
+
+            $weekday = (int) date("N", $timestamp);
+            if ($weekday === 5 || $weekday === 6) {
+                return $label . " cannot be scheduled on Friday or Saturday.";
+            }
+        }
+
+        return null;
+    }
+
     private function _record_milestone_changes(int $tender_id, array $old_milestones, array $new_milestones, string $reference, string $existing_status): void
     {
         if (!$old_milestones) {
@@ -1355,7 +1586,7 @@ class Tender_procurement_inbox extends Security_Controller
             return;
         }
 
-        if ($target_mode === "group" && $vendor_group_id <= 0) {
+        if (in_array($target_mode, ["group", "group_and_specific_vendors"], true) && $vendor_group_id <= 0) {
             return;
         }
 
@@ -1364,7 +1595,7 @@ class Tender_procurement_inbox extends Security_Controller
         }
 
         $now = date("Y-m-d H:i:s");
-        if ($target_mode === "specific_vendors") {
+        if (in_array($target_mode, ["specific_vendors", "group_and_specific_vendors"], true)) {
             foreach ($specific_vendor_ids as $vendor_id) {
                 $this->db->query(
                     "INSERT INTO $target_vendors (tender_id, vendor_id, created_by, created_at, deleted)
@@ -1373,7 +1604,9 @@ class Tender_procurement_inbox extends Security_Controller
                 );
             }
 
-            return;
+            if ($target_mode === "specific_vendors") {
+                return;
+            }
         }
 
         $this->db->query(
@@ -1384,7 +1617,7 @@ class Tender_procurement_inbox extends Security_Controller
                 $tender_id,
                 $target_mode === "specialty" ? $vendor_category_id : 0,
                 $target_mode === "specialty" && $vendor_sub_category_id > 0 ? $vendor_sub_category_id : null,
-                $target_mode === "group" && $vendor_group_id > 0 ? $vendor_group_id : null,
+                in_array($target_mode, ["group", "group_and_specific_vendors"], true) && $vendor_group_id > 0 ? $vendor_group_id : null,
                 $target_mode === "grade" && $vendor_grade_id > 0 ? $vendor_grade_id : null,
                 $this->login_user->id,
                 $now,
@@ -1585,7 +1818,9 @@ class Tender_procurement_inbox extends Security_Controller
     {
         $dropdown = ["" => "- " . app_lang("select_company") . " -"];
         foreach ($this->Gate_pass_companies_model->get_details()->getResult() as $company) {
-            $dropdown[(int) $company->id] = $company->name;
+            if ($this->can_access_tender_company((int) $company->id, "procurement")) {
+                $dropdown[(int) $company->id] = $company->name;
+            }
         }
         return $dropdown;
     }
@@ -1594,6 +1829,9 @@ class Tender_procurement_inbox extends Security_Controller
     {
         $dropdown = ["" => "- " . app_lang("select") . " -"];
         foreach ($this->Gate_pass_departments_model->get_details()->getResult() as $department) {
+            if (!$this->can_access_tender_company((int) ($department->company_id ?? 0), "procurement")) {
+                continue;
+            }
             $company_name = trim((string) ($department->company_name ?? ""));
             $label = $department->name;
             if ($company_name !== "") {
@@ -1725,7 +1963,13 @@ class Tender_procurement_inbox extends Security_Controller
             return "Submission deadline must be in the future.";
         }
 
-        $schedule_error = $this->_validate_tender_schedule($this->_get_tender_milestone_values($tender));
+        $milestones = $this->_get_tender_milestone_values($tender);
+        $workday_error = $this->_validate_tender_workdays($milestones);
+        if ($workday_error) {
+            return $workday_error;
+        }
+
+        $schedule_error = $this->_validate_tender_schedule($milestones);
         if ($schedule_error) {
             return $schedule_error;
         }
@@ -1842,8 +2086,11 @@ class Tender_procurement_inbox extends Security_Controller
         $uoms = (array) $this->request->getPost("rfq_item_uom");
         $qtys = (array) $this->request->getPost("rfq_item_qty");
         $prices = (array) $this->request->getPost("rfq_item_unit_price");
-        $brands = (array) $this->request->getPost("rfq_item_brand");
-        $max = max(count($sr), count($descriptions), count($uoms), count($qtys), count($prices), count($brands));
+        $part_numbers = (array) $this->request->getPost("rfq_item_part_no");
+        if (!$part_numbers) {
+            $part_numbers = (array) $this->request->getPost("rfq_item_brand");
+        }
+        $max = max(count($sr), count($descriptions), count($uoms), count($qtys), count($prices), count($part_numbers));
         $items = [];
 
         for ($i = 0; $i < $max; $i++) {
@@ -1853,14 +2100,12 @@ class Tender_procurement_inbox extends Security_Controller
                 "uom" => $uoms[$i] ?? "",
                 "qty" => $qtys[$i] ?? "",
                 "unit_price" => $prices[$i] ?? "",
-                "brand" => $brands[$i] ?? "",
+                "part_no" => $part_numbers[$i] ?? "",
             ];
         }
 
         return [
             "detail" => [
-                "rfq_no" => trim((string) $this->request->getPost("rfq_no")) ?: null,
-                "rfq_date" => $this->_date_or_null($this->request->getPost("rfq_date")),
                 "pr_no" => trim((string) $this->request->getPost("pr_no")) ?: null,
                 "delivery_location" => trim((string) $this->request->getPost("delivery_location")) ?: null,
                 "incoterm" => trim((string) $this->request->getPost("incoterm")) ?: null,
@@ -2095,6 +2340,30 @@ class Tender_procurement_inbox extends Security_Controller
                AND status='approved'
                AND vendor_group_id=?",
             [$vendor_group_id]
+        )->getResult();
+
+        return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
+    }
+
+    private function _sync_invites_by_group_and_specific_vendors(int $tender_id, int $vendor_group_id, array $vendor_ids): int
+    {
+        $vendors = $this->db->prefixTable("vendors");
+        $specific_vendor_ids = $this->_clean_vendor_ids($vendor_ids);
+        $params = [$vendor_group_id];
+        $where = "vendor_group_id=?";
+
+        if ($specific_vendor_ids) {
+            $where .= " OR id IN (" . implode(",", array_fill(0, count($specific_vendor_ids), "?")) . ")";
+            $params = array_merge($params, $specific_vendor_ids);
+        }
+
+        $rows = $this->db->query(
+            "SELECT DISTINCT id AS vendor_id
+             FROM $vendors
+             WHERE deleted=0
+               AND status='approved'
+               AND ($where)",
+            $params
         )->getResult();
 
         return $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));

@@ -6,15 +6,18 @@ use App\Libraries\App_folders;
 use App\Libraries\Excel_import;
 use App\Libraries\Dropdown_list;
 use App\Libraries\Client;
+use App\Models\Auth_security_model;
 
 class Clients extends Security_Controller {
     use App_folders;
     use Excel_import;
 
     private $client_groups_id_by_title = array();
+    private Auth_security_model $Auth_security_model;
 
     function __construct() {
         parent::__construct();
+        $this->Auth_security_model = new Auth_security_model();
 
         //check permission to access this module
         $this->init_permission_checker("client");
@@ -884,6 +887,21 @@ class Clients extends Security_Controller {
             "email_login_details" => $this->request->getPost('email_login_details'),
         );
 
+        $submittedLoginPassword = (string) $data["login_password"];
+        if (!(int) $data["contact_id"]
+            && ($submittedLoginPassword !== "" || !get_setting("disable_client_login"))) {
+            $policyErrors = $this->Users_model->password_policy_errors(
+                $submittedLoginPassword
+            );
+            if ($policyErrors) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => esc(implode(" ", $policyErrors)),
+                ]);
+                return;
+            }
+        }
+
         $client = new Client($this);
         $client->save_client_contact($data);
     }
@@ -945,7 +963,8 @@ class Clients extends Security_Controller {
         $account_data = array();
 
         $email = $this->request->getPost('email');
-        $password = $this->request->getPost("password");
+        $password = (string) $this->request->getPost("password");
+        $currentPassword = (string) $this->request->getPost("current_password");
         $disable_login = $this->request->getPost('disable_login');
 
         $this->validate_submitted_data(array(
@@ -974,7 +993,67 @@ class Clients extends Security_Controller {
             $account_data['disable_login'] = $disable_login;
         }
 
+        $isOwnPasswordChange = (int) $this->login_user->id === (int) $user_id;
+        if ($password) {
+            $this->validate_submitted_data([
+                "retype_password" => "required|matches[password]",
+            ]);
+            $policyErrors = $this->Users_model->password_policy_errors($password);
+            if ($policyErrors) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => esc(implode(" ", $policyErrors)),
+                ]);
+                return;
+            }
+
+            if ($isOwnPasswordChange) {
+                $ipHash = $this->Auth_security_model->ip_hash(
+                    (string) $this->request->getIPAddress()
+                );
+                $throttler = service("throttler");
+                if (!$throttler->check(
+                    "client_password_change_{$user_id}_{$ipHash}",
+                    5,
+                    300
+                )) {
+                    $this->response->setStatusCode(429);
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "Too many password attempts. Please wait and try again.",
+                    ]);
+                    return;
+                }
+                if ($currentPassword === ""
+                    || !$this->Users_model->verify_user_password($user_id, $currentPassword)) {
+                    $this->Auth_security_model->audit(
+                        "password_change_failed",
+                        "denied",
+                        (int) $user_id,
+                        "",
+                        ["reason" => "current_password_invalid"]
+                    );
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "The current password is not correct.",
+                    ]);
+                    return;
+                }
+                if (hash_equals($currentPassword, $password)) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "The new password must be different from the current password.",
+                    ]);
+                    return;
+                }
+                $throttler->remove("client_password_change_{$user_id}_{$ipHash}");
+            }
+        }
+
         $account_data = clean_data($account_data);
+        if ($password) {
+            $account_data["password"] = password_hash($password, PASSWORD_DEFAULT);
+        }
 
         $success = false;
 
@@ -987,12 +1066,21 @@ class Clients extends Security_Controller {
         }
 
 
-        //don't reset password if user doesn't entered any password
-        if ($success && $email && $password) {
-            $email_updated = $this->Users_model->update_password($email, password_hash($password, PASSWORD_DEFAULT));
+        //don't reset password if user doesn't enter any password
+        if ($success && $password) {
+            if ($isOwnPasswordChange) {
+                $this->session->regenerate(true);
+            }
+            $this->Auth_security_model->audit(
+                "password_changed",
+                "success",
+                (int) $user_id,
+                $this->Auth_security_model->identity_hash((string) $email),
+                ["actor_user_id" => (int) $this->login_user->id]
+            );
 
             //only allowed members can send login details email
-            if ($email_updated && $this->login_user->user_type == "staff" && $this->request->getPost('email_login_details') && !$disable_login) {
+            if ($this->login_user->user_type == "staff" && $this->request->getPost('email_login_details') && !$disable_login) {
                 $client = new Client($this);
                 $client->email_login_details($user_id, $email, $password);
             }
@@ -1024,7 +1112,7 @@ class Clients extends Security_Controller {
         $parser_data["USER_FIRST_NAME"] = clean_data($contact_info->first_name);
         $parser_data["USER_LAST_NAME"] = clean_data($contact_info->last_name);
         $parser_data["USER_LOGIN_EMAIL"] = $email;
-        $parser_data["USER_LOGIN_PASSWORD"] = $password;
+        $parser_data["USER_LOGIN_PASSWORD"] = app_lang("password_not_sent_by_email");
         $parser_data["DASHBOARD_URL"] = base_url();
         $parser_data["LOGO_URL"] = get_logo_url();
 
@@ -1050,7 +1138,7 @@ class Clients extends Security_Controller {
             $profile_image = serialize(move_temp_file("avatar.png", get_setting("profile_image_path"), "", $profile_image));
 
             //delete old file
-            delete_app_files(get_setting("profile_image_path"), array(@unserialize($user_info->image)));
+            delete_app_files(get_setting("profile_image_path"), array(@safe_unserialize($user_info->image)));
 
             $image_data = array("image" => $profile_image);
             $this->Users_model->ci_save($image_data, $user_id);
@@ -1072,7 +1160,7 @@ class Clients extends Security_Controller {
 
                 //delete old file
                 if ($user_info->image) {
-                    delete_app_files(get_setting("profile_image_path"), array(@unserialize($user_info->image)));
+                    delete_app_files(get_setting("profile_image_path"), array(@safe_unserialize($user_info->image)));
                 }
 
                 $image_data = array("image" => $profile_image);
@@ -1561,30 +1649,20 @@ class Clients extends Security_Controller {
     function export_my_data() {
         if (get_setting("enable_gdpr") && get_setting("allow_clients_to_export_their_data")) {
             $user_info = $this->Users_model->get_one($this->login_user->id);
-
-            $txt_file_name = $user_info->first_name . " " . $user_info->last_name . ".txt";
-
             $data = $this->_make_export_data($user_info);
+            $displayName = trim((string)($user_info->first_name ?? "") . " " . (string)($user_info->last_name ?? ""));
+            $asciiName = preg_replace('/[^a-z0-9 _-]+/i', '', $displayName) ?: "personal-data";
+            $fileName = trim($asciiName) . ".txt";
 
-            $handle = fopen($txt_file_name, "w");
-            fwrite($handle, $data);
-            fclose($handle);
-
-            header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename=' . basename($txt_file_name));
-            header('Expires: 0');
-            header('Cache-Control: must-revalidate');
-            header('Pragma: public');
-            header('Content-Length: ' . filesize($txt_file_name));
-            readfile($txt_file_name);
-
-            //delete local file
-            if (file_exists($txt_file_name)) {
-                unlink($txt_file_name);
-            }
-
-            exit;
+            return $this->response
+                ->setContentType("text/plain", "UTF-8")
+                ->setHeader("Content-Disposition", 'attachment; filename="' . $fileName . '"')
+                ->setHeader("Cache-Control", "private, no-store")
+                ->setHeader("X-Content-Type-Options", "nosniff")
+                ->setBody($data);
         }
+
+        app_redirect("forbidden");
     }
 
     private function _make_export_data($user_info) {
@@ -2317,7 +2395,7 @@ class Clients extends Security_Controller {
         $details_page_layout = get_setting("details_page_layout");
         $layout_settings = array();
         if ($details_page_layout) {
-            $layout_settings = unserialize($details_page_layout);
+            $layout_settings = safe_unserialize($details_page_layout);
         }
 
         return [

@@ -6,6 +6,10 @@ use App\Models\Vendors_model;
 use App\Models\Vendor_groups_model;
 use App\Models\Vendor_documents_model;
 use App\Models\Vendor_update_requests_model;
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
+use App\Libraries\ReCAPTCHA;
+use App\Libraries\Runtime_schema_guard;
 
 class Guest_vendor extends App_Controller
 {
@@ -84,8 +88,22 @@ class Guest_vendor extends App_Controller
     public function save()
     {
         $db = $this->db; // use the same connection everywhere
+        $uploadedPaths = [];
+        $ipHash = hash('sha256', (string)$this->request->getIPAddress());
+        $throttler = service('throttler');
+        if (!$throttler->check('guest_vendor_save_' . $ipHash, 10, 3600)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader('Retry-After', (string)max(1, $throttler->getTokenTime()))
+                ->setJSON([
+                    'success' => false,
+                    'message' => 'Too many registration attempts. Please wait and try again.',
+                ]);
+        }
 
         try {
+            (new ReCAPTCHA())->validate_recaptcha(true);
+
             // ✅ EXACT same validation style as your save()
             $this->validate_submitted_data([
                 "vendor_group_id" => "required|numeric",
@@ -105,7 +123,7 @@ class Guest_vendor extends App_Controller
                 // login user fields
                 "user_name"       => "required",
                 "user_email"      => "required|valid_email",
-                "password"        => "permit_empty",
+                "password"        => "required",
                 "password_confirm" => "permit_empty",
                 // optional vendor address fields
 
@@ -146,25 +164,9 @@ class Guest_vendor extends App_Controller
                 return;
             }
 
-            // vendor email must be unique for active records (deleted=0)
+            // Company email is descriptive vendor data and may be shared by
+            // different CR records. The CR remains the vendor identifier.
             $vendors_table = $db->prefixTable("vendors");
-            $existing_vendor = $db->table($vendors_table)
-                ->select("id")
-                ->where("email", $vendor_email)
-                ->where("deleted", 0)
-                ->get()
-                ->getRow();
-
-            if ($existing_vendor) {
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("email_already_exists"),
-                    "field"   => "email",
-                    "errors"  => ["email" => app_lang("email_already_exists")]
-                ]);
-                return;
-            }
-
             $existing_cr = $db->table($vendors_table)
                 ->select("id")
                 ->where("cr_number", $cr_number)
@@ -184,12 +186,38 @@ class Guest_vendor extends App_Controller
 
             $user_email = strtolower(trim((string) $this->request->getPost("user_email")));
             $existing_user = $db->table("users")
-                ->select("id, user_type, deleted")
+                ->select("id, user_type, status, disable_login, role_id, is_admin, password, deleted")
                 ->where("email", $user_email)
+                ->orderBy("deleted", "ASC")
+                ->orderBy("id", "ASC")
                 ->get()
                 ->getRow();
 
             if ($existing_user) {
+                // A public registration must never reactivate an identity that
+                // an administrator deliberately deprovisioned.
+                if ((int)($existing_user->deleted ?? 0) === 1) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("authentication_failed"),
+                        "field"   => "password",
+                        "errors"  => ["password" => app_lang("authentication_failed")]
+                    ]);
+                    return;
+                }
+
+                if ((string)($existing_user->status ?? "") !== "active"
+                    || (int)($existing_user->disable_login ?? 0) === 1
+                ) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("authentication_failed"),
+                        "field"   => "password",
+                        "errors"  => ["password" => app_lang("authentication_failed")]
+                    ]);
+                    return;
+                }
+
                 if (($existing_user->user_type ?? "") !== "staff") {
                     echo json_encode([
                         "success" => false,
@@ -200,33 +228,19 @@ class Guest_vendor extends App_Controller
                     return;
                 }
 
-                $existing_vendor_user = $db->table("vendor_users")
-                    ->select("id, vendor_id")
-                    ->where("user_id", (int)$existing_user->id)
-                    ->where("deleted", 0)
-                    ->get()
-                    ->getRow();
-
-                if ($existing_vendor_user) {
+                // An email is a single global identity. Reusing it for another
+                // CR is allowed only after the applicant proves ownership of
+                // the existing account with its current password.
+                if (!$this->Users_model->verify_user_password((int) $existing_user->id, $password)) {
                     echo json_encode([
                         "success" => false,
-                        "message" => app_lang("user_already_registered_as_vendor"),
-                        "field"   => "user_email",
-                        "errors"  => ["user_email" => app_lang("user_already_registered_as_vendor")]
+                        "message" => app_lang("authentication_failed"),
+                        "field"   => "password",
+                        "errors"  => ["password" => app_lang("authentication_failed")]
                     ]);
                     return;
                 }
             } else {
-                if ($password === "") {
-                    echo json_encode([
-                        "success" => false,
-                        "message" => app_lang("field_required"),
-                        "field"   => "password",
-                        "errors"  => ["password" => app_lang("field_required")]
-                    ]);
-                    return;
-                }
-
                 if ($password_confirm === "") {
                     echo json_encode([
                         "success" => false,
@@ -243,6 +257,17 @@ class Guest_vendor extends App_Controller
                         "message" => app_lang("passwords_do_not_match"),
                         "field"   => "password_confirm",
                         "errors"  => ["password_confirm" => app_lang("passwords_do_not_match")]
+                    ]);
+                    return;
+                }
+
+                $policyErrors = $this->Users_model->password_policy_errors($password);
+                if ($policyErrors) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => implode(" ", $policyErrors),
+                        "field" => "password",
+                        "errors" => ["password" => implode(" ", $policyErrors)],
                     ]);
                     return;
                 }
@@ -297,21 +322,6 @@ class Guest_vendor extends App_Controller
 
             if ($existing_user) {
                 $user_id = (int) $existing_user->id;
-
-                // revive soft-deleted user if needed
-                if ((int)($existing_user->deleted ?? 0) === 1) {
-                    $ok = $db->table("users")
-                        ->where("id", $user_id)
-                        ->update(clean_data([
-                            "deleted" => 0,
-                            "status" => "active",
-                            "disable_login" => 0
-                        ]));
-                    if (!$ok) {
-                        $err = $db->error();
-                        throw new \RuntimeException("Failed to restore existing user: " . ($err["message"] ?: "unknown"));
-                    }
-                }
             } else {
                 $password = (string) $this->request->getPost("password");
 
@@ -356,7 +366,7 @@ class Guest_vendor extends App_Controller
                         "invited_by" => 0,
                         "vendor_role_id" => 1,
                         "is_owner" => 1,
-                        "status" => "active",
+                        "status" => "invited",
                         "deleted" => 0
                     ]));
                 if (!$ok) {
@@ -373,7 +383,7 @@ class Guest_vendor extends App_Controller
 
                     "vendor_role_id" => 1,     // Owner
                     "is_owner"       => 1,
-                    "status"         => "active",
+                    "status"         => "invited",
                     "deleted"        => 0
                 ];
 
@@ -382,6 +392,75 @@ class Guest_vendor extends App_Controller
                     $err = $db->error();
                     throw new \RuntimeException("Vendor user pivot insert error: " . ($err["message"] ?: "unknown"));
                 }
+            }
+
+            // The applicant is also the primary contact for this CR. Keep one
+            // contact row per vendor/user membership and submit it through the
+            // same approval queue as contacts added later in the portal.
+            $contacts_table = $db->prefixTable("vendor_contacts");
+            $contact_data = clean_data([
+                "vendor_id"     => (int)$save_vendor_id,
+                "user_id"       => (int)$user_id,
+                "contacts_name" => trim((string)$this->request->getPost("contact_person")),
+                "phone"         => $phone,
+                "fax"           => "",
+                "designation"   => trim((string)$this->request->getPost("contact_designation")),
+                "email"         => $user_email,
+                "email_2"       => "",
+                "mobile"        => $phone,
+                "role"          => "Owner",
+                "is_primary"    => 1,
+                "is_active"     => 1,
+                "status"        => "pending",
+                "deleted"       => 0,
+                "created_at"    => date("Y-m-d H:i:s"),
+                "updated_at"    => date("Y-m-d H:i:s"),
+            ]);
+
+            $existing_contact = $db->table($contacts_table)
+                ->select("id")
+                ->where("vendor_id", (int)$save_vendor_id)
+                ->where("user_id", (int)$user_id)
+                ->get()
+                ->getRow();
+
+            if ($existing_contact) {
+                $contact_id = (int)$existing_contact->id;
+                $ok = $db->table($contacts_table)
+                    ->where("id", $contact_id)
+                    ->update($contact_data);
+            } else {
+                $ok = $db->table($contacts_table)->insert($contact_data);
+                $contact_id = (int)$db->insertID();
+            }
+
+            if (!$ok || !$contact_id) {
+                $err = $db->error();
+                throw new \RuntimeException("Vendor contact save error: " . ($err["message"] ?: "unknown"));
+            }
+
+            $contact_changes = [
+                "module"    => "contacts",
+                "table"     => "vendor_contacts",
+                "action"    => "create",
+                "record_id" => $contact_id,
+                "before"    => [],
+                "after"     => $contact_data,
+            ];
+
+            $contact_request_id = $this->Vendor_update_requests_model->ci_save([
+                "vendor_id"    => (int)$save_vendor_id,
+                "requested_by" => (int)$user_id,
+                "changes"      => json_encode($contact_changes, JSON_UNESCAPED_UNICODE),
+                "status"       => "pending",
+                "deleted"      => 0,
+                "created_at"   => date("Y-m-d H:i:s"),
+                "updated_at"   => date("Y-m-d H:i:s"),
+            ]);
+
+            if (!$contact_request_id) {
+                $err = $db->error();
+                throw new \RuntimeException("Vendor contact approval request error: " . ($err["message"] ?: "unknown"));
             }
 
 
@@ -455,15 +534,18 @@ class Guest_vendor extends App_Controller
 
             // Upload to same structure as vendor portal
             $upload_dir = WRITEPATH . "uploads/vendor_documents/vendor_" . $save_vendor_id . "/";
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0775, true);
-            }
+            $uploadSecurity = new Upload_security();
 
             foreach ($document_rows as $document_row) {
                 $file = $document_row["file"];
-                $extension = $file->getExtension() ?: pathinfo($file->getClientName(), PATHINFO_EXTENSION);
-                $new_name = uniqid("vd_", true) . ($extension ? "." . $extension : "");
-                $file->move($upload_dir, $new_name);
+                $stored = $uploadSecurity->storeUploadedFile(
+                    $file,
+                    $upload_dir,
+                    Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                    'vd_'
+                );
+                $new_name = $stored['stored_name'];
+                $uploadedPaths[] = $stored['path'];
 
                 // Prepare document data (same style as Vendor_portal::save_document)
                 $doc_data = [
@@ -471,9 +553,9 @@ class Guest_vendor extends App_Controller
                     "vendor_document_type_id" => (int)$document_row["vendor_document_type_id"],
                     "disk"                   => "local",
                     "path"                   => "vendor_documents/vendor_" . $save_vendor_id . "/" . $new_name,
-                    "original_name"          => $file->getClientName(),
-                    "mime_type"              => $file->getClientMimeType(),
-                    "size_bytes"             => $file->getSize(),
+                    "original_name"          => $stored['original_name'],
+                    "mime_type"              => $stored['detected_mime'],
+                    "size_bytes"             => $stored['size_bytes'],
                     "issued_at"              => $document_row["issued_at"] ?: null,
                     "expires_at"             => $document_row["expires_at"] ?: null,
                     "uploaded_by"            => $user_id,
@@ -536,10 +618,37 @@ class Guest_vendor extends App_Controller
             }
 
             // ✅ map DB unique constraint (race-condition) to field errors
+            foreach ($uploadedPaths as $uploadedPath) {
+                if (is_file($uploadedPath)) {
+                    @unlink($uploadedPath);
+                }
+            }
+
+            if ($e instanceof UploadSecurityException) {
+                log_message('notice', 'Guest vendor document upload rejected.');
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => app_lang('invalid_file_type'),
+                ]);
+            }
+
             $msg = $e->getMessage();
+            if (stripos($msg, "Duplicate entry") !== false
+                && (stripos($msg, "cr_number") !== false || stripos($msg, "cr identity") !== false)
+            ) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("cr_number_already_exists"),
+                    "field"   => "cr_number",
+                    "errors"  => ["cr_number" => app_lang("cr_number_already_exists")]
+                ]);
+                return;
+            }
+
             if (stripos($msg, "Duplicate entry") !== false && stripos($msg, "email") !== false) {
-                // Heuristic: if users unique triggered => user_email, else vendor email
-                $field = (stripos($msg, "users") !== false) ? "user_email" : "email";
+                // Company email is intentionally non-unique; this can only be
+                // the global login email constraint.
+                $field = "user_email";
 
                 echo json_encode([
                     "success" => false,
@@ -562,31 +671,11 @@ class Guest_vendor extends App_Controller
 
     private function _ensure_vendor_onboarding_columns(): void
     {
-        $table = $this->db->prefixTable("vendors");
-        $columns = [
-            "cr_number" => "ALTER TABLE `$table` ADD COLUMN `cr_number` VARCHAR(100) DEFAULT NULL AFTER `email`",
-            "phone" => "ALTER TABLE `$table` ADD COLUMN `phone` VARCHAR(50) DEFAULT NULL AFTER `cr_number`",
-            "phone_country_code" => "ALTER TABLE `$table` ADD COLUMN `phone_country_code` VARCHAR(12) DEFAULT NULL AFTER `phone`",
-            "contact_person" => "ALTER TABLE `$table` ADD COLUMN `contact_person` VARCHAR(255) DEFAULT NULL AFTER `phone_country_code`",
-            "contact_designation" => "ALTER TABLE `$table` ADD COLUMN `contact_designation` VARCHAR(255) DEFAULT NULL AFTER `contact_person`",
-        ];
-
-        foreach ($columns as $column => $sql) {
-            if (!$this->_column_exists($table, $column)) {
-                $this->db->query($sql);
-            }
-        }
-
-        $this->db->query("UPDATE `$table` SET status='new' WHERE deleted=0 AND (status='' OR status IS NULL)");
-    }
-
-    private function _column_exists(string $table, string $column): bool
-    {
-        $row = $this->db->query(
-            "SHOW COLUMNS FROM `$table` LIKE " . $this->db->escape($column)
-        )->getRow();
-
-        return (bool) $row;
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "vendors" => [
+                "cr_number", "phone", "phone_country_code", "contact_person", "contact_designation",
+            ],
+        ], "vendor onboarding");
     }
 
     /** @var list<string>|null */

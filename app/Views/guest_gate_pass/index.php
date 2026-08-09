@@ -1,3 +1,4 @@
+<?php $passwordPolicy = config("AuthSecurity"); ?>
 <div id="page-content" class="page-wrapper clearfix ggp-page pod-gate-pass-public">
     <style>
         .ggp-page {
@@ -699,12 +700,19 @@
                                 <div class="form-group ggp-password-wrap">
                                     <label for="password"><?php echo app_lang("password"); ?></label>
                                     <div class="input-group">
-                                        <input type="password" id="password" name="password" class="form-control" autocomplete="new-password">
+                                        <input type="password" id="password" name="password" class="form-control"
+                                               minlength="<?php echo (int) $passwordPolicy->passwordMinLength; ?>"
+                                               maxlength="<?php echo (int) $passwordPolicy->passwordMaxLength; ?>"
+                                               autocomplete="new-password">
                                         <button class="btn btn-outline-secondary ggp-password-toggle" type="button" id="toggle-password" aria-label="<?php echo app_lang("toggle_password_visibility"); ?>">
                                             <i data-feather="eye" class="icon-16"></i>
                                         </button>
                                     </div>
                                     <div id="password-error" class="alert alert-danger mt10 d-none"></div>
+                                    <small>
+                                        Use <?php echo (int) $passwordPolicy->passwordMinLength; ?>-<?php echo (int) $passwordPolicy->passwordMaxLength; ?>
+                                        characters with uppercase, lowercase, number, and special character.
+                                    </small>
                                     <small><?php echo app_lang("gate_pass_password_reuse_hint"); ?></small>
                                 </div>
                             </div>

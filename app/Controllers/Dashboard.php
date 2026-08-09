@@ -438,7 +438,7 @@ class Dashboard extends Security_Controller
             $this->Settings_model->save_setting('user_'.$this->login_user->id.'_dashboard', $user_selected_dashboard, 'user');
 
             $view_data['dashboard_info'] = $dashboard_info;
-            $view_data['widget_columns'] = $this->make_dashboard(unserialize($dashboard_info->data));
+            $view_data['widget_columns'] = $this->make_dashboard(safe_unserialize($dashboard_info->data));
 
             $view_data['dashboards'] = $this->Dashboards_model->get_details(['user_id' => $this->login_user->id])->getResult();
             $view_data['dashboard_type'] = 'custom';
@@ -769,7 +769,7 @@ class Dashboard extends Security_Controller
         }
 
         $view_data['dashboard_info'] = $dashboard_info;
-        $view_data['widget_sortable_rows'] = $this->_make_editable_rows(unserialize($dashboard_info->data));
+        $view_data['widget_sortable_rows'] = $this->_make_editable_rows(safe_unserialize($dashboard_info->data));
         $view_data['widgets'] = $this->_make_widgets($dashboard_info->id);
 
         return $this->template->rander('dashboards/custom_dashboards/edit/index', $view_data);
@@ -972,7 +972,7 @@ class Dashboard extends Security_Controller
 
         // when its edit mode, we have to remove the widgets which have already in the dashboard
         $dashboard_info = $this->Dashboards_model->get_one($dashboard_id);
-        $dashboard_elements_array = $dashboard_info->id ? unserialize($dashboard_info->data) : unserialize(get_setting('client_default_dashboard'));
+        $dashboard_elements_array = $dashboard_info->id ? safe_unserialize($dashboard_info->data) : safe_unserialize(get_setting('client_default_dashboard'));
 
         if ($dashboard_elements_array) {
             foreach ($dashboard_elements_array as $element) {
@@ -1425,7 +1425,7 @@ class Dashboard extends Security_Controller
         $client_default_dashboard = get_setting('client_default_dashboard');
 
         if ($client_default_dashboard) {
-            return unserialize($client_default_dashboard);
+            return safe_unserialize($client_default_dashboard);
         } else {
             $row1 = [];
             $row2 = [];

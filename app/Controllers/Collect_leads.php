@@ -38,6 +38,15 @@ class Collect_leads extends App_Controller {
             show_404();
         }
 
+        $ip_hash = hash('sha256', (string) $this->request->getIPAddress());
+        $throttler = service('throttler');
+        if (!$throttler->check('public_lead_' . $ip_hash, 5, 600)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader('Retry-After', (string) max(1, $throttler->getTokenTime()))
+                ->setJSON(array('success' => false, 'message' => 'Too many requests. Please try again later.'));
+        }
+
         $this->validate_submitted_data(array(
             "lead_source_id" => "numeric",
             "lead_owner_id" => "numeric",
@@ -46,12 +55,9 @@ class Collect_leads extends App_Controller {
 
         $is_embedded_form = $this->request->getPost("is_embedded_form");
 
-        //check if there reCaptcha is enabled
-        //if reCaptcha is enabled, check the validation
-        if ($is_embedded_form) {
-            $ReCAPTCHA = new ReCAPTCHA();
-            $ReCAPTCHA->validate_recaptcha();
-        }
+        // All unauthenticated lead-submission modes require human verification.
+        $ReCAPTCHA = new ReCAPTCHA();
+        $ReCAPTCHA->validate_recaptcha();
 
         $email = $this->request->getPost('email');
 

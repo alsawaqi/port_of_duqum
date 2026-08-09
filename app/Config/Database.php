@@ -35,17 +35,17 @@ class Database extends Config
         'hostname' => 'localhost',
         'username' => 'root',
         'password' => '',
-        'database' => 'pod',
+        'database' => 'bedotscpanel_poderp',
         'DBDriver' => 'MySQLi',
         'DBPrefix' => 'pod_',
         'pConnect' => false,
         'DBDebug' => (ENVIRONMENT !== 'production'),
-        'charset' => 'utf8',
-        'DBCollat' => 'utf8_general_ci',
+        'charset' => 'utf8mb4',
+        'DBCollat' => 'utf8mb4_unicode_ci',
         'swapPre' => '',
         'encrypt' => false,
         'compress' => false,
-        'strictOn' => false,
+        'strictOn' => true,
         'failover' => [],
         'port' => 3306,
     ];
@@ -87,6 +87,32 @@ class Database extends Config
         // we don't overwrite live data on accident.
         if (ENVIRONMENT === 'testing') {
             $this->defaultGroup = 'tests';
+        }
+
+        if (ENVIRONMENT === 'production') {
+            $hostname = strtolower(trim((string) ($this->default['hostname'] ?? '')));
+            $username = strtolower(trim((string) ($this->default['username'] ?? '')));
+            $password = (string) ($this->default['password'] ?? '');
+            $database = trim((string) ($this->default['database'] ?? ''));
+
+            if ($hostname === '' || $database === '' || $username === '' || $username === 'root' || $password === '') {
+                throw new \RuntimeException(
+                    'Production requires a dedicated, password-protected least-privilege database account.'
+                );
+            }
+
+            $localHosts = ['localhost', '127.0.0.1', '::1'];
+            if (!in_array($hostname, $localHosts, true) && empty($this->default['encrypt'])) {
+                throw new \RuntimeException(
+                    'Production requires TLS encryption for a remote database connection.'
+                );
+            }
+
+            $this->default['DBDebug'] = false;
+            $this->default['pConnect'] = false;
+            $this->default['strictOn'] = true;
+            $this->default['charset'] = 'utf8mb4';
+            $this->default['DBCollat'] = 'utf8mb4_unicode_ci';
         }
     }
 

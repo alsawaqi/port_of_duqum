@@ -1,5 +1,5 @@
 <?php
-$signer_info = @unserialize($contract_info->meta_data);
+$signer_info = @safe_unserialize($contract_info->meta_data);
 if (!($signer_info && is_array($signer_info))) {
     $signer_info = array();
 }
@@ -19,7 +19,7 @@ if (!($signer_info && is_array($signer_info))) {
 
             <?php
             if (get_array_value($signer_info, "signature")) {
-                $signature_file = @unserialize(get_array_value($signer_info, "signature"));
+                $signature_file = @safe_unserialize(get_array_value($signer_info, "signature"));
                 $signature_file_name = get_array_value($signature_file, "file_name");
                 $signature_file = get_source_url_of_file($signature_file, get_setting("timeline_file_path"), "thumbnail");
             ?>
@@ -41,7 +41,7 @@ if (!($signer_info && is_array($signer_info))) {
 
             <?php
             if (get_array_value($signer_info, "staff_signature")) {
-                $signature_file = @unserialize(get_array_value($signer_info, "staff_signature"));
+                $signature_file = @safe_unserialize(get_array_value($signer_info, "staff_signature"));
                 $signature_file_name = get_array_value($signature_file, "file_name");
                 $signature_file = get_source_url_of_file($signature_file, get_setting("timeline_file_path"), "thumbnail");
             ?>

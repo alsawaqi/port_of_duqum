@@ -1,3 +1,4 @@
+<?php $can_manage_contacts = !empty($can_manage_contacts); ?>
  <div class="vp-contacts p15">
      <style>
          /* =========================
@@ -271,7 +272,11 @@
                              <?php echo nl2br(esc($review_request->review_comment)); ?>
                          </p>
                          <div class="vp-banner-note">
-                             Please update your contacts and save again to re-submit for approval.
+                             <?php if ($can_manage_contacts) { ?>
+                                 Please update your contacts and save again to re-submit for approval.
+                             <?php } else { ?>
+                                 The CR owner must update the contacts and re-submit them for approval.
+                             <?php } ?>
                          </div>
                      </div>
                  </div>
@@ -284,10 +289,21 @@
                      </div>
                      <div class="vp-banner-content">
                          <p class="vp-banner-title"><?php echo app_lang("pending_review"); ?></p>
-                         <p class="vp-banner-text mb0">
-                             You can still <strong>add new contacts</strong>, but
-                             <strong>edit/delete</strong> are disabled until approval.
-                         </p>
+                         <?php if ($can_manage_contacts) { ?>
+                             <p class="vp-banner-text mb0">You can still <strong>add new contacts</strong>, but <strong>edit/delete</strong> are disabled until approval.</p>
+                         <?php } else { ?>
+                             <p class="vp-banner-text mb0">Contact records remain read-only for your account.</p>
+                         <?php } ?>
+                     </div>
+                 </div>
+             <?php } ?>
+
+             <?php if (!$can_manage_contacts) { ?>
+                 <div class="vp-banner vp-banner-info">
+                     <div class="vp-banner-icon"><i data-feather="eye" class="icon-16"></i></div>
+                     <div class="vp-banner-content">
+                         <p class="vp-banner-title">Read-only contact access</p>
+                         <p class="vp-banner-text mb0">Only the owner of this CR can add, edit, delete contacts or set initial passwords.</p>
                      </div>
                  </div>
              <?php } ?>
@@ -300,18 +316,20 @@
                          </div>
                          <div>
                              <h4><?php echo app_lang("contacts"); ?></h4>
-                             <p class="vp-header-sub">Manage the primary and secondary contacts for this vendor.</p>
+                             <p class="vp-header-sub">Approved contacts receive full portal access for this vendor CR.</p>
                          </div>
                      </div>
                  </div>
 
-                 <div class="vp-add-btn">
-                     <?php echo modal_anchor(
-                            get_uri("vendor_portal/contact_modal_form"),
-                            "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_contact'),
-                            ["class" => "btn btn-default"]
-                        ); ?>
-                 </div>
+                 <?php if ($can_manage_contacts) { ?>
+                     <div class="vp-add-btn">
+                         <?php echo modal_anchor(
+                                get_uri("vendor_portal/contact_modal_form"),
+                                "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_contact'),
+                                ["class" => "btn btn-default"]
+                            ); ?>
+                     </div>
+                 <?php } ?>
              </div>
 
              <div class="vp-toolbar">
@@ -326,8 +344,14 @@
                      </span>
                      <span class="vp-pill">
                          <span class="vp-pill-dot inactive"></span>
-                         <span>Inactive / non-primary</span>
+                         <span>Inactive / suspended access</span>
                      </span>
+                     <?php if ($can_manage_contacts) { ?>
+                         <span class="vp-pill">
+                             <i data-feather="key" class="icon-14"></i>
+                             <span>Password setup required (legacy contacts)</span>
+                         </span>
+                     <?php } ?>
                  </div>
              </div>
 
@@ -375,6 +399,10 @@
                  {
                      title: 'Active',
                      "class": "text-center w10p"
+                 },
+                 {
+                     title: 'Portal access',
+                     "class": "text-center w15p"
                  },
                  {
                      title: '<i data-feather="menu" class="icon-16"></i>',

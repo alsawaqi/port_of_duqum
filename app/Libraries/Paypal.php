@@ -2,239 +2,268 @@
 
 namespace App\Libraries;
 
-class Paypal {
+use App\Libraries\Payments\Legacy_invoice_payment_manager;
+use App\Libraries\Payments\Payment_amount;
+use DomainException;
+use RuntimeException;
+use Throwable;
 
-    private $paypal_live_url = "https://api-m.paypal.com/v1";
-    private $paypal_sandbox_url = "https://api-m.sandbox.paypal.com/v1";
-    private $paypal_url = "";
+class Paypal
+{
+    private $paypal_live_url = 'https://api-m.paypal.com/v1';
+    private $paypal_sandbox_url = 'https://api-m.sandbox.paypal.com/v1';
+    private $paypal_url = '';
     private $paypal_config;
     private $Payment_methods_model;
-    private $Invoices_model;
 
-    public function __construct() {
-        $this->Payment_methods_model = model("App\Models\Payment_methods_model");
-        $this->paypal_config = $this->Payment_methods_model->get_oneline_payment_method("paypal_payments_standard");
-        $this->Invoices_model = model("App\Models\Invoices_model");
-
-        if ($this->paypal_config->paypal_live == "1") {
-            $this->paypal_url = $this->paypal_live_url;
-        } else {
-            $this->paypal_url = $this->paypal_sandbox_url;
-        }
+    public function __construct()
+    {
+        $this->Payment_methods_model = model('App\Models\Payment_methods_model');
+        $this->paypal_config = $this->Payment_methods_model
+            ->get_oneline_payment_method('paypal_payments_standard');
+        $this->paypal_url = $this->paypal_config->paypal_live == '1'
+            ? $this->paypal_live_url
+            : $this->paypal_sandbox_url;
     }
 
-    public function get_paypal_checkout_url($data = array(), $login_user = 0) {
-        $invoice_id = get_array_value($data, "invoice_id");
-        $currency = get_array_value($data, "currency");
-        $payment_amount = get_array_value($data, "payment_amount");
-        $description = get_array_value($data, "description");
-        $verification_code = get_array_value($data, "verification_code");
-        $contact_user_id = $login_user ? $login_user : get_array_value($data, "contact_user_id");
-        $client_id = get_array_value($data, "client_id");
-        $payment_method_id = get_array_value($data, "payment_method_id");
-        $balance_due = get_array_value($data, "balance_due");
+    public function get_paypal_checkout_url($data = [], $login_user = 0)
+    {
+        $manager = new Legacy_invoice_payment_manager();
+        $attempt = $manager->start('paypal', (array)$data, (int)$login_user);
 
-        if (!$invoice_id) {
-            return false;
-        }
+        $paymentData = [
+            'intent' => 'sale',
+            'payer' => ['payment_method' => 'paypal'],
+            'transactions' => [[
+                'amount' => [
+                    'total' => (string)$attempt->expected_amount,
+                    'currency' => (string)$attempt->currency,
+                ],
+                'description' => 'Invoice ' . (string)$attempt->invoice_display_id,
+                'custom' => (string)$attempt->public_id,
+                'invoice_number' => (string)$attempt->invoice_display_id . '-' . strtoupper(substr((string)$attempt->public_id, 0, 12)),
+                'payment_options' => [
+                    'allowed_payment_method' => 'INSTANT_FUNDING_SOURCE',
+                ],
+            ]],
+            'redirect_urls' => [
+                'return_url' => get_uri('paypal_redirect/index/' . $attempt->public_id),
+                'cancel_url' => $this->invoiceReturnUrl($attempt),
+            ],
+        ];
 
-        $invoice_info = $this->Invoices_model->get_one($invoice_id);
-
-        //validate public invoice information
-        if (!$login_user && !validate_invoice_verification_code($verification_code, array("invoice_id" => $invoice_id, "client_id" => $client_id, "contact_id" => $contact_user_id))) {
-            return false;
-        }
-
-        //check if partial payment allowed or not
-        if (get_setting("allow_partial_invoice_payment_from_clients")) {
-            $payment_amount = unformat_currency($payment_amount);
-        } else {
-            $payment_amount = $balance_due;
-        }
-
-        $redirect_to = "invoices/preview/$invoice_id";
-        if ($verification_code) {
-            $redirect_to = "pay_invoice/index/$verification_code";
-        }
-
-        //validate payment amount
-        if ($payment_amount < $this->paypal_config->minimum_payment_amount * 1) {
-            $error_message = app_lang('minimum_payment_validation_message') . " " . to_currency($this->paypal_config->minimum_payment_amount, $currency . " ");
-            $session = \Config\Services::session();
-            $session->setFlashdata("error_message", $error_message);
-            app_redirect($redirect_to);
-        }
-
-        //we'll verify the transaction with a random string code after completing the transaction
-        $payment_verification_code = make_random_string();
-
-        $paypal_ipn_data = array(
-            "verification_code" => $verification_code,
-            "invoice_id" => $invoice_id,
-            "contact_user_id" => $contact_user_id,
-            "client_id" => $client_id,
-            "payment_method_id" => $payment_method_id,
-            "payment_verification_code" => $payment_verification_code
-        );
-
-        $paypal_payment_data = array(
-            "intent" => "sale",
-            "payer" => array(
-                "payment_method" => "paypal"
-            ),
-            "transactions" => array(
-                array(
-                    "amount" => array(
-                        "total" => $payment_amount,
-                        "currency" => $currency,
-                    ),
-                    "description" => $description,
-                    "invoice_number" => $invoice_info->display_id . " - " . strtoupper(make_random_string()), //it'll give duplication error if any client wants to pay multiple times on a same invoice like partial payment
-                    "payment_options" => array(
-                        "allowed_payment_method" => "INSTANT_FUNDING_SOURCE"
-                    ),
-                ),
-            ),
-            "redirect_urls" => array(
-                "return_url" => get_uri("paypal_redirect/index/$payment_verification_code"),
-                "cancel_url" => get_uri($redirect_to)
-            )
-        );
-
-        $checkout_info = $this->do_request("POST", "/payments/payment", $paypal_payment_data);
-        if ($checkout_info->id) {
-            /**
-              so, the checkout creation is success
-              save ipn data to db
-             */
-            $paypal_ipn_model = model("App\Models\Paypal_ipn_model");
-            $paypal_ipn_model->ci_save($paypal_ipn_data);
-
-            $checkout_url = get_array_value($checkout_info->links, "1");
-            $checkout_url = $checkout_url->href;
-            return $checkout_url;
-        }
-    }
-
-    private function common_error_handling_for_curl($result, $err) {
         try {
-            $result = json_decode($result);
-        } catch (\Exception $ex) {
-            echo json_encode(array("success" => false, 'message' => $ex->getMessage()));
-            exit();
-        }
+            $checkout = $this->do_request('POST', '/payments/payment', $paymentData);
+            $paymentId = trim((string)($checkout->id ?? ''));
+            if ($paymentId === '') {
+                throw new RuntimeException('PayPal did not create a checkout.');
+            }
 
-        if ($err) {
-            //got curl error
-            echo json_encode(array("success" => false, 'message' => "cURL Error #:" . $err));
-            exit();
-        }
+            $approvalUrl = '';
+            foreach ((array)($checkout->links ?? []) as $link) {
+                if ((string)($link->rel ?? '') === 'approval_url'
+                    && str_starts_with((string)($link->href ?? ''), 'https://')) {
+                    $approvalUrl = (string)$link->href;
+                    break;
+                }
+            }
+            if ($approvalUrl === '') {
+                throw new RuntimeException('PayPal did not return an approval URL.');
+            }
 
-        if (isset($result->error_description) && $result->error_description) {
-            //got error message from curl
-            echo json_encode(array("success" => false, 'message' => $result->error_description));
-            exit();
+            $manager->bindProviderReference((int)$attempt->id, $paymentId);
+            return $approvalUrl;
+        } catch (Throwable $exception) {
+            $manager->markFailed((string)$attempt->public_id, 'paypal', 'checkout_creation_failed');
+            throw $exception;
         }
-
-        if (isset($result->error) && $result->error &&
-                isset($result->error->message) && $result->error->message &&
-                isset($result->error->code) && $result->error->code !== "InvalidAuthenticationToken") {
-            //got error message from curl
-            echo json_encode(array("success" => false, 'message' => $result->error->message));
-            exit();
-        }
-
-        return $result;
     }
 
-    private function headers($access_token) {
-        return array(
-            'Authorization: Bearer ' . $access_token,
-            'Content-Type: application/json'
+    /**
+     * Executes and verifies the exact server-bound PayPal payment, then settles
+     * the invoice atomically. A completed attempt is safe to revisit.
+     */
+    public function settle_invoice_attempt(string $publicId, array $query): array
+    {
+        $manager = new Legacy_invoice_payment_manager();
+        $attempt = $manager->getAttempt($publicId, 'paypal');
+        if (!$attempt || empty($attempt->provider_reference)) {
+            throw new DomainException('The PayPal payment attempt is invalid.');
+        }
+
+        $paymentId = trim((string)($query['paymentId'] ?? ''));
+        $payerId = trim((string)($query['PayerID'] ?? ''));
+        if (!hash_equals((string)$attempt->provider_reference, $paymentId)
+            || preg_match('/^[A-Za-z0-9._:-]{1,191}$/D', $paymentId) !== 1
+            || preg_match('/^[A-Za-z0-9._:-]{1,191}$/D', $payerId) !== 1) {
+            throw new DomainException('The PayPal callback is not bound to this checkout.');
+        }
+
+        if (in_array((string)$attempt->status, ['completed', 'review_required'], true)) {
+            return $manager->settle(
+                (string)$attempt->public_id,
+                'paypal',
+                $paymentId,
+                (string)$attempt->provider_transaction_id,
+                (int)$attempt->expected_amount_minor,
+                (string)$attempt->currency
+            );
+        }
+
+        $payment = $this->do_request(
+            'POST',
+            '/payments/payment/' . rawurlencode($paymentId) . '/execute',
+            ['payer_id' => $payerId]
+        );
+        if (!hash_equals($paymentId, (string)($payment->id ?? ''))
+            || (string)($payment->state ?? '') !== 'approved') {
+            throw new DomainException('PayPal did not confirm an approved payment.');
+        }
+
+        $transactions = (array)($payment->transactions ?? []);
+        if (count($transactions) !== 1) {
+            throw new DomainException('PayPal returned an unexpected transaction set.');
+        }
+        $transaction = reset($transactions);
+        $amount = $transaction->amount ?? null;
+        $currency = strtoupper(trim((string)($amount->currency ?? '')));
+        $total = trim((string)($amount->total ?? ''));
+        $custom = trim((string)($transaction->custom ?? ''));
+        $amountMinor = Payment_amount::toMinor(
+            $total,
+            Legacy_invoice_payment_manager::minorUnitExponent($currency)
+        );
+        if (!hash_equals((string)$attempt->public_id, $custom)
+            || !hash_equals((string)$attempt->currency, $currency)
+            || (int)$attempt->expected_amount_minor !== $amountMinor) {
+            throw new DomainException('PayPal amount, currency, or attempt binding mismatch.');
+        }
+
+        $sale = null;
+        foreach ((array)($transaction->related_resources ?? []) as $resource) {
+            if (isset($resource->sale)) {
+                $sale = $resource->sale;
+                break;
+            }
+        }
+        $saleId = trim((string)($sale->id ?? ''));
+        $saleCurrency = strtoupper(trim((string)($sale->amount->currency ?? '')));
+        $saleAmountMinor = Payment_amount::toMinor(
+            trim((string)($sale->amount->total ?? '')),
+            Legacy_invoice_payment_manager::minorUnitExponent($saleCurrency)
+        );
+        if ($saleId === ''
+            || (string)($sale->state ?? '') !== 'completed'
+            || !hash_equals((string)$attempt->currency, $saleCurrency)
+            || (int)$attempt->expected_amount_minor !== $saleAmountMinor) {
+            throw new DomainException('PayPal did not return a completed sale.');
+        }
+
+        return $manager->settle(
+            (string)$attempt->public_id,
+            'paypal',
+            $paymentId,
+            $saleId,
+            $amountMinor,
+            $currency
         );
     }
 
-    //get access token everytime since we won't get refresh token
-    private function get_access_token() {
+    private function invoiceReturnUrl(object $attempt): string
+    {
+        if (!empty($attempt->invoice_verification_code)) {
+            return get_uri('pay_invoice/index/' . $attempt->invoice_verification_code);
+        }
+        return get_uri('invoices/preview/' . (int)$attempt->invoice_id);
+    }
+
+    private function get_access_token(): string
+    {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $this->paypal_url . '/oauth2/token');
         curl_setopt($ch, CURLOPT_HEADER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERPWD, $this->paypal_config->client_id . ':' . $this->paypal_config->client_secret);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array(
-            'grant_type' => 'client_credentials'
-        )));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['grant_type' => 'client_credentials']));
+        $this->applySecureCurlOptions($ch);
 
         $result = curl_exec($ch);
-        $err = curl_error($ch);
+        $errorNumber = curl_errno($ch);
+        $httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-
-        $result = $this->common_error_handling_for_curl($result, $err);
-
-        return $result->access_token;
+        $payload = $this->decodeResponse($result, $errorNumber, $httpStatus);
+        $token = trim((string)($payload->access_token ?? ''));
+        if ($token === '') {
+            throw new RuntimeException('PayPal authentication failed.');
+        }
+        return $token;
     }
 
-    private function do_request($method, $path, $body = array()) {
-        if (is_array($body)) {
-            // Treat an empty array in the body data as if no body data was set
-            if (!count($body)) {
-                $body = '';
-            } else {
-                $body = json_encode($body);
-            }
+    private function do_request(string $method, string $path, array $body = []): object
+    {
+        $method = strtoupper($method);
+        if (!in_array($method, ['DELETE', 'PATCH', 'POST', 'PUT', 'GET'], true)
+            || !preg_match('#^/[A-Za-z0-9_./:-]+$#D', $path)) {
+            throw new DomainException('Invalid PayPal API request.');
         }
 
-        $method = strtoupper($method);
-        $url = $this->paypal_url . $path;
-
-        $access_token = $this->get_access_token();
-        if (!$access_token) {
-            echo json_encode(array("success" => false, 'message' => app_lang('error_occurred')));
-            exit();
+        $encodedBody = $body ? json_encode($body, JSON_UNESCAPED_SLASHES) : '';
+        if ($encodedBody === false) {
+            throw new RuntimeException('Unable to encode the PayPal request.');
         }
 
         $ch = curl_init();
-
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers($access_token));
+        curl_setopt($ch, CURLOPT_URL, $this->paypal_url . $path);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $this->get_access_token(),
+            'Accept: application/json',
+            'Content-Type: application/json',
+        ]);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-        if (in_array($method, array('DELETE', 'PATCH', 'POST', 'PUT', 'GET'))) {
-
-            // All except DELETE can have a payload in the body
-            if ($method != 'DELETE' && strlen($body)) {
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-            }
-
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        if ($method !== 'DELETE' && $encodedBody !== '') {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $encodedBody);
         }
+        $this->applySecureCurlOptions($ch);
 
         $result = curl_exec($ch);
-        $err = curl_error($ch);
+        $errorNumber = curl_errno($ch);
+        $httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-
-        $result = $this->common_error_handling_for_curl($result, $err);
-
-        return $result;
+        return $this->decodeResponse($result, $errorNumber, $httpStatus);
     }
 
-    public function is_valid_ipn($payment_info) {
-        $payment_id = get_array_value($payment_info, "paymentId");
-        $payer_id = get_array_value($payment_info, "PayerID");
-
-        $checkout_info = $this->do_request("POST", "/payments/payment/$payment_id/execute", array("payer_id" => $payer_id));
-        if (!($checkout_info && $checkout_info->id)) {
-            return false;
+    private function applySecureCurlOptions($ch): void
+    {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        if (defined('CURLOPT_SSLVERSION') && defined('CURL_SSLVERSION_TLSv1_2')) {
+            curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
         }
-
-        if ($checkout_info && $checkout_info->state === "approved") {
-            //so the payment is successful
-            return $checkout_info;
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'PODC-Invoice-Payments/1.0');
+        if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+            curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
         }
     }
 
+    private function decodeResponse($result, int $errorNumber, int $httpStatus): object
+    {
+        if ($errorNumber !== 0 || !is_string($result) || $result === '') {
+            log_message('error', 'PAYPAL TRANSPORT FAILURE: curl={curl} http={http}', [
+                'curl' => $errorNumber,
+                'http' => $httpStatus,
+            ]);
+            throw new RuntimeException('The secure payment provider is unavailable.');
+        }
+        $payload = json_decode($result);
+        if (!is_object($payload) || $httpStatus < 200 || $httpStatus >= 300) {
+            log_message('warning', 'PAYPAL API REJECTED REQUEST: http={http}', ['http' => $httpStatus]);
+            throw new RuntimeException('The secure payment provider rejected the request.');
+        }
+        return $payload;
+    }
 }

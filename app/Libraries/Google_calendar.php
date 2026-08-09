@@ -16,13 +16,13 @@ class Google_calendar {
     }
 
     //authorize connection
-    public function authorize() {
+    public function authorize(string $state) {
         $client = $this->_get_client_credentials();
-        $this->_check_access_token($client, true);
+        $this->_check_access_token($client, true, $state);
     }
 
     //check access token
-    private function _check_access_token($client, $redirect_to_settings = false) {
+    private function _check_access_token($client, $redirect_to_settings = false, string $state = '') {
         //load previously authorized token from database, if it exists.
         $accessToken = decode_id(get_setting('google_calendar_oauth_access_token'), "google_calendar_oauth_access_token");
 
@@ -39,6 +39,10 @@ class Google_calendar {
                     app_redirect("settings/events");
                 }
             } else {
+                if (!$redirect_to_settings || $state === '') {
+                    throw new \RuntimeException('Google Calendar authorization is required.');
+                }
+                $client->setState($state);
                 $authUrl = $client->createAuthUrl();
                 app_redirect($authUrl, true);
             }

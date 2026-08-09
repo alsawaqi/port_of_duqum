@@ -51,7 +51,7 @@ class Filters extends Security_Controller {
         if (!$filters) {
             $filters = "a:0:{}";
         }
-        $filters = unserialize($filters);
+        $filters = safe_unserialize($filters);
 
         $filter_data = array(
             "context" => $context,
@@ -110,12 +110,12 @@ class Filters extends Security_Controller {
             $filters[] = $filter_data;
         }
 
-        $this->_save_custom_filters($filters, $id);
+        $this->_save_custom_filters($filters);
 
         echo json_encode(array("success" => true, "filters" => $filters));
     }
 
-    function _save_custom_filters($filters_array) {
+    private function _save_custom_filters($filters_array) {
         $filters_array = serialize($filters_array);
         $filters_array = clean_data($filters_array);
         return $this->Settings_model->save_setting("user_" . $this->login_user->id . "_filters", $filters_array, "user");
@@ -133,7 +133,7 @@ class Filters extends Security_Controller {
         if (!$custom_filters) {
             $custom_filters = "a:0:{}";
         }
-        $filters = unserialize($custom_filters);
+        $filters = safe_unserialize($custom_filters);
 
         $context_with_id = "";
         if ($context_id != 0 && $context_id) {

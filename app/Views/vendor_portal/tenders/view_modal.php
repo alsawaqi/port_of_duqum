@@ -189,22 +189,20 @@ $section_labels = [
     </div>
 
     <hr>
-    <h5 class="mb15">RFQ / RFP Details</h5>
+    <h5 class="mb15">Tender Details</h5>
 
     <div class="row">
-        <div class="col-md-4 mb15"><div class="text-muted">Reference Number</div><div><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></div></div>
-        <div class="col-md-4 mb15"><div class="text-muted">Request Date</div><div><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></div></div>
-        <div class="col-md-4 mb15"><div class="text-muted">PR No</div><div><?php echo esc($rfq_detail->pr_no ?? "-"); ?></div></div>
+        <div class="col-md-4 mb15"><div class="text-muted">PR No (Optional)</div><div><?php echo esc($rfq_detail->pr_no ?? "-"); ?></div></div>
         <div class="col-md-4 mb15"><div class="text-muted">Delivery Location</div><div><?php echo esc($rfq_detail->delivery_location ?? "-"); ?></div></div>
         <div class="col-md-4 mb15"><div class="text-muted">INCOTERM</div><div><?php echo esc($rfq_detail->incoterm ?? "-"); ?></div></div>
-        <div class="col-md-4 mb15"><div class="text-muted">Material Required On</div><div><?php echo !empty($rfq_detail->material_required_on) ? format_to_date($rfq_detail->material_required_on, false) : "-"; ?></div></div>
+        <div class="col-md-4 mb15"><div class="text-muted">Estimated Material/Service Required On</div><div><?php echo !empty($rfq_detail->material_required_on) ? format_to_date($rfq_detail->material_required_on, false) : "-"; ?></div></div>
         <div class="col-md-12 mb15"><div class="text-muted">Terms & Conditions</div><div><?php echo esc($rfq_detail->terms_reference ?? "-"); ?></div></div>
     </div>
 
     <?php if ($rfq_items) { ?>
         <div class="table-responsive mb15">
             <table class="table table-bordered table-striped">
-                <thead><tr><th>Sr No</th><th>Description</th><th>UOM</th><th>Qty</th><th>Brand</th></tr></thead>
+                <thead><tr><th>Sr No</th><th>Description</th><th>UOM</th><th>Qty</th><th>Part No (Optional)</th></tr></thead>
                 <tbody>
                     <?php foreach ($rfq_items as $item) { ?>
                         <tr>
@@ -212,7 +210,7 @@ $section_labels = [
                             <td><?php echo esc($item->description ?? "-"); ?></td>
                             <td><?php echo esc($item->uom ?? "-"); ?></td>
                             <td><?php echo $item->qty !== null ? number_format((float) $item->qty, 3) : "-"; ?></td>
-                            <td><?php echo esc($item->brand ?? "-"); ?></td>
+                            <td><?php echo esc($item->part_no ?? ($item->brand ?? "-")); ?></td>
                         </tr>
                     <?php } ?>
                 </tbody>
@@ -311,6 +309,16 @@ $section_labels = [
                                 <?php } ?>
                             </td>
                             <td class="text-center">
+                                <?php echo js_anchor(
+                                    "<i data-feather='eye' class='icon-14'></i> Preview",
+                                    [
+                                        "title" => "Preview Document",
+                                        "class" => "btn btn-primary btn-sm me-1",
+                                        "data-toggle" => "app-modal",
+                                        "data-sidebar" => "0",
+                                        "data-url" => get_uri("vendor_portal/preview_tender_document/" . (int) $doc->id),
+                                    ]
+                                ); ?>
                                 <a href="<?php echo get_uri('vendor_portal/download_tender_document/' . $doc->id); ?>" class="btn btn-default btn-sm">
                                     <i data-feather="download" class="icon-14"></i> Download
                                 </a>

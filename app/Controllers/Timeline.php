@@ -122,7 +122,7 @@ class Timeline extends Security_Controller {
 
             //delete the files
             $timeline_file_path = get_setting("timeline_file_path");
-            $files = unserialize($post_info->files);
+            $files = safe_unserialize($post_info->files);
 
             delete_app_files($timeline_file_path, $files);
         }

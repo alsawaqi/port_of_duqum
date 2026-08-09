@@ -30,7 +30,7 @@
         <div class="col-md-12 mt15">
             <?php
             if ($model_info->files) {
-                $files = unserialize($model_info->files);
+                $files = safe_unserialize($model_info->files);
                 $total_files = count($files);
                 echo view("includes/timeline_preview", array("files" => $files, "seperate_audio" => true));
             }

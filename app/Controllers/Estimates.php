@@ -363,9 +363,9 @@ class Estimates extends Security_Controller {
 
         if ($this->Estimates_model->delete($id)) {
             //delete signature file
-            $signer_info = @unserialize($estimate_info->meta_data);
+            $signer_info = @safe_unserialize($estimate_info->meta_data);
             if ($signer_info && is_array($signer_info) && get_array_value($signer_info, "signature")) {
-                $signature_file = unserialize(get_array_value($signer_info, "signature"));
+                $signature_file = safe_unserialize(get_array_value($signer_info, "signature"));
                 delete_app_files(get_setting("timeline_file_path"), $signature_file);
             }
 
@@ -1111,7 +1111,7 @@ class Estimates extends Security_Controller {
 
             //delete the files
             $file_path = get_setting("timeline_file_path");
-            $files = unserialize($comment_info->files);
+            $files = safe_unserialize($comment_info->files);
 
             foreach ($files as $file) {
                 $source_path = $file_path . get_array_value($file, "file_name");

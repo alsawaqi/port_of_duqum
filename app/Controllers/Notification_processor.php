@@ -2,6 +2,10 @@
 
 namespace App\Controllers;
 
+use App\Libraries\Notification_payload_guard;
+use App\Libraries\Notification_request_authenticator;
+use App\Models\Notification_processor_nonces_model;
+
 /*
  * To process the notifications we'll use this.
  * This controller will be called via curl 
@@ -11,6 +15,8 @@ namespace App\Controllers;
  */
 
 class Notification_processor extends App_Controller {
+
+    private int $signed_request_failure_status = 401;
 
     function __construct() {
         parent::__construct();
@@ -22,14 +28,32 @@ class Notification_processor extends App_Controller {
         app_redirect("forbidden");
     }
 
-    function create_notification($data = array()) {
+    function create_notification(array $data = array()) {
 
         ini_set('max_execution_time', 300); //300 seconds 
 
-        //validate notification request
+        // Normal application notifications arrive as an in-process array from
+        // log_notification(). The HTTP form/$_POST path is intentionally not
+        // trusted. Controlled internal workers must send signed JSON instead.
+        $is_internal_call = !empty($data);
+        if (!$is_internal_call) {
+            $data = $this->_get_signed_request_payload();
+            if (!is_array($data)) {
+                return $this->response
+                    ->setStatusCode($this->signed_request_failure_status)
+                    ->setJSON(["success" => false, "message" => "Access denied."]);
+            }
+        }
 
-        if (!get_setting("log_direct_notifications")) {
-            $data = $_POST;
+        $data = Notification_payload_guard::sanitize($data, $this->_allowed_plugin_fields());
+        if (!is_array($data)) {
+            if ($is_internal_call) {
+                log_message('warning', 'Rejected an invalid internal notification payload.');
+                return false;
+            }
+            return $this->response
+                ->setStatusCode(400)
+                ->setJSON(["success" => false, "message" => "Invalid notification payload."]);
         }
 
         $raw_event = get_array_value($data, "event");
@@ -40,13 +64,13 @@ class Notification_processor extends App_Controller {
 
 
         if (!$event) {
-            die("Access Denied!");
+            return $this->_deny_notification($is_internal_call);
         }
 
         $notification_data = get_notification_config($event);
 
         if (!is_array($notification_data)) {
-            die("Access Denied!!");
+            return $this->_deny_notification($is_internal_call);
         }
 
         $user_id = get_array_value($data, "user_id");
@@ -86,9 +110,9 @@ class Notification_processor extends App_Controller {
             "reminder_log_id" => get_array_value($data, "reminder_log_id")
         );
 
-        //get data from plugin by persing 'plugin_'
+        // Plugin fields must be explicitly registered by an installed plugin.
         foreach ($data as $key => $value) {
-            if (strpos($key, 'plugin_') !== false) {
+            if (str_starts_with($key, 'plugin_')) {
                 $options[$key] = $value;
             }
         }
@@ -134,7 +158,87 @@ class Notification_processor extends App_Controller {
         //error_log("announcement_id: " . $options["announcement_id"] . PHP_EOL, 3, "notification.txt");
         //error_log("announcement_share_with: " . $options["announcement_share_with"] . PHP_EOL, 3, "notification.txt");
 
-        $this->Notifications_model->create_notification($event, $user_id, $options);
+        $created = $this->Notifications_model->create_notification($event, $user_id, $options);
+        if ($is_internal_call) {
+            return $created;
+        }
+
+        return $this->response->setJSON(["success" => true]);
+    }
+
+    private function _get_signed_request_payload(): ?array {
+        if (strtoupper((string)$this->request->getMethod()) !== 'POST') {
+            $this->signed_request_failure_status = 405;
+            return null;
+        }
+
+        $content_type = strtolower((string)$this->request->getHeaderLine('Content-Type'));
+        if (!str_starts_with($content_type, 'application/json')) {
+            $this->signed_request_failure_status = 415;
+            return null;
+        }
+
+        $body = (string)$this->request->getBody();
+        if ($body === '' || strlen($body) > Notification_request_authenticator::MAX_BODY_BYTES) {
+            $this->signed_request_failure_status = 400;
+            return null;
+        }
+
+        $secret = trim((string)getenv('PODC_NOTIFICATION_PROCESSOR_KEY'));
+        $timestamp = trim((string)$this->request->getHeaderLine('X-PODC-Notification-Timestamp'));
+        $nonce = trim((string)$this->request->getHeaderLine('X-PODC-Notification-Nonce'));
+        $signature = trim((string)$this->request->getHeaderLine('X-PODC-Notification-Signature'));
+        if (strlen($secret) < 32) {
+            $this->signed_request_failure_status = 503;
+            return null;
+        }
+
+        $nonce_model = new Notification_processor_nonces_model();
+        $authenticated = Notification_request_authenticator::authenticate(
+            $secret,
+            $timestamp,
+            $nonce,
+            $signature,
+            $body,
+            static function (string $nonce_hash, int $expires_at) use ($nonce_model): bool {
+                return $nonce_model->claim($nonce_hash, $expires_at);
+            }
+        );
+        if (!$authenticated) {
+            return null;
+        }
+
+        $payload = json_decode($body, true);
+        if (!is_array($payload) || json_last_error() !== JSON_ERROR_NONE) {
+            $this->signed_request_failure_status = 400;
+            return null;
+        }
+
+        return $payload;
+    }
+
+    private function _allowed_plugin_fields(): array {
+        $fields = [];
+        if (function_exists('app_hooks')) {
+            $hooks = app_hooks();
+            if (is_object($hooks) && method_exists($hooks, 'apply_filters')) {
+                $fields = $hooks->apply_filters(
+                    'app_filter_notification_processor_allowed_plugin_fields',
+                    $fields
+                );
+            }
+        }
+        return is_array($fields) ? $fields : [];
+    }
+
+    private function _deny_notification(bool $is_internal_call) {
+        if ($is_internal_call) {
+            log_message('warning', 'Rejected an unknown internal notification event.');
+            return false;
+        }
+        return $this->response
+            ->setStatusCode(403)
+            ->setJSON(["success" => false, "message" => "Access denied."]);
     }
 
     private function get_reminder_tasks($event) {
@@ -172,7 +276,7 @@ class Notification_processor extends App_Controller {
                 //get notify to array according to changes
                 $notify_to_array = get_change_logs_array($activity->changes, $activity->log_type, $activity->action, true);
 
-                $changes = unserialize($activity->changes);
+                $changes = safe_unserialize($activity->changes);
 
                 //only chaged assigned_to field?
                 if (is_array($changes) && count($changes) == 1 && get_array_value($changes, "assigned_to")) {

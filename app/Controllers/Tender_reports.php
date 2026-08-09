@@ -2,14 +2,19 @@
 
 namespace App\Controllers;
 
+use App\Libraries\Upload_security;
+use App\Libraries\UploadSecurityException;
+use App\Libraries\Runtime_schema_guard;
 use App\Models\Tender_bid_documents_model;
 use App\Models\Tender_bid_openings_model;
 use App\Models\Tender_communications_model;
+use App\Models\Tender_documents_model;
 use App\Models\Tender_evaluation_attachments_model;
 use App\Models\Tender_evaluations_model;
 use App\Models\Tender_rfq_details_model;
 use App\Models\Tender_rfq_items_model;
 use App\Models\Tenders_model;
+use CodeIgniter\HTTP\Files\UploadedFile;
 
 class Tender_reports extends Security_Controller
 {
@@ -18,6 +23,7 @@ class Tender_reports extends Security_Controller
     protected $Tender_bid_documents_model;
     protected $Tender_bid_openings_model;
     protected $Tender_communications_model;
+    protected $Tender_documents_model;
     protected $Tender_evaluation_attachments_model;
     protected $Tender_evaluations_model;
     protected $Tender_rfq_details_model;
@@ -33,6 +39,7 @@ class Tender_reports extends Security_Controller
         $this->Tender_bid_documents_model = new Tender_bid_documents_model();
         $this->Tender_bid_openings_model = new Tender_bid_openings_model();
         $this->Tender_communications_model = new Tender_communications_model();
+        $this->Tender_documents_model = new Tender_documents_model();
         $this->Tender_evaluation_attachments_model = new Tender_evaluation_attachments_model();
         $this->Tender_evaluations_model = new Tender_evaluations_model();
         $this->Tender_rfq_details_model = new Tender_rfq_details_model();
@@ -49,7 +56,6 @@ class Tender_reports extends Security_Controller
     public function list_data()
     {
         $this->_access_reports();
-        $this->Tenders_model->auto_progress_workflow();
 
         $status = strtolower(trim((string) $this->request->getPost("status")));
         $type = strtolower(trim((string) $this->request->getPost("tender_type")));
@@ -80,6 +86,11 @@ class Tender_reports extends Security_Controller
         $tiv = $this->db->prefixTable("tender_invited_vendors");
         $tb = $this->db->prefixTable("tender_bids");
         $te = $this->db->prefixTable("tender_evaluations");
+        $where[] = $this->tender_company_scope_sql(
+            "COALESCE(t.company_id, req.company_id)",
+            "reports",
+            $params
+        );
 
         $sql = "SELECT
                     t.id,
@@ -153,12 +164,12 @@ class Tender_reports extends Security_Controller
     public function details($id = 0)
     {
         $this->_access_reports();
-        $this->Tenders_model->auto_progress_workflow();
 
         $tender_id = (int) $id;
         if (!$tender_id) {
             show_404();
         }
+        $this->require_tender_scope($tender_id, "reports");
 
         $tender = $this->_get_tender_report($tender_id);
         if (!$tender) {
@@ -197,6 +208,32 @@ class Tender_reports extends Security_Controller
         ]);
     }
 
+    public function preview_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+
+        return $this->template->view(
+            "tender_procurement_manager_inbox/file_preview",
+            $this->_make_tender_document_preview_data(
+                $context["doc"],
+                $context["full_path"],
+                get_uri("tender_reports/view_tender_document/" . (int) $id)
+            )
+        );
+    }
+
+    public function view_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_tender_document_file($context["doc"], $context["full_path"], false);
+    }
+
+    public function download_tender_document($id = 0)
+    {
+        $context = $this->_get_accessible_tender_document_context((int) $id);
+        return $this->_serve_tender_document_file($context["doc"], $context["full_path"], true);
+    }
+
     public function save_update()
     {
         $this->validate_submitted_data([
@@ -207,6 +244,7 @@ class Tender_reports extends Security_Controller
         $this->access_only_tender("procurement", "update");
 
         $tender_id = (int) $this->request->getPost("tender_id");
+        $this->require_tender_scope($tender_id, "reports");
         $tender = $this->_get_tender_report($tender_id);
         if (!$tender) {
             return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
@@ -214,6 +252,20 @@ class Tender_reports extends Security_Controller
 
         if ((string) ($tender->status ?? "") === "cancelled") {
             return $this->response->setJSON(["success" => false, "message" => "Cancelled tenders cannot receive vendor updates."]);
+        }
+
+        try {
+            $update_files = $this->_collect_update_files();
+            $security = new Upload_security();
+            foreach ($update_files as $update_file) {
+                $security->validateUploadedFile($update_file, Upload_security::CONTEXT_GENERIC);
+            }
+        } catch (UploadSecurityException $e) {
+            log_message("notice", "Tender report update attachment rejected.");
+            return $this->response->setStatusCode(422)->setJSON([
+                "success" => false,
+                "message" => "One or more attachments could not be accepted.",
+            ]);
         }
 
         $type = strtolower(trim((string) $this->request->getPost("update_type")));
@@ -228,6 +280,7 @@ class Tender_reports extends Security_Controller
         }
 
         $now = date("Y-m-d H:i:s");
+        $this->db->transBegin();
         $saved = $this->Tender_communications_model->ci_save(clean_data([
             "tender_id" => $tender_id,
             "vendor_id" => null,
@@ -245,10 +298,34 @@ class Tender_reports extends Security_Controller
         ]));
 
         if (!$saved) {
+            $this->db->transRollback();
             return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
         }
 
-        $this->_save_update_files((int) $saved, $tender_id);
+        $stored_paths = [];
+        try {
+            $stored_paths = $this->_save_update_files((int) $saved, $tender_id, $update_files);
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException("Tender update attachment persistence failed.");
+            }
+            $this->db->transCommit();
+        } catch (UploadSecurityException $e) {
+            $this->db->transRollback();
+            $this->_remove_stored_files($stored_paths);
+            log_message("notice", "Tender report update attachment rejected during storage.");
+            return $this->response->setStatusCode(422)->setJSON([
+                "success" => false,
+                "message" => "One or more attachments could not be accepted.",
+            ]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            $this->_remove_stored_files($stored_paths);
+            log_message("error", "Tender report update attachment storage failed.");
+            return $this->response->setStatusCode(500)->setJSON([
+                "success" => false,
+                "message" => app_lang("error_occurred"),
+            ]);
+        }
 
         return $this->response->setJSON([
             "success" => true,
@@ -270,64 +347,117 @@ class Tender_reports extends Security_Controller
         if (!$attachment) {
             show_404();
         }
+        $this->require_tender_scope((int) $attachment->tender_id, "reports");
 
         if (!$this->_get_tender_report((int) $attachment->tender_id)) {
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        if ((string) ($attachment->disk ?? "local") !== "local") {
+            show_404();
+        }
+        $path_suffix = "tender_" . (int) $attachment->tender_id
+            . "/communication_" . (int) $attachment->communication_id;
+        $security = new Upload_security();
+        $full_path = $security->resolveStoredFile((string) $attachment->path, "tender_clarifications/" . $path_suffix)
+            ?: $security->resolveStoredFile((string) $attachment->path, "tender_updates/" . $path_suffix);
+        if (!$full_path) {
             show_404();
         }
 
-        return $this->response->download($full_path, null)->setFileName($attachment->original_name ?: basename($full_path));
+        return $this->response
+            ->download($full_path, null)
+            ->setFileName($attachment->original_name ?: basename($full_path))
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store");
     }
 
-    private function _save_update_files(int $communication_id, int $tender_id): void
+    /** @return UploadedFile[] */
+    private function _collect_update_files(): array
     {
         $files = method_exists($this->request, "getFileMultiple")
             ? ($this->request->getFileMultiple("update_files") ?: [])
             : (($this->request->getFiles()["update_files"] ?? []) ?: []);
 
         if (!$files) {
-            return;
+            return [];
         }
 
         if (!is_array($files)) {
             $files = [$files];
         }
-
-        $relative_dir = "tender_updates/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-        $upload_dir = WRITEPATH . "uploads/" . $relative_dir;
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
+        if (count($files) > 10) {
+            throw new UploadSecurityException("Too many update attachments were submitted.");
         }
+
+        $collected = [];
+        $total_size = 0;
+        foreach ($files as $file) {
+            if ($file instanceof UploadedFile && $file->getError() === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+            if (!$file instanceof UploadedFile || !$file->isValid() || $file->hasMoved()) {
+                throw new UploadSecurityException("An update attachment is invalid or incomplete.");
+            }
+            $total_size += (int) $file->getSize();
+            if ($total_size > 50 * 1024 * 1024) {
+                throw new UploadSecurityException("The combined update attachments are too large.");
+            }
+            $collected[] = $file;
+        }
+
+        return $collected;
+    }
+
+    /** @param UploadedFile[] $files @return string[] absolute paths */
+    private function _save_update_files(int $communication_id, int $tender_id, array $files): array
+    {
+        if (!$files) {
+            return [];
+        }
+
+        // Global updates share the protected communications attachment root so
+        // the existing vendor-authorized download route can serve them.
+        $relative_dir = "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
+        $upload_dir = WRITEPATH . "uploads/" . $relative_dir;
 
         $saved_files = [];
-        foreach ($files as $file) {
-            if (!$file || !$file->isValid() || $file->hasMoved()) {
-                continue;
+        $stored_paths = [];
+        $security = new Upload_security();
+        try {
+            foreach ($files as $file) {
+                $stored = $security->storeUploadedFile(
+                    $file,
+                    $upload_dir,
+                    Upload_security::CONTEXT_GENERIC,
+                    "tu_"
+                );
+                $stored_paths[] = $stored["path"];
+                $saved_files[] = [
+                    "disk" => "local",
+                    "path" => $relative_dir . $stored["stored_name"],
+                    "original_name" => $stored["original_name"],
+                    "mime_type" => $stored["detected_mime"],
+                    "size_bytes" => $stored["size_bytes"],
+                ];
             }
 
-            $original_name = $file->getClientName();
-            if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-                continue;
-            }
-
-            $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-            $new_name = uniqid("tu_", true) . ($extension ? "." . $extension : "");
-            $file->move($upload_dir, $new_name);
-
-            $saved_files[] = [
-                "disk" => "local",
-                "path" => $relative_dir . $new_name,
-                "original_name" => $original_name,
-                "mime_type" => $file->getClientMimeType(),
-                "size_bytes" => $file->getSize(),
-            ];
+            $this->Tender_communications_model->save_attachments((int) $communication_id, $tender_id, null, $saved_files, (int) $this->login_user->id);
+        } catch (\Throwable $e) {
+            $this->_remove_stored_files($stored_paths);
+            throw $e;
         }
 
-        $this->Tender_communications_model->save_attachments((int) $communication_id, $tender_id, null, $saved_files, (int) $this->login_user->id);
+        return $stored_paths;
+    }
+
+    private function _remove_stored_files(array $paths): void
+    {
+        foreach ($paths as $path) {
+            if (is_string($path) && is_file($path)) {
+                @unlink($path);
+            }
+        }
     }
 
     public function approve_vendor_participation()
@@ -350,6 +480,7 @@ class Tender_reports extends Security_Controller
 
         $tender_id = (int) $this->request->getPost("tender_id");
         $vendor_id = (int) $this->request->getPost("vendor_id");
+        $this->require_tender_scope($tender_id, "reports");
         $tender = $this->_get_tender_report($tender_id);
 
         if (!$tender) {
@@ -415,6 +546,7 @@ class Tender_reports extends Security_Controller
         $this->access_only_tender("procurement", "update");
 
         $tender_id = (int) $this->request->getPost("tender_id");
+        $this->require_tender_scope($tender_id, "reports");
         $target_stage = $this->_normalize_workflow_stage($this->request->getPost("workflow_stage"));
         $reason = trim((string) $this->request->getPost("reason"));
         $open_until = $this->_normalize_override_until($this->request->getPost("open_until"));
@@ -534,6 +666,7 @@ class Tender_reports extends Security_Controller
         if (!$evaluation) {
             return $this->response->setJSON(["success" => false, "message" => "Late evaluation not found."]);
         }
+        $this->require_tender_scope((int) $evaluation->tender_id, "reports");
 
         if ((int) ($evaluation->submitted_after_deadline ?? 0) !== 1) {
             return $this->response->setJSON(["success" => false, "message" => "Only late evaluations require procurement review."]);
@@ -549,19 +682,28 @@ class Tender_reports extends Security_Controller
         $tb = $this->db->prefixTable("tender_bids");
 
         $this->db->transStart();
-        $this->db->table($te)->where("id", $evaluation_id)->update(clean_data([
-            "late_review_status" => $decision,
-            "late_reviewed_by" => (int) $this->login_user->id,
-            "late_reviewed_at" => $now,
-            "late_review_comment" => $comment ?: null,
-            "updated_at" => $now,
-        ]));
-
-        if ($decision === "accepted" && (string) ($evaluation->type ?? "") === "technical" && in_array((string) ($evaluation->decision ?? ""), ["accepted", "rejected"], true)) {
-            $this->db->table($tb)->where("id", (int) $evaluation->tender_bid_id)->update(clean_data([
-                "status" => (string) $evaluation->decision,
+        $this->db->table($te)
+            ->where("id", $evaluation_id)
+            ->where("tender_id", (int) $evaluation->tender_id)
+            ->where("tender_bid_id", (int) $evaluation->tender_bid_id)
+            ->where("deleted", 0)
+            ->update(clean_data([
+                "late_review_status" => $decision,
+                "late_reviewed_by" => (int) $this->login_user->id,
+                "late_reviewed_at" => $now,
+                "late_review_comment" => $comment ?: null,
                 "updated_at" => $now,
             ]));
+
+        if ($decision === "accepted" && (string) ($evaluation->type ?? "") === "technical" && in_array((string) ($evaluation->decision ?? ""), ["accepted", "rejected"], true)) {
+            $this->db->table($tb)
+                ->where("id", (int) $evaluation->tender_bid_id)
+                ->where("tender_id", (int) $evaluation->tender_id)
+                ->where("deleted", 0)
+                ->update(clean_data([
+                    "status" => (string) $evaluation->decision,
+                    "updated_at" => $now,
+                ]));
         }
 
         $this->_record_late_evaluation_review_history($evaluation, $decision, $comment, $now);
@@ -586,6 +728,7 @@ class Tender_reports extends Security_Controller
         $this->access_only_tender("procurement", "update");
 
         $tender_id = (int) $this->request->getPost("tender_id");
+        $this->require_tender_scope($tender_id, "reports");
         $tender = $this->_get_tender_report($tender_id);
         if (!$tender) {
             return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
@@ -596,32 +739,99 @@ class Tender_reports extends Security_Controller
         }
 
         $file = $this->request->getFile("manual_bid_opening_form");
-        if (!$file || !$file->isValid() || $file->hasMoved()) {
+        if (!$file instanceof UploadedFile || !$file->isValid() || $file->hasMoved()) {
             return $this->response->setJSON(["success" => false, "message" => "Upload the signed bid opening form."]);
         }
 
-        $original_name = $file->getClientName();
-        if (function_exists("is_valid_file_to_upload") && !is_valid_file_to_upload($original_name)) {
-            return $this->response->setJSON(["success" => false, "message" => "Please upload a valid file."]);
+        $relative_dir = "tender_opening_forms/tender_" . $tender_id . "/";
+        try {
+            $stored = (new Upload_security())->storeUploadedFile(
+                $file,
+                WRITEPATH . "uploads/" . $relative_dir,
+                Upload_security::CONTEXT_SECURITY_DOCUMENT,
+                "opening_form_",
+                ["pdf", "jpg", "jpeg", "png"]
+            );
+        } catch (UploadSecurityException $e) {
+            log_message("notice", "Manual tender opening form rejected.");
+            return $this->response->setStatusCode(422)->setJSON([
+                "success" => false,
+                "message" => "The signed opening form could not be accepted.",
+            ]);
         }
 
-        $upload_dir = WRITEPATH . "uploads/tender_opening_forms/tender_" . $tender_id . "/";
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true);
+        $previous_session = $this->Tender_bid_openings_model->get_active_session($tender_id, "technical");
+        $path = $relative_dir . $stored["stored_name"];
+        $this->db->transBegin();
+        try {
+            $opening_id = $this->Tender_bid_openings_model->mark_manual_form_accepted(
+                $tender_id,
+                (int) $this->login_user->id,
+                $path,
+                $stored["original_name"]
+            );
+            if (!$opening_id || $this->db->transStatus() === false) {
+                throw new \RuntimeException("Manual tender opening form persistence failed.");
+            }
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            $this->_remove_stored_files([$stored["path"]]);
+            log_message("error", "Manual tender opening form could not be recorded.");
+            return $this->response->setStatusCode(500)->setJSON([
+                "success" => false,
+                "message" => app_lang("error_occurred"),
+            ]);
         }
 
-        $extension = $file->getExtension() ?: pathinfo($original_name, PATHINFO_EXTENSION);
-        $new_name = uniqid("opening_form_", true) . ($extension ? "." . $extension : "");
-        $file->move($upload_dir, $new_name);
-
-        $path = "tender_opening_forms/tender_" . $tender_id . "/" . $new_name;
-        $this->Tender_bid_openings_model->mark_manual_form_accepted($tender_id, (int) $this->login_user->id, $path, $original_name);
+        $previous_path = (string) ($previous_session->manual_form_path ?? "");
+        if ($previous_path !== "" && $previous_path !== $path) {
+            $previous_full_path = (new Upload_security())->resolveStoredFile(
+                $previous_path,
+                "tender_opening_forms/tender_" . $tender_id
+            );
+            if ($previous_full_path) {
+                @unlink($previous_full_path);
+            }
+        }
 
         return $this->response->setJSON([
             "success" => true,
             "message" => "Manual bid opening form uploaded. Procurement can now start technical review.",
             "redirect_url" => get_uri("tender_reports/details/" . $tender_id . "#tender-report-audit"),
         ]);
+    }
+
+    public function download_manual_bid_opening_form($id = 0)
+    {
+        $this->_access_reports();
+        $tender_id = (int) $id;
+        if (!$tender_id) {
+            show_404();
+        }
+        $this->require_tender_scope($tender_id, "reports");
+        if (!$this->_get_tender_report($tender_id)) {
+            show_404();
+        }
+
+        $session = $this->Tender_bid_openings_model->get_active_session($tender_id, "technical");
+        if (!$session || empty($session->manual_form_path)) {
+            show_404();
+        }
+        $full_path = (new Upload_security())->resolveStoredFile(
+            (string) $session->manual_form_path,
+            "tender_opening_forms/tender_" . $tender_id
+        );
+        if (!$full_path) {
+            show_404();
+        }
+
+        $name = str_replace(["\r", "\n", chr(34)], "", (string) ($session->manual_form_original_name ?: basename($full_path)));
+        return $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store");
     }
 
     public function start_technical_review()
@@ -632,6 +842,7 @@ class Tender_reports extends Security_Controller
         $this->access_only_tender("procurement", "update");
 
         $tender_id = (int) $this->request->getPost("tender_id");
+        $this->require_tender_scope($tender_id, "reports");
         $tender = $this->_get_tender_report($tender_id);
         if (!$tender) {
             return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
@@ -699,6 +910,7 @@ class Tender_reports extends Security_Controller
         if (!$tender_id) {
             show_404();
         }
+        $this->require_tender_scope($tender_id, "reports");
 
         $tender = $this->_get_tender_report($tender_id);
         if (!$tender) {
@@ -713,7 +925,36 @@ class Tender_reports extends Security_Controller
             "opening_audit" => $this->_get_opening_audit($tender_id),
             "opening_session" => $this->Tender_bid_openings_model->get_active_session($tender_id, "technical"),
             "signature_rows" => $this->_get_opening_signatures($tender_id),
+            "signature_image_route" => "tender_reports/signature_image",
+            "manual_form_download_url" => get_uri("tender_reports/download_manual_bid_opening_form/" . $tender_id),
         ]);
+    }
+
+    public function signature_image($id = 0)
+    {
+        $this->_access_reports();
+        $context = $this->_get_opening_signature_context((int) $id);
+        if (!$context || !$this->_get_tender_report((int) $context->tender_id)) {
+            show_404();
+        }
+        $this->require_tender_scope((int) $context->tender_id, "reports");
+
+        $full_path = (new Upload_security())->resolveStoredFile(
+            (string) $context->signature_image_path,
+            "tender_opening_signatures/opening_" . (int) $context->opening_id
+        );
+        $info = $full_path ? @getimagesize($full_path) : false;
+        if (!$full_path || !is_array($info) || (int) ($info[2] ?? 0) !== IMAGETYPE_PNG) {
+            show_404();
+        }
+
+        return $this->response
+            ->download($full_path, null)
+            ->setFileName("signature.png")
+            ->setContentType("image/png")
+            ->setHeader("X-Content-Type-Options", "nosniff")
+            ->setHeader("Cache-Control", "private, no-store")
+            ->inline();
     }
 
     public function download_bid_document($id = 0)
@@ -728,6 +969,7 @@ class Tender_reports extends Security_Controller
         if (!$doc) {
             show_404();
         }
+        $this->require_tender_scope((int) $doc->tender_id, "reports");
 
         $access = $this->_get_document_access_map($doc);
         $section = (string) ($doc->section ?? "");
@@ -735,8 +977,10 @@ class Tender_reports extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $doc->path, "/");
-        if (!is_file($full_path)) {
+        $expected_path = "tender_bids/tender_" . (int) $doc->tender_id
+            . "/vendor_" . (int) $doc->vendor_id;
+        $full_path = (new Upload_security())->resolveStoredFile((string) $doc->path, $expected_path);
+        if (!$full_path) {
             show_404();
         }
 
@@ -755,13 +999,105 @@ class Tender_reports extends Security_Controller
         if (!$attachment) {
             show_404();
         }
+        $evaluation = $this->Tender_evaluations_model->get_one((int) ($attachment->tender_evaluation_id ?? 0));
+        if (
+            !$evaluation
+            || (int) ($evaluation->deleted ?? 0) === 1
+            || !in_array(strtolower((string) ($evaluation->type ?? "")), ["technical", "commercial"], true)
+            || (int) ($evaluation->tender_id ?? 0) !== (int) ($attachment->tender_id ?? 0)
+            || (int) ($evaluation->tender_bid_id ?? 0) !== (int) ($attachment->tender_bid_id ?? 0)
+            || !$this->_evaluation_bid_matches_tender(
+                (int) ($evaluation->tender_bid_id ?? 0),
+                (int) ($evaluation->tender_id ?? 0)
+            )
+        ) {
+            show_404();
+        }
+        $this->require_tender_scope((int) $attachment->tender_id, "reports");
 
-        $full_path = WRITEPATH . "uploads/" . ltrim((string) $attachment->path, "/");
-        if (!is_file($full_path)) {
+        $expected_path = "tender_evaluation_findings/tender_" . (int) $attachment->tender_id
+            . "/evaluation_" . (int) $attachment->tender_evaluation_id;
+        $full_path = (new Upload_security())->resolveStoredFile((string) $attachment->path, $expected_path);
+        if (!$full_path) {
             show_404();
         }
 
         return $this->response->download($full_path, null)->setFileName($attachment->original_name ?: basename($full_path));
+    }
+
+    private function _get_accessible_tender_document_context(int $id): array
+    {
+        $this->_access_reports();
+        if (!$id) {
+            show_404();
+        }
+
+        $doc = $this->Tender_documents_model->get_one($id);
+        if (!$doc || (int) ($doc->deleted ?? 0) === 1 || !$this->_get_tender_report((int) ($doc->tender_id ?? 0))) {
+            show_404();
+        }
+        $this->require_tender_scope((int) $doc->tender_id, "reports");
+
+        $full_path = (new Upload_security())->resolveStoredFile(
+            (string) ($doc->path ?? ""),
+            "tender_documents"
+        );
+        if (!$full_path) {
+            show_404();
+        }
+
+        return ["doc" => $doc, "full_path" => $full_path];
+    }
+
+    private function _evaluation_bid_matches_tender(int $bid_id, int $tender_id): bool
+    {
+        if (!$bid_id || !$tender_id) {
+            return false;
+        }
+
+        $tb = $this->db->prefixTable("tender_bids");
+        return (bool) $this->db->query(
+            "SELECT id
+             FROM $tb
+             WHERE id=?
+               AND tender_id=?
+               AND deleted=0
+             LIMIT 1",
+            [$bid_id, $tender_id]
+        )->getRow();
+    }
+
+    private function _make_tender_document_preview_data($doc, string $full_path, string $file_url): array
+    {
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = strtolower((string) ($mime ?: "application/octet-stream"));
+        $image_mimes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+
+        return [
+            "file_url" => $file_url,
+            "is_image_file" => in_array($mime, $image_mimes, true),
+            "is_iframe_preview_available" => $mime === "application/pdf",
+            "is_google_preview_available" => false,
+            "is_viewable_video_file" => false,
+            "is_google_drive_file" => false,
+        ];
+    }
+
+    private function _serve_tender_document_file($doc, string $full_path, bool $download)
+    {
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = $mime ?: "application/octet-stream";
+        $name = str_replace(["\r", "\n", chr(34)], "", (string) ($doc->original_name ?: basename($full_path)));
+        $inline_mimes = ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"];
+        $inline = !$download && in_array(strtolower($mime), $inline_mimes, true);
+
+        $response = $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setContentType($mime, "")
+            ->setHeader("X-Content-Type-Options", "nosniff");
+
+        return $inline ? $response->inline() : $response;
     }
 
     private function _access_reports(): void
@@ -777,28 +1113,12 @@ class Tender_reports extends Security_Controller
 
     private function _ensure_workflow_history_table(): void
     {
-        $table = $this->db->prefixTable("tender_workflow_history");
-
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS `$table` (
-                `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                `tender_id` bigint(20) UNSIGNED NOT NULL,
-                `action_type` varchar(50) NOT NULL DEFAULT 'stage_override',
-                `from_status` varchar(50) DEFAULT NULL,
-                `to_status` varchar(50) DEFAULT NULL,
-                `from_stage` varchar(50) DEFAULT NULL,
-                `to_stage` varchar(50) DEFAULT NULL,
-                `open_until` datetime DEFAULT NULL,
-                `reason` text DEFAULT NULL,
-                `details` text DEFAULT NULL,
-                `created_by` bigint(20) UNSIGNED DEFAULT NULL,
-                `created_at` datetime DEFAULT NULL,
-                `deleted` tinyint(1) NOT NULL DEFAULT 0,
-                PRIMARY KEY (`id`),
-                KEY `idx_tender_workflow_history_tender` (`tender_id`),
-                KEY `idx_tender_workflow_history_action` (`action_type`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_workflow_history" => [
+                "id", "tender_id", "action_type", "from_status", "to_status", "from_stage",
+                "to_stage", "open_until", "reason", "details", "created_by", "created_at", "deleted",
+            ],
+        ], "tender reports workflow history");
     }
 
     private function _workflow_stage_options(): array
@@ -1185,6 +1505,12 @@ class Tender_reports extends Security_Controller
         $departments = $this->db->prefixTable("departments");
         $vendors = $this->db->prefixTable("vendors");
         $users = $this->db->prefixTable("users");
+        $scope_params = [];
+        $company_scope = $this->tender_company_scope_sql(
+            "COALESCE(t.company_id, req.company_id)",
+            "reports",
+            $scope_params
+        );
 
         return $this->db->query(
             "SELECT
@@ -1220,8 +1546,9 @@ class Tender_reports extends Security_Controller
                 ON creator.id = t.created_by
              WHERE t.deleted = 0
                AND t.id = ?
+               AND $company_scope
              LIMIT 1",
-            [$tender_id]
+            array_merge([$tender_id], $scope_params)
         )->getRow();
     }
 
@@ -1555,6 +1882,7 @@ class Tender_reports extends Security_Controller
              INNER JOIN $tb
                 ON $tb.id = $te.tender_bid_id
                AND $tb.deleted = 0
+               AND $tb.tender_id = $te.tender_id
              INNER JOIN $vendors
                 ON $vendors.id = $tb.vendor_id
                AND $vendors.deleted = 0
@@ -1616,6 +1944,7 @@ class Tender_reports extends Security_Controller
              INNER JOIN $tb
                 ON $tb.id = $te.tender_bid_id
                AND $tb.deleted = 0
+               AND $tb.tender_id = $te.tender_id
              INNER JOIN $t
                 ON $t.id = $te.tender_id
                AND $t.deleted = 0
@@ -1797,6 +2126,34 @@ class Tender_reports extends Security_Controller
         }
 
         return $this->Tender_bid_openings_model->get_signature_rows((int) $session->id);
+    }
+
+    private function _get_opening_signature_context(int $entry_id)
+    {
+        if (!$entry_id) {
+            return null;
+        }
+
+        $entries = $this->db->prefixTable("tender_bid_opening_entries");
+        $openings = $this->db->prefixTable("tender_bid_openings");
+        return $this->db->query(
+            "SELECT
+                $entries.id,
+                $entries.signature_image_path,
+                $openings.id AS opening_id,
+                $openings.tender_id
+             FROM $entries
+             INNER JOIN $openings
+                ON $openings.id = $entries.tender_bid_opening_id
+               AND $openings.deleted = 0
+             WHERE $entries.id = ?
+               AND $entries.deleted = 0
+               AND $entries.is_valid = 1
+               AND $entries.signed_at IS NOT NULL
+               AND $entries.signature_image_path IS NOT NULL
+             LIMIT 1",
+            [$entry_id]
+        )->getRow();
     }
 
     private function _get_bid_document_with_tender(int $document_id)

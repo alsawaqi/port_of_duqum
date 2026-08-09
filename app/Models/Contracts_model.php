@@ -246,11 +246,10 @@ class Contracts_model extends Crud_model {
 
     //save initial number of contract
     function save_initial_number_of_contract($value) {
-        $contracts_table = $this->db->prefixTable('contracts');
         $value = $this->_get_clean_value($value);
-        $sql = "ALTER TABLE $contracts_table AUTO_INCREMENT=$value;";
 
-        return $this->db->query($sql);
+        // Settings are application data; primary-key allocation remains database-managed.
+        return is_numeric($value) && (int) $value > 0;
     }
 
     function get_contract_basic_info($contract_id) {

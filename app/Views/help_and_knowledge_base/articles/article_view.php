@@ -28,7 +28,7 @@ $category_class = str_replace(' ', '-', strtolower($article_info->category_title
     <div class="mt20 mb20">
         <?php
         if ($article_info->files) {
-            $files = unserialize($article_info->files);
+            $files = safe_unserialize($article_info->files);
             $total_files = count($files);
             echo view("includes/timeline_preview", array("files" => $files));
 

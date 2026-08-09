@@ -61,6 +61,18 @@ class Gate_pass_visitors extends Security_Controller
             ]);
         }
 
+        $password = (string) $this->request->getPost("password");
+        if ($is_create || $password !== "") {
+            $policyErrors = $this->Users_model->password_policy_errors($password);
+            if ($policyErrors) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => esc(implode(" ", $policyErrors)),
+                ]);
+                return;
+            }
+        }
+
         $email = strtolower(trim($this->request->getPost("email")));
         $username = trim((string)$this->request->getPost("username"));
         $portal_status = $this->request->getPost("portal_status");
@@ -114,8 +126,6 @@ class Gate_pass_visitors extends Security_Controller
                 if ($exists) {
                     throw new \RuntimeException(app_lang("email_already_exists"));
                 }
-
-                $password = $this->request->getPost("password");
 
                 $user_data = [
                     "first_name" => $this->request->getPost("first_name"),
@@ -188,14 +198,16 @@ class Gate_pass_visitors extends Security_Controller
                     "disable_login" => ($portal_status === "suspended") ? 1 : 0,
                 ];
 
-                $password = $this->request->getPost("password");
                 if ($password) {
                     $user_update["password"] = password_hash($password, PASSWORD_DEFAULT);
                 }
 
-                $this->db->table("users")
-                    ->where("id", (int)$row->user_id)
-                    ->update(clean_data($user_update));
+                if (!$this->Users_model->ci_save(
+                    clean_data($user_update),
+                    (int) $row->user_id
+                )) {
+                    throw new \RuntimeException(app_lang("error_occurred"));
+                }
 
                 $pivot_update = [
                     "username" => $username,

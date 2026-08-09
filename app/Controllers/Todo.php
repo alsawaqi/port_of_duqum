@@ -46,7 +46,7 @@ class Todo extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "todo");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $view_type = $this->request->getPost('view_type');
         if ($view_type === "responsive") {
@@ -188,7 +188,7 @@ class Todo extends Security_Controller {
 
         $files_label = "";
         if ($data->files) {
-            $files = unserialize($data->files);
+            $files = safe_unserialize($data->files);
             if (count($files)) {
                 $files_label = "<span class='ml10'><i data-feather='paperclip' class='icon-14 mt-1'></i></span>";
                 $title .= $files_label;

@@ -49,7 +49,7 @@ if (count($notifications)) {
                     $signer_info = $notification->proposal_meta_data;
                 }
 
-                $signer_info = @unserialize($signer_info);
+                $signer_info = @safe_unserialize($signer_info);
                 if (!($signer_info && is_array($signer_info))) {
                     $signer_info = array();
                 }

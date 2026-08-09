@@ -334,7 +334,7 @@ if (!function_exists('get_change_logs_array')) {
         $changes_array = array();
 
         if ($changes) {
-            $changes = unserialize($changes);
+            $changes = safe_unserialize($changes);
 
             if (is_array($changes)) {
                 if ($action === "bitbucket_notification_received" || $action === "bitbucket_push_received") {

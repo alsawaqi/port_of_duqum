@@ -27,7 +27,7 @@
 
                     <div class="comment-image-box clearfix">
                         <?php
-                        $files = unserialize($reply_info->files);
+                        $files = safe_unserialize($reply_info->files);
                         $total_files = count($files);
 
                         if ($total_files) {

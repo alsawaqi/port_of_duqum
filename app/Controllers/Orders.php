@@ -176,7 +176,7 @@ class Orders extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "order");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $order_data = array(
             "client_id" => $client_id,
@@ -447,7 +447,7 @@ class Orders extends Security_Controller {
         if ($id) {
             validate_numeric_value($id);
             $order_info = $this->Orders_model->get_one($id);
-            $files = unserialize($order_info->files);
+            $files = safe_unserialize($order_info->files);
             $file = get_array_value($files, $key);
 
             $file_name = get_array_value($file, "file_name");

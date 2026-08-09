@@ -410,7 +410,7 @@ foreach ($opening_signatures as $signature) {
         <div class="card-body p0">
             <ul class="nav nav-tabs tender-report-tabs" role="tablist">
                 <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tender-report-overview" type="button" role="tab">Overview</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tender-report-rfq" type="button" role="tab">RFQ/RFP</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tender-report-rfq" type="button" role="tab">Tender Details</button></li>
                 <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tender-report-timeline" type="button" role="tab">Timeline</button></li>
                 <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tender-report-vendors" type="button" role="tab">Vendors</button></li>
                 <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tender-report-evaluations" type="button" role="tab">Evaluations</button></li>
@@ -490,16 +490,14 @@ foreach ($opening_signatures as $signature) {
                 <div class="tab-pane fade tender-report-section" id="tender-report-rfq" role="tabpanel">
                     <div class="row">
                         <div class="col-md-6">
-                            <h4 class="mb15">RFQ / RFP Header</h4>
+                            <h4 class="mb15">Tender Details</h4>
                             <div class="table-responsive">
                                 <table class="table table-bordered table-striped">
                                     <tbody>
-                                        <tr><th>Reference Number</th><td><?php echo esc($rfq_detail->rfq_no ?? "-"); ?></td></tr>
-                                        <tr><th>Request Date</th><td><?php echo !empty($rfq_detail->rfq_date) ? format_to_date($rfq_detail->rfq_date, false) : "-"; ?></td></tr>
-                                        <tr><th>PR No</th><td><?php echo esc($rfq_detail->pr_no ?? "-"); ?></td></tr>
+                                        <tr><th>PR No (Optional)</th><td><?php echo esc($rfq_detail->pr_no ?? "-"); ?></td></tr>
                                         <tr><th>Delivery Location</th><td><?php echo esc($rfq_detail->delivery_location ?? "-"); ?></td></tr>
                                         <tr><th>INCOTERM</th><td><?php echo esc($rfq_detail->incoterm ?? "-"); ?></td></tr>
-                                        <tr><th>Material Required On</th><td><?php echo !empty($rfq_detail->material_required_on) ? format_to_date($rfq_detail->material_required_on, false) : "-"; ?></td></tr>
+                                        <tr><th>Estimated Material/Service Required On</th><td><?php echo !empty($rfq_detail->material_required_on) ? format_to_date($rfq_detail->material_required_on, false) : "-"; ?></td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -518,7 +516,7 @@ foreach ($opening_signatures as $signature) {
                         </div>
                     </div>
 
-                    <h4 class="mb15 mt15">Item Lines</h4>
+                    <h4 class="mb15 mt15">Schedule Rate</h4>
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped">
                             <thead>
@@ -528,24 +526,43 @@ foreach ($opening_signatures as $signature) {
                                     <th>UOM</th>
                                     <th>Qty</th>
                                     <th>Unit Price</th>
-                                    <th>Brand</th>
+                                    <th>Part No (Optional)</th>
+                                    <th>Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (!$rfq_items) { ?>
-                                    <tr><td colspan="6" class="text-center text-off p20">No RFQ item lines recorded.</td></tr>
+                                    <tr><td colspan="7" class="text-center text-off p20">No tender item lines recorded.</td></tr>
                                 <?php } ?>
+                                <?php $schedule_rate_total = 0.0; $has_schedule_rate_total = false; ?>
                                 <?php foreach ($rfq_items as $item) { ?>
+                                    <?php
+                                    $line_total = null;
+                                    if (is_numeric($item->qty ?? null) && is_numeric($item->unit_price ?? null)) {
+                                        $line_total = round((float) $item->qty * (float) $item->unit_price, 3);
+                                        $schedule_rate_total += $line_total;
+                                        $has_schedule_rate_total = true;
+                                    }
+                                    ?>
                                     <tr>
                                         <td><?php echo esc($item->sr_no ?? "-"); ?></td>
                                         <td><?php echo esc($item->description ?? "-"); ?></td>
                                         <td><?php echo esc($item->uom ?? "-"); ?></td>
                                         <td><?php echo $item->qty !== null ? number_format((float) $item->qty, 3) : "-"; ?></td>
                                         <td><?php echo $item->unit_price !== null ? number_format((float) $item->unit_price, 3) : "-"; ?></td>
-                                        <td><?php echo esc($item->brand ?? "-"); ?></td>
+                                        <td><?php echo esc($item->part_no ?? ($item->brand ?? "-")); ?></td>
+                                        <td><?php echo $line_total !== null ? number_format($line_total, 3) : "-"; ?></td>
                                     </tr>
                                 <?php } ?>
                             </tbody>
+                            <?php if ($rfq_items) { ?>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="6" class="text-end">Schedule Rate Total</th>
+                                        <th><?php echo $has_schedule_rate_total ? number_format($schedule_rate_total, 3) : "-"; ?></th>
+                                    </tr>
+                                </tfoot>
+                            <?php } ?>
                         </table>
                     </div>
                 </div>
@@ -923,10 +940,10 @@ foreach ($opening_signatures as $signature) {
                     <h4 class="mb15">Tender Documents</h4>
                     <div class="table-responsive mb20">
                         <table class="table table-bordered table-striped">
-                            <thead><tr><th>Type</th><th>Title</th><th>File</th><th>Time Limited</th><th>Uploaded By</th><th>Uploaded At</th></tr></thead>
+                            <thead><tr><th>Type</th><th>Title</th><th>File</th><th>Time Limited</th><th>Uploaded By</th><th>Uploaded At</th><th>Actions</th></tr></thead>
                             <tbody>
                                 <?php if (!$tender_documents) { ?>
-                                    <tr><td colspan="6" class="text-center text-off p20">No tender documents uploaded.</td></tr>
+                                    <tr><td colspan="7" class="text-center text-off p20">No tender documents uploaded.</td></tr>
                                 <?php } ?>
                                 <?php foreach ($tender_documents as $doc) { ?>
                                     <tr>
@@ -936,6 +953,23 @@ foreach ($opening_signatures as $signature) {
                                         <td><?php echo (int) ($doc->time_limited ?? 0) ? "Yes (" . (int) ($doc->expires_in_hours ?? 0) . "h)" : "No"; ?></td>
                                         <td><?php echo esc($doc->uploaded_by_name ?: "-"); ?></td>
                                         <td><?php echo $date_value($doc->created_at ?? null); ?></td>
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <?php echo js_anchor(
+                                                    "<i data-feather='eye' class='icon-14'></i> Preview",
+                                                    [
+                                                        "title" => "Preview Document",
+                                                        "class" => "btn btn-primary btn-sm",
+                                                        "data-toggle" => "app-modal",
+                                                        "data-sidebar" => "0",
+                                                        "data-url" => get_uri("tender_reports/preview_tender_document/" . (int) $doc->id),
+                                                    ]
+                                                ); ?>
+                                                <a href="<?php echo get_uri("tender_reports/download_tender_document/" . (int) $doc->id); ?>" class="btn btn-default btn-sm">
+                                                    <i data-feather="download" class="icon-14"></i> Download
+                                                </a>
+                                            </div>
+                                        </td>
                                     </tr>
                                 <?php } ?>
                             </tbody>

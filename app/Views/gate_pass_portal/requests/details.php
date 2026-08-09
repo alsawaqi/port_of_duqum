@@ -959,16 +959,18 @@ $(document).ready(function () {
             data: { gate_pass_request_id: "<?php echo (int)$request->id; ?>", "<?php echo csrf_token(); ?>": "<?php echo csrf_hash(); ?>" },
             dataType: "json",
             success: function (res) {
-                if (res.success) {
-                    appAlert.success(res.message);
-                    window.location.reload();
+                if (res.success && res.checkout_url) {
+                    window.location.assign(res.checkout_url);
                 } else {
                     appAlert.error(res.message || "<?php echo app_lang('error_occurred'); ?>");
                     $btn.prop("disabled", false);
                 }
             },
-            error: function () {
-                appAlert.error("<?php echo app_lang('error_occurred'); ?>");
+            error: function (xhr) {
+                var message = xhr && xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : "<?php echo app_lang('error_occurred'); ?>";
+                appAlert.error(message);
                 $btn.prop("disabled", false);
             }
         });

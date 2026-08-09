@@ -49,7 +49,7 @@
                 </div>
 
                 <?php
-                $files = @unserialize($invoice_info->files);
+                $files = @safe_unserialize($invoice_info->files);
                 if ($files && is_array($files) && count($files)) {
                 ?>
                     <div class="clearfix">

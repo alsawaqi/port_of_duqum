@@ -35,7 +35,7 @@ class Event_tracker extends App_Controller {
                 $now = get_current_utc_time();
                 $logs = array();
                 if ($event_tracker_info->logs) {
-                    $logs = unserialize($event_tracker_info->logs);
+                    $logs = safe_unserialize($event_tracker_info->logs);
                 }
                 $logs[] = ["read_at" => $now];
                 $event_tracker_data = array(

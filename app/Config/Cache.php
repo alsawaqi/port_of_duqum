@@ -158,4 +158,7 @@ class Cache extends BaseConfig
      * @var bool|list<string>
      */
     public $cacheQueryString = false;
+
+    /** Cache successful pages only; never persist transient error responses. */
+    public array $cacheStatusCodes = [200];
 }

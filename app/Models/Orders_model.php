@@ -225,13 +225,10 @@ class Orders_model extends Crud_model {
 
     //save initial number of order
     function save_initial_number_of_order($value) {
-        $orders_table = $this->db->prefixTable('orders');
-
         $value = $this->_get_clean_value($value);
 
-        $sql = "ALTER TABLE $orders_table AUTO_INCREMENT=$value;";
-
-        return $this->db->query($sql);
+        // Settings are application data; primary-key allocation remains database-managed.
+        return is_numeric($value) && (int) $value > 0;
     }
 
 }

@@ -301,17 +301,20 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                 </div>
 
                 <div class="tender-milestone-grid">
+                    <div class="alert alert-light span-all mb0">
+                        Friday and Saturday are non-working days and cannot be selected for tender milestones.
+                    </div>
                     <div class="form-group">
                         <label>Tender Release Date</label>
-                        <input type="datetime-local" name="release_at" class="form-control" value="<?php echo esc($dtValue($tender->release_at ?? "")); ?>">
+                        <input type="datetime-local" name="release_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->release_at ?? "")); ?>">
                     </div>
                     <div class="form-group">
                         <label>Last Date of Document Purchase</label>
-                        <input type="datetime-local" name="document_purchase_deadline" class="form-control" value="<?php echo esc($dtValue($tender->document_purchase_deadline ?? "")); ?>">
+                        <input type="datetime-local" name="document_purchase_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->document_purchase_deadline ?? "")); ?>">
                     </div>
                     <div class="form-group">
                         <label>Site Visit Date / Deadline</label>
-                        <input type="datetime-local" name="site_visit_at" class="form-control" value="<?php echo esc($dtValue($tender->site_visit_at ?? "")); ?>">
+                        <input type="datetime-local" name="site_visit_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->site_visit_at ?? "")); ?>">
                     </div>
                     <div class="form-group">
                         <label>Site Visit Location</label>
@@ -326,23 +329,23 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                     </div>
                     <div class="form-group">
                         <label>Clarification Submission Deadline</label>
-                        <input type="datetime-local" name="clarification_deadline" class="form-control" value="<?php echo esc($dtValue($tender->clarification_deadline ?? "")); ?>">
+                        <input type="datetime-local" name="clarification_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->clarification_deadline ?? "")); ?>">
                     </div>
                     <div class="form-group">
                         <label>Tender Submission Deadline</label>
-                        <input type="datetime-local" name="closing_at" class="form-control" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>" data-wizard-required="1">
+                        <input type="datetime-local" name="closing_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->closing_at ?? "")); ?>" data-wizard-required="1">
                     </div>
                     <div class="form-group">
                         <label>Bid Opening Date</label>
-                        <input type="datetime-local" name="bid_opening_at" class="form-control" value="<?php echo esc($dtValue($tender->bid_opening_at ?? "")); ?>">
+                        <input type="datetime-local" name="bid_opening_at" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->bid_opening_at ?? "")); ?>">
                     </div>
                     <div class="form-group">
                         <label>Technical Evaluation Deadline</label>
-                        <input type="datetime-local" name="technical_eval_deadline" class="form-control" value="<?php echo esc($dtValue($tender->technical_eval_deadline ?? "")); ?>">
+                        <input type="datetime-local" name="technical_eval_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->technical_eval_deadline ?? "")); ?>">
                     </div>
                     <div class="form-group">
                         <label>Commercial Evaluation Deadline</label>
-                        <input type="datetime-local" name="commercial_eval_deadline" class="form-control" value="<?php echo esc($dtValue($tender->commercial_eval_deadline ?? "")); ?>">
+                        <input type="datetime-local" name="commercial_eval_deadline" class="form-control tender-workday-datetime" value="<?php echo esc($dtValue($tender->commercial_eval_deadline ?? "")); ?>">
                     </div>
                     <div class="form-group span-all">
                         <label>Site Visit Instructions</label>
@@ -449,6 +452,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                                     "specialty" => "Vendor Specialty",
                                     "group" => "Vendor Group",
                                     "specific_vendors" => "Specific Vendors",
+                                    "group_and_specific_vendors" => "Vendor Group + Specific Vendors",
                                     "grade" => "Vendor Grade",
                                 ],
                                 $selected_target_mode ?? "specialty",
@@ -538,7 +542,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                             <button type="button" class="btn btn-default tender-open-vendor-picker">
                                 <i data-feather="search" class="icon-16"></i> Search and Add Vendors
                             </button>
-                            <div class="text-off mt5">Add as many approved vendors as needed. Only selected vendors will be invited when this target mode is used.</div>
+                            <div class="text-off mt5">Add approved vendors individually. In the combined mode, these vendors are added to everyone in the selected group.</div>
                         </div>
                     </div>
                 </div>
@@ -593,8 +597,8 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                 <div class="tender-rfq-panel mb20">
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb15">
                         <div>
-                            <h4 class="mb5">RFQ / RFP Details</h4>
-                            <div class="text-off">External-facing RFQ header and item lines for vendor download/reference.</div>
+                            <h4 class="mb5">Tender Details</h4>
+                            <div class="text-off">External-facing tender information and schedule-rate item lines.</div>
                         </div>
                         <button type="button" class="btn btn-default btn-sm tender-add-rfq-row">
                             <i data-feather="plus-circle" class="icon-14"></i> Add Item Line
@@ -604,19 +608,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                     <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Reference Number</label>
-                                <input type="text" name="rfq_no" class="form-control" value="<?php echo esc($rfq_detail->rfq_no ?? ""); ?>">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Request Date</label>
-                                <input type="date" name="rfq_date" class="form-control" value="<?php echo esc($dateOnlyValue($rfq_detail->rfq_date ?? "")); ?>">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>PR No</label>
+                                <label>PR No (Optional)</label>
                                 <input type="text" name="pr_no" class="form-control" value="<?php echo esc($rfq_detail->pr_no ?? ""); ?>">
                             </div>
                         </div>
@@ -637,7 +629,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Material Required On</label>
+                                <label>Estimated Material/Service Required On</label>
                                 <input type="date" name="material_required_on" class="form-control" value="<?php echo esc($dateOnlyValue($rfq_detail->material_required_on ?? "")); ?>">
                             </div>
                         </div>
@@ -664,6 +656,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                         </div>
                     </div>
 
+                    <h5 class="mb10">Schedule Rate</h5>
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped mb0" id="rfq-items-table">
                             <thead>
@@ -673,26 +666,32 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                                     <th style="width:110px;">UOM</th>
                                     <th style="width:120px;">Qty</th>
                                     <th style="width:140px;">Unit Price</th>
-                                    <th style="width:160px;">Brand</th>
+                                    <th style="width:160px;">Part No (Optional)</th>
+                                    <th style="width:140px;">Total</th>
                                     <th class="text-center" style="width:60px;"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php
-                                $rfq_rows = $rfq_items ?: [(object) ["sr_no" => "1", "description" => "", "uom" => "", "qty" => "", "unit_price" => "", "brand" => ""]];
+                                $rfq_rows = $rfq_items ?: [(object) ["sr_no" => "1", "description" => "", "uom" => "", "qty" => "", "unit_price" => "", "part_no" => ""]];
                                 foreach ($rfq_rows as $index => $item) { ?>
                                     <tr>
                                         <td><input type="text" name="rfq_item_sr_no[]" class="form-control" value="<?php echo esc($item->sr_no ?? ($index + 1)); ?>"></td>
                                         <td><input type="text" name="rfq_item_description[]" class="form-control" value="<?php echo esc($item->description ?? ""); ?>"></td>
                                         <td><input type="text" name="rfq_item_uom[]" class="form-control" value="<?php echo esc($item->uom ?? ""); ?>"></td>
-                                        <td><input type="number" step="0.001" min="0" name="rfq_item_qty[]" class="form-control" value="<?php echo esc($item->qty ?? ""); ?>"></td>
-                                        <td><input type="number" step="0.001" min="0" name="rfq_item_unit_price[]" class="form-control" value="<?php echo esc($item->unit_price ?? ""); ?>"></td>
-                                        <td><input type="text" name="rfq_item_brand[]" class="form-control" value="<?php echo esc($item->brand ?? ""); ?>"></td>
+                                        <td><input type="number" step="0.001" min="0" name="rfq_item_qty[]" class="form-control tender-rfq-qty" value="<?php echo esc($item->qty ?? ""); ?>"></td>
+                                        <td><input type="number" step="0.001" min="0" name="rfq_item_unit_price[]" class="form-control tender-rfq-unit-price" value="<?php echo esc($item->unit_price ?? ""); ?>"></td>
+                                        <td><input type="text" name="rfq_item_part_no[]" class="form-control" value="<?php echo esc($item->part_no ?? ($item->brand ?? "")); ?>"></td>
+                                        <td class="text-end align-middle"><span class="tender-rfq-line-total">-</span></td>
                                         <td class="text-center"><button type="button" class="btn btn-default btn-sm tender-remove-rfq-row"><i data-feather="trash-2" class="icon-14"></i></button></td>
                                     </tr>
                                 <?php } ?>
                             </tbody>
                         </table>
+                    </div>
+                    <div class="d-flex justify-content-end align-items-center gap-2 mt10">
+                        <strong>Schedule Rate Total:</strong>
+                        <strong id="tender-rfq-grand-total">-</strong>
                     </div>
                 </div>
 
@@ -745,7 +744,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                                     <th>File</th>
                                     <th>Size</th>
                                     <th>Limited</th>
-                                    <th class="text-center" style="width:70px;"></th>
+                                    <th class="text-center" style="width:260px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -757,15 +756,30 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                                         <td><?php echo esc($doc->size_bytes ? convert_file_size($doc->size_bytes) : "-"); ?></td>
                                         <td><?php echo ((int) $doc->time_limited) ? ("Yes (" . (int) $doc->expires_in_hours . "h)") : "No"; ?></td>
                                         <td class="text-center">
-                                            <?php echo js_anchor(
-                                                "<i data-feather='x' class='icon-16'></i>",
-                                                [
-                                                    "title" => app_lang("delete"),
-                                                    "class" => "delete-doc",
-                                                    "data-id" => $doc->id,
-                                                    "data-action-url" => get_uri("tender_procurement_inbox/delete_document"),
-                                                ]
-                                            ); ?>
+                                            <div class="d-flex justify-content-center flex-wrap gap-1">
+                                                <?php echo js_anchor(
+                                                    "<i data-feather='eye' class='icon-14'></i> Preview",
+                                                    [
+                                                        "title" => "Preview Document",
+                                                        "class" => "btn btn-primary btn-sm",
+                                                        "data-toggle" => "app-modal",
+                                                        "data-sidebar" => "0",
+                                                        "data-url" => get_uri("tender_procurement_inbox/preview_tender_document/" . (int) $doc->id),
+                                                    ]
+                                                ); ?>
+                                                <a class="btn btn-default btn-sm" href="<?php echo get_uri("tender_procurement_inbox/download_tender_document/" . (int) $doc->id); ?>">
+                                                    <i data-feather="download" class="icon-14"></i> Download
+                                                </a>
+                                                <?php echo js_anchor(
+                                                    "<i data-feather='x' class='icon-14'></i> Delete",
+                                                    [
+                                                        "title" => app_lang("delete"),
+                                                        "class" => "btn btn-default btn-sm delete-doc",
+                                                        "data-id" => $doc->id,
+                                                        "data-action-url" => get_uri("tender_procurement_inbox/delete_document"),
+                                                    ]
+                                                ); ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php } ?>
@@ -845,19 +859,17 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                     </section>
 
                     <section class="tender-preview-card span-all">
-                        <h3><i data-feather="list" class="icon-16"></i> RFQ / RFP</h3>
+                        <h3><i data-feather="list" class="icon-16"></i> Tender Details</h3>
                         <dl class="tender-preview-list mb15">
-                            <div><dt>Reference Number</dt><dd data-preview="rfq_no">-</dd></div>
-                            <div><dt>Request Date</dt><dd data-preview="rfq_date">-</dd></div>
-                            <div><dt>PR No</dt><dd data-preview="pr_no">-</dd></div>
+                            <div><dt>PR No (Optional)</dt><dd data-preview="pr_no">-</dd></div>
                             <div><dt>Delivery</dt><dd data-preview="delivery_location">-</dd></div>
                             <div><dt>INCOTERM</dt><dd data-preview="incoterm">-</dd></div>
-                            <div><dt>Material Required</dt><dd data-preview="material_required_on">-</dd></div>
+                            <div><dt>Estimated Material/Service Required On</dt><dd data-preview="material_required_on">-</dd></div>
                             <div class="span-all"><dt>Terms Reference</dt><dd data-preview="terms_reference">-</dd></div>
                         </dl>
-                        <div class="tender-preview-subtitle">Item Lines</div>
+                        <div class="tender-preview-subtitle">Schedule Rate</div>
                         <ul class="tender-preview-tags" data-preview-list="rfq_items">
-                            <li>No RFQ item lines</li>
+                            <li>No schedule-rate item lines</li>
                         </ul>
                     </section>
 
@@ -1120,6 +1132,42 @@ $(document).ready(function () {
         });
     }
 
+    function tenderWorkdayNumber(value) {
+        var datePart = String(value || "").split("T")[0];
+        var parts = datePart.split("-");
+        if (parts.length !== 3) {
+            return null;
+        }
+
+        return new Date(
+            parseInt(parts[0], 10),
+            parseInt(parts[1], 10) - 1,
+            parseInt(parts[2], 10),
+            12,
+            0,
+            0
+        ).getDay();
+    }
+
+    function validateTenderWorkdays(showMessage) {
+        var invalidField = null;
+        $(".tender-workday-datetime").each(function () {
+            var day = tenderWorkdayNumber($(this).val());
+            var isWeekend = day === 5 || day === 6;
+            markField($(this), isWeekend);
+            if (!invalidField && isWeekend) {
+                invalidField = this;
+            }
+        });
+
+        if (invalidField && showMessage !== false) {
+            appAlert.error("Tender milestones cannot be scheduled on Friday or Saturday.", {duration: 3500});
+            showStep(1);
+        }
+
+        return !invalidField;
+    }
+
     function scheduleRule(first, second, message, strictAfter) {
         var firstTime = fieldTime(first);
         var secondTime = fieldTime(second);
@@ -1134,6 +1182,9 @@ $(document).ready(function () {
 
     function validateSchedule() {
         clearScheduleMarkers();
+        if (!validateTenderWorkdays(true)) {
+            return false;
+        }
 
         var rules = [
             ["release_at", "document_purchase_deadline", "Tender release date must be on or before the document purchase deadline.", false],
@@ -1234,13 +1285,22 @@ $(document).ready(function () {
             var uom = $.trim($row.find('[name="rfq_item_uom[]"]').val() || "");
             var qty = $.trim($row.find('[name="rfq_item_qty[]"]').val() || "");
             var price = $.trim($row.find('[name="rfq_item_unit_price[]"]').val() || "");
-            var brand = $.trim($row.find('[name="rfq_item_brand[]"]').val() || "");
+            var partNo = $.trim($row.find('[name="rfq_item_part_no[]"]').val() || "");
+            var total = "";
+            if (qty !== "" && price !== "" && !isNaN(parseFloat(qty)) && !isNaN(parseFloat(price))) {
+                total = (parseFloat(qty) * parseFloat(price)).toFixed(3);
+            }
 
-            if (!sr && !description && !uom && !qty && !price && !brand) {
+            if (!sr && !description && !uom && !qty && !price && !partNo) {
                 return;
             }
 
-            rows.push((sr || "-") + " - " + (description || "Item") + (qty ? " | Qty " + qty : "") + (uom ? " " + uom : "") + (brand ? " | " + brand : ""));
+            rows.push((sr || "-") + " - " + (description || "Item")
+                + (qty ? " | Qty " + qty : "")
+                + (uom ? " " + uom : "")
+                + (price ? " | Unit Price " + price : "")
+                + (total ? " | Total " + total : "")
+                + (partNo ? " | Part No " + partNo : ""));
         });
         return rows;
     }
@@ -1286,14 +1346,12 @@ $(document).ready(function () {
         setPreview("vendor_grade", selectedText("#vendor_grade_id"));
         setPreview("specific_vendors", selectedVendorTexts().join(", ") || "-");
 
-        setPreview("rfq_no", fieldValue("rfq_no"));
-        setPreview("rfq_date", fieldValue("rfq_date"));
         setPreview("pr_no", fieldValue("pr_no"));
         setPreview("delivery_location", fieldValue("delivery_location"));
         setPreview("incoterm", fieldValue("incoterm"));
         setPreview("material_required_on", fieldValue("material_required_on"));
         setPreview("terms_reference", fieldValue("terms_reference"));
-        setPreviewList("rfq_items", rfqItemTexts(), "No RFQ item lines");
+        setPreviewList("rfq_items", rfqItemTexts(), "No schedule-rate item lines");
         setPreviewList("requirements", checkedRequirementTexts(), "None selected");
         setPreviewList("new_documents", newDocumentTexts(), "No new uploaded files");
         setPreviewList("existing_documents", existingDocumentTexts(), "No existing documents");
@@ -1345,15 +1403,20 @@ $(document).ready(function () {
 
         if (step === 3) {
             var targetMode = $("#target_mode").val();
-            var $targetField = targetMode === "group" ? $("#vendor_group_id") : (targetMode === "grade" ? $("#vendor_grade_id") : $("#vendor_category_id"));
-            var mustHaveTarget = targetMode === "group" || targetMode === "grade" || targetMode === "specific_vendors" || ($("#tender_type").val() === "close" && !hasRequestSelectedVendors);
-            var hasTarget = !mustHaveTarget || fieldHasValue($targetField);
-            if (targetMode === "specific_vendors") {
-                hasTarget = selectedVendorTexts().length > 0;
-                $targetField = $("#selected-vendor-tags");
-            }
-            markField($targetField, !hasTarget);
-            if (!hasTarget) {
+            var requiresGroup = targetMode === "group" || targetMode === "group_and_specific_vendors";
+            var requiresSpecific = targetMode === "specific_vendors" || targetMode === "group_and_specific_vendors";
+            var requiresGrade = targetMode === "grade";
+            var requiresSpecialty = targetMode === "specialty" && $("#tender_type").val() === "close" && !hasRequestSelectedVendors;
+            var hasGroup = !requiresGroup || fieldHasValue($("#vendor_group_id"));
+            var hasSpecific = !requiresSpecific || selectedVendorTexts().length > 0;
+            var hasGrade = !requiresGrade || fieldHasValue($("#vendor_grade_id"));
+            var hasSpecialty = !requiresSpecialty || fieldHasValue($("#vendor_category_id"));
+
+            markField($("#vendor_group_id"), !hasGroup);
+            markField($("#selected-vendor-tags"), !hasSpecific);
+            markField($("#vendor_grade_id"), !hasGrade);
+            markField($("#vendor_category_id"), !hasSpecialty);
+            if (!hasGroup || !hasSpecific || !hasGrade || !hasSpecialty) {
                 isValid = false;
             }
         } else {
@@ -1388,8 +1451,8 @@ $(document).ready(function () {
     function toggleTargetMode() {
         var mode = $("#target_mode").val();
         $("#target-by-specialty-wrap").toggle(mode === "specialty");
-        $("#target-by-group-wrap").toggle(mode === "group");
-        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors");
+        $("#target-by-group-wrap").toggle(mode === "group" || mode === "group_and_specific_vendors");
+        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors" || mode === "group_and_specific_vendors");
         $("#target-by-grade-wrap").toggle(mode === "grade");
         renderPreview();
     }
@@ -1563,16 +1626,42 @@ $(document).ready(function () {
             '<td><input type="text" name="rfq_item_sr_no[]" class="form-control" value="' + nextNo + '"></td>' +
             '<td><input type="text" name="rfq_item_description[]" class="form-control"></td>' +
             '<td><input type="text" name="rfq_item_uom[]" class="form-control"></td>' +
-            '<td><input type="number" step="0.001" min="0" name="rfq_item_qty[]" class="form-control"></td>' +
-            '<td><input type="number" step="0.001" min="0" name="rfq_item_unit_price[]" class="form-control"></td>' +
-            '<td><input type="text" name="rfq_item_brand[]" class="form-control"></td>' +
+            '<td><input type="number" step="0.001" min="0" name="rfq_item_qty[]" class="form-control tender-rfq-qty"></td>' +
+            '<td><input type="number" step="0.001" min="0" name="rfq_item_unit_price[]" class="form-control tender-rfq-unit-price"></td>' +
+            '<td><input type="text" name="rfq_item_part_no[]" class="form-control"></td>' +
+            '<td class="text-end align-middle"><span class="tender-rfq-line-total">-</span></td>' +
             '<td class="text-center"><button type="button" class="btn btn-default btn-sm tender-remove-rfq-row"><i data-feather="trash-2" class="icon-14"></i></button></td>' +
             '</tr>';
+    }
+
+    function recalculateRfqTotals() {
+        var grandTotal = 0;
+        var hasCalculatedLine = false;
+
+        $("#rfq-items-table tbody tr").each(function () {
+            var $row = $(this);
+            var qtyText = $.trim($row.find(".tender-rfq-qty").val() || "");
+            var unitPriceText = $.trim($row.find(".tender-rfq-unit-price").val() || "");
+            var $lineTotal = $row.find(".tender-rfq-line-total");
+
+            if (qtyText === "" || unitPriceText === "" || isNaN(parseFloat(qtyText)) || isNaN(parseFloat(unitPriceText))) {
+                $lineTotal.text("-");
+                return;
+            }
+
+            var total = Math.round(parseFloat(qtyText) * parseFloat(unitPriceText) * 1000) / 1000;
+            $lineTotal.text(total.toFixed(3));
+            grandTotal += total;
+            hasCalculatedLine = true;
+        });
+
+        $("#tender-rfq-grand-total").text(hasCalculatedLine ? grandTotal.toFixed(3) : "-");
     }
 
     $(".tender-add-rfq-row").on("click", function () {
         var nextNo = $("#rfq-items-table tbody tr").length + 1;
         $("#rfq-items-table tbody").append(rfqRowTemplate(nextNo));
+        recalculateRfqTotals();
         if (typeof feather !== "undefined") {
             feather.replace();
         }
@@ -1582,9 +1671,28 @@ $(document).ready(function () {
         var $rows = $("#rfq-items-table tbody tr");
         if ($rows.length <= 1) {
             $(this).closest("tr").find("input").val("");
+            recalculateRfqTotals();
             return;
         }
         $(this).closest("tr").remove();
+        recalculateRfqTotals();
+    });
+
+    $(document).on("input", ".tender-rfq-qty, .tender-rfq-unit-price", function () {
+        recalculateRfqTotals();
+        renderPreview();
+    });
+
+    $(".tender-workday-datetime").on("change", function () {
+        var day = tenderWorkdayNumber($(this).val());
+        if (day === 5 || day === 6) {
+            $(this).val("");
+            markField($(this), true);
+            appAlert.error("Friday and Saturday cannot be selected for tender milestones.", {duration: 3500});
+        } else {
+            markField($(this), false);
+        }
+        renderPreview();
     });
 
     $("#target_mode").on("change", toggleTargetMode);
@@ -1594,6 +1702,7 @@ $(document).ready(function () {
     if ($("#vendor_category_id").val()) {
         loadSubcategories();
     }
+    recalculateRfqTotals();
 
     $("#tender-procurement-form").appForm({
         isModal: false,

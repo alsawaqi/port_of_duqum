@@ -55,6 +55,15 @@ class Request_estimate extends App_Controller {
 
     //save estimate request from client
     function save_estimate_request() {
+        $ip_hash = hash('sha256', (string) $this->request->getIPAddress());
+        $throttler = service('throttler');
+        if (!$throttler->check('public_estimate_' . $ip_hash, 5, 600)) {
+            return $this->response
+                ->setStatusCode(429)
+                ->setHeader('Retry-After', (string) max(1, $throttler->getTokenTime()))
+                ->setJSON(array('success' => false, 'message' => 'Too many requests. Please try again later.'));
+        }
+
         $form_id = $this->request->getPost('form_id');
         $assigned_to = $this->request->getPost('assigned_to');
 

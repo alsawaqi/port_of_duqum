@@ -80,6 +80,7 @@ use Config\Session as ConfigSession;
 use Config\Toolbar as ConfigToolbar;
 use Config\Validation as ConfigValidation;
 use Config\View as ConfigView;
+use Config\WorkerMode;
 
 /**
  * Services Configuration file.
@@ -203,6 +204,18 @@ class BaseService
     }
 
     /**
+     * Checks if a service instance has been created.
+     *
+     * @param string $key Identifier of the entry to check.
+     *
+     * @return bool True if the service instance exists, false otherwise.
+     */
+    public static function has(string $key): bool
+    {
+        return isset(static::$instances[$key]);
+    }
+
+    /**
      * Sets an entry.
      *
      * @param string $key Identifier of the entry.
@@ -231,7 +244,7 @@ class BaseService
      *
      * $key must be a name matching a service.
      *
-     * @param array|bool|float|int|object|string|null ...$params
+     * @param mixed ...$params
      *
      * @return object
      */
@@ -362,6 +375,53 @@ class BaseService
     }
 
     /**
+     * Reconnect cache connection for worker mode at the start of a request.
+     * Checks if cache connection is alive and reconnects if needed.
+     *
+     * This should be called at the beginning of each request in worker mode,
+     * before the application runs.
+     */
+    public static function reconnectCacheForWorkerMode(): void
+    {
+        if (! isset(static::$instances['cache'])) {
+            return;
+        }
+
+        $cache = static::$instances['cache'];
+
+        if (! $cache->ping()) {
+            $cache->reconnect();
+        }
+    }
+
+    /**
+     * Resets all services except those in the persistent list.
+     * Used for worker mode to preserve expensive-to-initialize services.
+     *
+     * Called at the END of each request to clean up state.
+     */
+    public static function resetForWorkerMode(WorkerMode $config): void
+    {
+        // Reset mocks (testing only, safe to clear)
+        static::$mocks = [];
+
+        // Reset factories
+        static::$factories = [];
+
+        // Process each service instance
+        $persistentInstances = [];
+
+        foreach (static::$instances as $serviceName => $service) {
+            // Persist services in the persistent list
+            if (in_array($serviceName, $config->persistentServices, true)) {
+                $persistentInstances[$serviceName] = $service;
+            }
+        }
+
+        static::$instances = $persistentInstances;
+    }
+
+    /**
      * Resets any mock and shared instances for a single service.
      *
      * @return void
@@ -385,8 +445,9 @@ class BaseService
      */
     public static function injectMock(string $name, $mock)
     {
-        static::$instances[$name]         = $mock;
-        static::$mocks[strtolower($name)] = $mock;
+        $name                     = strtolower($name);
+        static::$instances[$name] = $mock;
+        static::$mocks[$name]     = $mock;
     }
 
     /**

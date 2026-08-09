@@ -155,7 +155,7 @@ class Contract extends Security_Controller {
         $email = $this->request->getPost("email");
         $signature = $this->request->getPost("signature");
 
-        $meta_data = $contract_info->meta_data ? unserialize($contract_info->meta_data) : array(); //check if ther has already some meta data
+        $meta_data = $contract_info->meta_data ? safe_unserialize($contract_info->meta_data) : array(); //check if ther has already some meta data
         $contract_data = array();
 
         if ($signature) {
@@ -219,7 +219,7 @@ class Contract extends Security_Controller {
             show_404();
         }
 
-        $files = unserialize($contract_info->files);
+        $files = safe_unserialize($contract_info->files);
         $file = get_array_value($files, $key);
 
         $file_name = get_array_value($file, "file_name");

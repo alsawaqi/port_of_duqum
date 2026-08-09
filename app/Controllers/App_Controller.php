@@ -276,7 +276,7 @@ class App_Controller extends Controller {
     protected function download_app_files($directory_path, $serialized_file_data) {
         $file_exists = false;
         if ($serialized_file_data) {
-            $files = unserialize($serialized_file_data);
+            $files = safe_unserialize($serialized_file_data);
             $total_files = count($files);
 
             //for only one file we'll download the file without archiving

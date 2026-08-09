@@ -20,6 +20,11 @@ function echo_uri($uri): void
     echo get_uri($uri);
 }
 
+function view($name, $data = []): string
+{
+    return '';
+}
+
 function csrf_token(): string
 {
     return "csrf_test";

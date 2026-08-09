@@ -30,6 +30,9 @@ class ContentSecurityPolicy extends BaseConfig
      */
     public ?string $reportURI = null;
 
+    /** Reporting API endpoint name, when explicitly configured. */
+    public ?string $reportTo = null;
+
     /**
      * Instructs user agents to rewrite URL schemes, changing
      * HTTP to HTTPS. This directive is for websites with
@@ -56,12 +59,20 @@ class ContentSecurityPolicy extends BaseConfig
      */
     public $scriptSrc = 'self';
 
+    // Empty CSP3-specific directives preserve the explicit policy assembled
+    // in Events.php and allow normal script-src/style-src fallback behavior.
+    public array|string $scriptSrcElem = [];
+    public array|string $scriptSrcAttr = [];
+
     /**
      * Lists allowed stylesheets' URLs.
      *
      * @var string|string[]
      */
     public $styleSrc = 'self';
+
+    public array|string $styleSrcElem = [];
+    public array|string $styleSrcAttr = [];
 
     /**
      * Defines the origins from which images can be loaded.
@@ -144,6 +155,11 @@ class ContentSecurityPolicy extends BaseConfig
      * @var string|string[]|null
      */
     public $manifestSrc;
+
+    /**
+     * @var list<string>|string
+     */
+    public array|string $workerSrc = [];
 
     /**
      * Limits the kinds of plugins a page may invoke.

@@ -41,7 +41,9 @@ class Tender_committee_inbox extends Security_Controller
 
         $result = [];
         foreach ($list as $row) {
-            $result[] = $this->_make_row($row);
+            if ($this->can_access_tender_company((int) ($row->company_id ?? 0), "committee")) {
+                $result[] = $this->_make_row($row);
+            }
         }
 
         return $this->response->setJSON(["data" => $result]);
@@ -53,6 +55,7 @@ class Tender_committee_inbox extends Security_Controller
         $this->access_only_tender("committee", "view");
 
         $id = (int) $this->request->getPost("id");
+        $this->require_tender_request_scope($id, "committee");
         $request = $this->Tender_requests_model->get_details(["id" => $id])->getRow();
 
         if (!$request) {
@@ -84,7 +87,7 @@ class Tender_committee_inbox extends Security_Controller
         $this->access_only_tender("committee", "update");
 
         $id = (int) $this->request->getPost("id");
-        $request = $this->Tender_requests_model->get_one($id);
+        $request = $this->require_tender_request_scope($id, "committee");
 
         if (!$request || !$request->id || (int) ($request->deleted ?? 0) === 1) {
             return $this->response->setJSON([
@@ -143,7 +146,7 @@ class Tender_committee_inbox extends Security_Controller
 
         $id = (int) $this->request->getPost("id");
         $comment = trim((string) $this->request->getPost("comment"));
-        $request = $this->Tender_requests_model->get_one($id);
+        $request = $this->require_tender_request_scope($id, "committee");
 
         if (!$request || !$request->id || (int) ($request->deleted ?? 0) === 1) {
             return $this->response->setJSON([

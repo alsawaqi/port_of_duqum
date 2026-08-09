@@ -5,77 +5,437 @@ namespace App\Models;
 class Users_model extends Crud_model {
 
     protected $table = null;
+    private ?bool $supports_auth_session_version = null;
 
     function __construct() {
         $this->table = 'users';
         parent::__construct($this->table);
     }
 
-    function authenticate($email, $password) {
+    /**
+     * Any password mutation increments the account's session version. The
+     * caller's current session is advanced only when it belongs to the target;
+     * every other live session becomes invalid on its next protected request.
+     */
+    function ci_save($data = array(), $id = 0) {
+        $changesPassword = (int) $id > 0 && array_key_exists("password", $data);
+        if (!$changesPassword) {
+            return parent::ci_save($data, $id);
+        }
 
-        $email = $this->_get_clean_value(array("email" => $email), "email");
-        $email = $this->_resolve_vendor_cr_login_email($email) ?: $email;
-
-        $this->db_builder->select("id,user_type,client_id,password");
-        $result = $this->db_builder->getWhere(array('email' => $email, 'status' => 'active', 'deleted' => 0, 'disable_login' => 0));
-
-        $result_count = count($result->getResult());
-        if (!$result_count) {
+        if (!$this->_supports_auth_session_version()) {
+            log_message("critical", "Password mutation denied because session-version storage is unavailable.");
             return false;
         }
 
-        if ($result_count === 1) {
-            $user_info = $result->getRow();
-            if (!$this->_vendor_user_can_login((int)$user_info->id)) {
+        $userId = (int) $id;
+        $usersTable = $this->db->prefixTable("users");
+        $nextVersion = 0;
+
+        if (!$this->db->transBegin()) {
+            return false;
+        }
+
+        try {
+            $row = $this->db->query(
+                "SELECT auth_session_version
+                 FROM {$usersTable}
+                 WHERE id = ?
+                 LIMIT 1 FOR UPDATE",
+                [$userId]
+            )->getRow();
+
+            if (!$row) {
+                $this->db->transRollback();
                 return false;
             }
-            return $this->verify_password($user_info, $password);
-        } else {
-            //same email on multiple client contacts
-            //check with the password
-            foreach ($result->getResult() as $user_info) {
-                if (!$this->_vendor_user_can_login((int)$user_info->id)) {
-                    continue;
-                }
-                if ($this->verify_password($user_info, $password)) {
-                    return true;
-                }
+
+            $nextVersion = max(1, (int) ($row->auth_session_version ?? 0)) + 1;
+            $data["auth_session_version"] = $nextVersion;
+            $result = parent::ci_save($data, $userId);
+
+            if (!$result || !$this->db->transStatus()) {
+                $this->db->transRollback();
+                return false;
             }
+
+            if (!$this->db->transCommit()) {
+                $this->db->transRollback();
+                return false;
+            }
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message("error", "Atomic password session invalidation failed for user ID {$userId}.");
+            return false;
         }
+
+        $session = \Config\Services::session();
+        if ((int) $session->get("user_id") === $userId) {
+            $session->set("auth_session_version", $nextVersion);
+        }
+
+        return $result;
     }
 
-    private function _resolve_vendor_cr_login_email($identifier): string
-    {
-        $identifier = trim((string)$identifier);
-        if ($identifier === "" || filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
-            return "";
+    function authenticate($email, $password) {
+        $user_info = $this->authenticate_credentials($email, $password);
+        if (!$user_info || !$this->_vendor_user_can_login((int) $user_info->id)) {
+            return false;
         }
 
-        $vendors_table = $this->db->prefixTable("vendors");
-        $vendor_users_table = $this->db->prefixTable("vendor_users");
-        $users_table = $this->db->prefixTable("users");
+        return $this->start_user_session((int) $user_info->id);
+    }
 
+    /**
+     * Validate an email/password pair without creating a login session.
+     * CR numbers are deliberately not authentication credentials.
+     */
+    function authenticate_credentials($email, $password) {
+        $email = strtolower(trim((string) $this->_get_clean_value(array("email" => $email), "email")));
+        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        $users_table = $this->db->prefixTable("users");
         $rows = $this->db->query(
-            "SELECT $users_table.email
-             FROM $vendors_table
-             INNER JOIN $vendor_users_table
-                ON $vendor_users_table.vendor_id = $vendors_table.id
-               AND $vendor_users_table.deleted = 0
-               AND $vendor_users_table.status = 'active'
-               AND $vendor_users_table.is_owner = 1
-             INNER JOIN $users_table
-                ON $users_table.id = $vendor_users_table.user_id
-               AND $users_table.deleted = 0
-               AND $users_table.status = 'active'
-               AND $users_table.disable_login = 0
-             WHERE $vendors_table.deleted = 0
-               AND $vendors_table.cr_number = ?
-               AND $vendors_table.status IN (" . $this->_vendor_login_status_sql() . ")
-             LIMIT 2",
-            [$identifier]
+            "SELECT id, user_type, client_id, is_admin, role_id, email, phone, password
+             FROM $users_table
+             WHERE LOWER(email) = ?
+               AND status = 'active'
+               AND deleted = 0
+               AND disable_login = 0",
+            [$email]
         )->getResult();
 
-        return count($rows) === 1 ? (string)$rows[0]->email : "";
+        foreach ($rows as $user_info) {
+            if ($this->_password_matches($user_info, $password) && $this->_client_can_login($user_info) !== false) {
+                $this->_rehash_verified_password_if_needed($user_info, (string) $password);
+                $isActiveVendorPortalIdentity = $this->is_vendor_only_identity(
+                    (int) $user_info->id,
+                    $user_info
+                ) && $this->has_active_vendor_portal_membership((int) $user_info->id);
+                $user_info->mfa_user_type = $isActiveVendorPortalIdentity ? 'vendor' : strtolower((string) $user_info->user_type);
+                return $user_info;
+            }
+        }
+
+        return false;
+    }
+
+    function verify_user_password(int $user_id, $password): bool
+    {
+        if (!$user_id) {
+            return false;
+        }
+
+        $user_info = $this->db_builder
+            ->select("id, password")
+            ->getWhere(["id" => $user_id, "deleted" => 0])
+            ->getRow();
+
+        if (!$user_info || !$this->_password_matches($user_info, $password)) {
+            return false;
+        }
+
+        $this->_rehash_verified_password_if_needed($user_info, (string) $password);
+        return true;
+    }
+
+    /**
+     * @return string[]
+     */
+    function password_policy_errors(string $password): array
+    {
+        return (new Auth_security_model())->password_errors($password);
+    }
+
+    /**
+     * Resolve exactly one login identity for password recovery. Ambiguous
+     * legacy duplicate-email rows deliberately produce no reset message.
+     */
+    function find_password_reset_user(string $email): ?object
+    {
+        $normalized = strtolower(trim($email));
+        if (!filter_var($normalized, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        $usersTable = $this->db->prefixTable("users");
+        $rows = $this->db->query(
+            "SELECT id, user_type, email, first_name, last_name, language
+             FROM {$usersTable}
+             WHERE LOWER(email) = ?
+               AND status = 'active'
+               AND deleted = 0
+               AND disable_login = 0",
+            [$normalized]
+        )->getResult();
+
+        $rows = array_values(array_filter($rows, static function ($user): bool {
+            if ((string) ($user->user_type ?? "") === "staff") {
+                return true;
+            }
+
+            return (string) ($user->user_type ?? "") === "client"
+                && get_setting("disable_client_login") != "1";
+        }));
+
+        return count($rows) === 1 ? $rows[0] : null;
+    }
+
+    /**
+     * External portal accounts use role-less staff rows for compatibility. A
+     * user with an internal role or privileged workflow assignment is mixed
+     * staff; memberships in another external portal remain portal-only.
+     */
+    function is_vendor_only_identity(int $user_id, $user_info = null): bool
+    {
+        if (!$user_id) {
+            return false;
+        }
+
+        $user_info = $user_info ?: $this->get_one($user_id);
+        if (!$user_info
+            || (string) ($user_info->user_type ?? "") !== "staff"
+            || !empty($user_info->is_admin)
+            || (int) ($user_info->role_id ?? 0) !== 0) {
+            return false;
+        }
+
+        $vendorUsers = $this->db->prefixTable("vendor_users");
+        $membership = $this->db->query(
+            "SELECT memberships.id
+             FROM {$vendorUsers} memberships
+             WHERE memberships.user_id = ?
+               AND memberships.deleted = 0
+             LIMIT 1",
+            [$user_id]
+        )->getRow();
+        if (!$membership) {
+            return false;
+        }
+
+        $assignmentTables = [
+            "gate_pass_commercial_users",
+            "gate_pass_department_users",
+            "gate_pass_rop_users",
+            "gate_pass_security_users",
+            "ptw_hmo_users",
+            "ptw_hsse_users",
+            "ptw_terminal_users",
+            "tender_commercial_users",
+            "tender_committee_users",
+            "tender_department_manager_users",
+            "tender_department_users",
+            "tender_finance_users",
+            "tender_procurement_manager_users",
+            "tender_procurement_users",
+            "tender_technical_users",
+        ];
+
+        $assignmentQueries = [];
+        foreach ($assignmentTables as $table) {
+            if (!$this->db->tableExists($table)) {
+                continue;
+            }
+            $prefixed = $this->db->prefixTable($table);
+            $assignmentQueries[] = "SELECT user_id FROM {$prefixed}"
+                . " WHERE user_id = {$user_id} AND deleted = 0 AND status = 'active'";
+        }
+
+        $operational = $assignmentQueries
+            ? $this->db->query(
+                "SELECT user_id FROM (" . implode(" UNION ALL ", $assignmentQueries) . ") assignments LIMIT 1"
+            )->getRow()
+            : null;
+
+        return !$operational;
+    }
+
+    /**
+     * A self-registered gate-pass requester is a portal identity, not an
+     * internal employee, even though the legacy schema stores it as staff.
+     */
+    function is_gate_pass_only_identity(int $user_id, $user_info = null): bool
+    {
+        if (!$user_id) {
+            return false;
+        }
+
+        $user_info = $user_info ?: $this->get_one($user_id);
+        if (!$user_info
+            || (string) ($user_info->user_type ?? "") !== "staff"
+            || !empty($user_info->is_admin)
+            || (int) ($user_info->role_id ?? 0) !== 0) {
+            return false;
+        }
+
+        if (!$this->db->tableExists("gate_pass_users")) {
+            return false;
+        }
+
+        $requesters = $this->db->prefixTable("gate_pass_users");
+        $membership = $this->db->query(
+            "SELECT id FROM {$requesters}
+             WHERE user_id = ? AND deleted = 0
+             LIMIT 1",
+            [$user_id]
+        )->getRow();
+        if (!$membership) {
+            return false;
+        }
+
+        // Reviewer/approver assignments are internal operational identities.
+        // A plain requester has none of these privileged assignments.
+        $assignmentTables = [
+            "gate_pass_commercial_users",
+            "gate_pass_department_users",
+            "gate_pass_rop_users",
+            "gate_pass_security_users",
+            "ptw_hmo_users",
+            "ptw_hsse_users",
+            "ptw_terminal_users",
+            "tender_commercial_users",
+            "tender_committee_users",
+            "tender_department_manager_users",
+            "tender_department_users",
+            "tender_finance_users",
+            "tender_procurement_manager_users",
+            "tender_procurement_users",
+            "tender_technical_users",
+        ];
+
+        $queries = [];
+        foreach ($assignmentTables as $table) {
+            if (!$this->db->tableExists($table)) {
+                continue;
+            }
+            $prefixed = $this->db->prefixTable($table);
+            $queries[] = "SELECT user_id FROM {$prefixed}"
+                . " WHERE user_id = {$user_id} AND deleted = 0 AND status = 'active'";
+        }
+
+        $operational = $queries
+            ? $this->db->query(
+                "SELECT user_id FROM (" . implode(" UNION ALL ", $queries) . ") assignments LIMIT 1"
+            )->getRow()
+            : null;
+
+        return !$operational;
+    }
+
+    function is_ptw_applicant_only_identity(int $user_id, $user_info = null): bool
+    {
+        if (!$user_id) {
+            return false;
+        }
+
+        $user_info = $user_info ?: $this->get_one($user_id);
+        if (!$user_info
+            || (string) ($user_info->user_type ?? "") !== "staff"
+            || !empty($user_info->is_admin)
+            || (int) ($user_info->role_id ?? 0) !== 0) {
+            return false;
+        }
+
+        if (!$this->db->tableExists("ptw_applicant_users")) {
+            return false;
+        }
+
+        $applicants = $this->db->prefixTable("ptw_applicant_users");
+        if (!$this->db->query(
+            "SELECT id FROM {$applicants}
+             WHERE user_id=? AND deleted=0 LIMIT 1",
+            [$user_id]
+        )->getRow()) {
+            return false;
+        }
+
+        $privilegedTables = [
+            "gate_pass_commercial_users",
+            "gate_pass_department_users",
+            "gate_pass_rop_users",
+            "gate_pass_security_users",
+            "ptw_hmo_users",
+            "ptw_hsse_users",
+            "ptw_terminal_users",
+            "tender_commercial_users",
+            "tender_committee_users",
+            "tender_department_manager_users",
+            "tender_department_users",
+            "tender_finance_users",
+            "tender_procurement_manager_users",
+            "tender_procurement_users",
+            "tender_technical_users",
+        ];
+
+        $queries = [];
+        foreach ($privilegedTables as $table) {
+            if (!$this->db->tableExists($table)) {
+                continue;
+            }
+            $prefixed = $this->db->prefixTable($table);
+            $queries[] = "SELECT user_id FROM {$prefixed}"
+                . " WHERE user_id = {$user_id} AND deleted = 0 AND status = 'active'";
+        }
+
+        return !$queries || !$this->db->query(
+            "SELECT user_id FROM (" . implode(" UNION ALL ", $queries) . ") assignments LIMIT 1"
+        )->getRow();
+    }
+
+    /**
+     * Identity-history classification keeps role-less external accounts out of
+     * internal modules. These methods separately determine which portal is
+     * currently usable, so an inactive CR cannot mask a valid Gate Pass/PTW
+     * membership (or vice versa).
+     */
+    function has_active_vendor_portal_membership(int $user_id): bool
+    {
+        return $user_id > 0
+            && count((new Vendor_users_model())->get_accessible_memberships($user_id)) > 0;
+    }
+
+    function has_active_gate_pass_portal_membership(int $user_id): bool
+    {
+        if ($user_id < 1 || !$this->db->tableExists("gate_pass_users")) {
+            return false;
+        }
+
+        $users = $this->db->prefixTable("gate_pass_users");
+        return (bool) $this->db->query(
+            "SELECT id FROM {$users}
+             WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1",
+            [$user_id]
+        )->getRow();
+    }
+
+    function has_active_ptw_applicant_portal_membership(int $user_id): bool
+    {
+        if ($user_id < 1 || !$this->db->tableExists("ptw_applicant_users")) {
+            return false;
+        }
+
+        $assignments = $this->db->prefixTable("ptw_applicant_users");
+        $companies = $this->db->prefixTable("companies");
+        return (bool) $this->db->query(
+            "SELECT assignments.id
+             FROM {$assignments} assignments
+             INNER JOIN {$companies} companies
+                ON companies.id=assignments.company_id AND companies.deleted=0
+             WHERE assignments.user_id=?
+               AND assignments.deleted=0
+               AND assignments.status='active'
+             LIMIT 1",
+            [$user_id]
+        )->getRow();
+    }
+
+    function has_any_active_external_portal_membership(int $user_id): bool
+    {
+        return $this->has_active_vendor_portal_membership($user_id)
+            || $this->has_active_gate_pass_portal_membership($user_id)
+            || $this->has_active_ptw_applicant_portal_membership($user_id);
     }
 
     private function _vendor_user_can_login(int $user_id): bool
@@ -84,28 +444,145 @@ class Users_model extends Crud_model {
             return false;
         }
 
-        $vendors_table = $this->db->prefixTable("vendors");
-        $vendor_users_table = $this->db->prefixTable("vendor_users");
-
-        $rows = $this->db->query(
-            "SELECT $vendors_table.status
-             FROM $vendor_users_table
-             INNER JOIN $vendors_table
-                ON $vendors_table.id = $vendor_users_table.vendor_id
-               AND $vendors_table.deleted = 0
-             WHERE $vendor_users_table.deleted = 0
-               AND $vendor_users_table.status = 'active'
-               AND $vendor_users_table.user_id = ?
-             LIMIT 2",
-            [$user_id]
-        )->getResult();
-
-        if (!count($rows)) {
+        // Legacy callers of authenticate() enforce the same active-membership
+        // boundary as Signin for every role-less external identity.
+        $isExternalPortalIdentity = $this->is_vendor_only_identity($user_id)
+            || $this->is_gate_pass_only_identity($user_id)
+            || $this->is_ptw_applicant_only_identity($user_id);
+        if (!$isExternalPortalIdentity) {
             return true;
         }
 
-        foreach ($rows as $row) {
-            if (!in_array(strtolower((string)$row->status), vendor_login_allowed_statuses(), true)) {
+        $hasActiveVendor = count((new Vendor_users_model())->get_accessible_memberships($user_id)) > 0;
+        return $hasActiveVendor
+            || $this->has_active_gate_pass_portal_membership($user_id)
+            || $this->has_active_ptw_applicant_portal_membership($user_id);
+    }
+
+    private function _password_matches($user_info, $password): bool {
+        $stored_password = (string) ($user_info->password ?? "");
+        if ($stored_password === "") {
+            return false;
+        }
+
+        $hash_info = password_get_info($stored_password);
+        return (!empty($hash_info["algo"]) && password_verify((string) $password, $stored_password))
+            || (strlen($stored_password) === 32 && hash_equals($stored_password, md5((string) $password)));
+    }
+
+    /**
+     * Keep the legacy MD5 verifier only as a one-login migration bridge. The
+     * successfully verified value is immediately replaced with PASSWORD_DEFAULT
+     * using a compare-and-update so concurrent password changes are preserved.
+     */
+    private function _rehash_verified_password_if_needed(object $userInfo, string $password): void
+    {
+        $storedPassword = (string) ($userInfo->password ?? "");
+        $hashInfo = password_get_info($storedPassword);
+        $isLegacyMd5 = preg_match('/^[a-f0-9]{32}$/iD', $storedPassword) === 1;
+        $needsRehash = !empty($hashInfo["algo"])
+            && password_needs_rehash($storedPassword, PASSWORD_DEFAULT);
+
+        if (!$isLegacyMd5 && !$needsRehash) {
+            return;
+        }
+
+        $replacement = password_hash($password, PASSWORD_DEFAULT);
+        if (!$replacement) {
+            return;
+        }
+
+        $this->db_builder
+            ->where("id", (int) $userInfo->id)
+            ->where("password", $storedPassword)
+            ->update(["password" => $replacement]);
+        $userInfo->password = $replacement;
+    }
+
+    function start_user_session(int $user_id, int $active_vendor_id = 0): bool {
+        if (!$user_id
+            || !$this->_supports_auth_session_version()
+            || !$this->is_login_enabled($user_id)
+        ) {
+            return false;
+        }
+
+        $session = \Config\Services::session();
+        $session->set('user_id', $user_id);
+        $session->remove([
+            'pending_vendor_user_id',
+            'pending_vendor_redirect_url',
+            'pending_vendor_authenticated_at',
+            'pending_mfa_challenge_id',
+            'pending_mfa_user_id',
+            'pending_mfa_redirect_url',
+            'pending_mfa_started_at'
+        ]);
+
+        $session->set(
+            "auth_session_version",
+            $this->_get_auth_session_version($user_id)
+        );
+
+        if ($active_vendor_id) {
+            $session->set('active_vendor_id', $active_vendor_id);
+        } else {
+            $session->remove('active_vendor_id');
+        }
+
+        try {
+            app_hooks()->do_action('app_hook_after_signin');
+        } catch (\Exception $ex) {
+            log_message('error', '[ERROR] {exception}', ['exception' => $ex]);
+        }
+
+        return true;
+    }
+
+    function is_login_enabled(int $user_id): bool
+    {
+        if ($user_id < 1) {
+            return false;
+        }
+
+        $supportsSessionVersion = $this->_supports_auth_session_version();
+        $session = \Config\Services::session();
+        $isAuthenticatedSession = (int) $session->get("user_id") === $user_id;
+        if ($isAuthenticatedSession && !$supportsSessionVersion) {
+            return false;
+        }
+
+        $select = $supportsSessionVersion
+            ? "id, auth_session_version"
+            : "id";
+        $user = $this->db_builder
+            ->select($select)
+            ->getWhere([
+                "id" => $user_id,
+                "status" => "active",
+                "deleted" => 0,
+                "disable_login" => 0,
+            ])
+            ->getRow();
+
+        if (!$user) {
+            return false;
+        }
+
+        if ($supportsSessionVersion && $isAuthenticatedSession) {
+            if (!$session->has("auth_session_version")) {
+                return false;
+            }
+
+            $sessionVersion = $session->get("auth_session_version");
+            if ((!is_int($sessionVersion) && !(is_string($sessionVersion) && ctype_digit($sessionVersion)))
+                || (int) $sessionVersion < 1
+            ) {
+                return false;
+            }
+
+            $currentVersion = max(1, (int) ($user->auth_session_version ?? 0));
+            if ((int) $sessionVersion !== $currentVersion) {
                 return false;
             }
         }
@@ -113,33 +590,30 @@ class Users_model extends Crud_model {
         return true;
     }
 
-    private function _vendor_login_status_sql(): string
+    private function _supports_auth_session_version(): bool
     {
-        $statuses = array_map(function ($status) {
-            return $this->db->escape($status);
-        }, vendor_login_allowed_statuses());
+        if ($this->supports_auth_session_version === null) {
+            $this->supports_auth_session_version = $this->db->fieldExists(
+                "auth_session_version",
+                $this->db->prefixTable("users")
+            );
+        }
 
-        return implode(", ", $statuses);
+        return $this->supports_auth_session_version;
     }
 
-    private function verify_password($user_info, $password) {
-        //there has two password encryption method for legacy (md5) compatibility
-        //check if anyone of them is correct
-        if ($user_info->password && (strlen($user_info->password) === 60 && password_verify($password, $user_info->password)) || $user_info->password === md5($password)) {
-
-            if ($this->_client_can_login($user_info) !== false) {
-                $session = \Config\Services::session();
-                $session->set('user_id', $user_info->id);
-
-                try {
-                    app_hooks()->do_action('app_hook_after_signin');
-                } catch (\Exception $ex) {
-                    log_message('error', '[ERROR] {exception}', ['exception' => $ex]);
-                }
-
-                return true;
-            }
+    private function _get_auth_session_version(int $userId): int
+    {
+        if (!$this->_supports_auth_session_version()) {
+            return 1;
         }
+
+        $row = $this->db_builder
+            ->select("auth_session_version")
+            ->getWhere(["id" => $userId], 1)
+            ->getRow();
+
+        return max(1, (int) ($row->auth_session_version ?? 1));
     }
 
     private function _client_can_login($user_info) {
@@ -570,12 +1044,26 @@ class Users_model extends Crud_model {
 
     function update_password($email, $password) {
         $users_table = $this->db->prefixTable('users');
-        $email = $this->_get_clean_value($email);
-
-        $sql = "UPDATE $users_table SET $users_table.password='$password' WHERE $users_table.deleted=0 AND $users_table.email='$email'; ";
-        if ($this->db->query($sql)) {
-            return true;
+        $email = strtolower(trim((string) $email));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return false;
         }
+
+        $matches = $this->db->query(
+            "SELECT id FROM {$users_table}
+             WHERE deleted = 0 AND LOWER(email) = ?",
+            [$email]
+        )->getResult();
+
+        // Never change multiple identities because a legacy email is shared.
+        if (count($matches) !== 1) {
+            return false;
+        }
+
+        return (bool) $this->ci_save(
+            ["password" => (string) $password],
+            (int) $matches[0]->id
+        );
     }
 
     function count_total_users() {

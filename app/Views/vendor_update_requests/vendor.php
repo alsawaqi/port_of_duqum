@@ -543,9 +543,12 @@
                 setBulkButtonsBusy(true);
 
                 appAjaxRequest({
-                    url: "<?php echo get_uri('vendor_update_requests/approve/'); ?>" + id,
+                    url: "<?php echo get_uri('vendor_update_requests/approve'); ?>",
                     type: "POST",
                     dataType: "json",
+                    data: {
+                        id: id
+                    },
                     success: function(result) {
                         appLoader.hide();
                         setBulkButtonsBusy(false);

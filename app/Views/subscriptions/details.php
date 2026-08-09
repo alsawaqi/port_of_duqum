@@ -23,7 +23,7 @@
         </div>
 
         <?php
-        $files = @unserialize($subscription_info->files);
+        $files = @safe_unserialize($subscription_info->files);
         if ($files && is_array($files) && count($files)) {
         ?>
             <div class="clearfix">

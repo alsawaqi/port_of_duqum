@@ -119,7 +119,7 @@
             ?>
 
             <?php
-            $files = @unserialize($model_info->files);
+            $files = @safe_unserialize($model_info->files);
             if ($files && is_array($files) && count($files)) {
                 ?>
                 <div class="clearfix">

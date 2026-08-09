@@ -9,9 +9,9 @@ trait Google_Trait {
     private $type;
 
     //authorize connection
-    public function authorize() {
+    public function authorize(string $state) {
         $client = $this->_get_client_credentials();
-        $this->_check_access_token($client, true);
+        $this->_check_access_token($client, true, $state);
     }
 
     public function set_type($type) {
@@ -19,7 +19,7 @@ trait Google_Trait {
     }
 
     //check access token
-    private function _check_access_token($client, $redirect_to_settings = false) {
+    private function _check_access_token($client, $redirect_to_settings = false, string $state = '') {
         //load previously authorized token from database, if it exists.
         $oauth_access_token_setting_name = "gmail_" . $this->type . "_oauth_access_token";
         $accessToken = $this->Settings_model->get_setting($oauth_access_token_setting_name);
@@ -42,6 +42,10 @@ trait Google_Trait {
                     app_redirect($settings_url);
                 }
             } else {
+                if (!$redirect_to_settings || $state === '') {
+                    throw new \RuntimeException('Google mail authorization is required.');
+                }
+                $client->setState($state);
                 $authUrl = $client->createAuthUrl();
                 app_redirect($authUrl, true);
             }

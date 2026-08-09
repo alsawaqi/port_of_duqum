@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Tender_rfq_items_model extends Crud_model
 {
     protected $table = null;
@@ -20,51 +22,21 @@ class Tender_rfq_items_model extends Crud_model
             return;
         }
 
-        $table = $this->db->prefixTable("tender_rfq_items");
-        $tenders = $this->db->prefixTable("tenders");
-
-        if (!$this->_table_exists($table)) {
-            $this->db->query(
-                "CREATE TABLE `$table` (
-                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `tender_id` BIGINT UNSIGNED NOT NULL,
-                    `sr_no` VARCHAR(30) DEFAULT NULL,
-                    `description` TEXT DEFAULT NULL,
-                    `uom` VARCHAR(50) DEFAULT NULL,
-                    `qty` DECIMAL(18,3) DEFAULT NULL,
-                    `unit_price` DECIMAL(18,3) DEFAULT NULL,
-                    `brand` VARCHAR(150) DEFAULT NULL,
-                    `sort_order` INT UNSIGNED NOT NULL DEFAULT 0,
-                    `created_at` DATETIME DEFAULT NULL,
-                    `updated_at` DATETIME DEFAULT NULL,
-                    `deleted` TINYINT(1) NOT NULL DEFAULT 0,
-                    PRIMARY KEY (`id`),
-                    KEY `tender_rfq_items_tender_id_idx` (`tender_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-            );
-
-            $this->db->query(
-                "ALTER TABLE `$table`
-                 ADD CONSTRAINT `{$table}_tender_fk`
-                 FOREIGN KEY (`tender_id`) REFERENCES `$tenders` (`id`)
-                 ON DELETE CASCADE"
-            );
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            "tender_rfq_items" => [
+                "id", "tender_id", "sr_no", "description", "uom", "qty", "unit_price",
+                "brand", "sort_order", "created_at", "updated_at", "deleted",
+            ],
+        ], "tender RFQ items");
 
         self::$schema_checked = true;
-    }
-
-    private function _table_exists(string $table): bool
-    {
-        $row = $this->db->query("SHOW TABLES LIKE " . $this->db->escape($table))->getRow();
-        return (bool) $row;
     }
 
     public function get_by_tender(int $tender_id): array
     {
         $table = $this->db->prefixTable("tender_rfq_items");
 
-        return $this->db->query(
+        $rows = $this->db->query(
             "SELECT *
              FROM $table
              WHERE deleted = 0
@@ -72,6 +44,14 @@ class Tender_rfq_items_model extends Crud_model
              ORDER BY sort_order ASC, id ASC",
             [$tender_id]
         )->getResult();
+
+        // `brand` remains the legacy storage column so existing databases do
+        // not require a destructive rename. Tender code uses Part No wording.
+        foreach ($rows as $row) {
+            $row->part_no = $row->brand ?? null;
+        }
+
+        return $rows;
     }
 
     public function sync_items(int $tender_id, array $items): void
@@ -88,9 +68,9 @@ class Tender_rfq_items_model extends Crud_model
             $uom = trim((string) ($item["uom"] ?? ""));
             $qty = $this->_decimal_or_null($item["qty"] ?? null);
             $unit_price = $this->_decimal_or_null($item["unit_price"] ?? null);
-            $brand = trim((string) ($item["brand"] ?? ""));
+            $part_no = trim((string) ($item["part_no"] ?? ($item["brand"] ?? "")));
 
-            if ($description === "" && $sr_no === "" && $uom === "" && $qty === null && $unit_price === null && $brand === "") {
+            if ($description === "" && $sr_no === "" && $uom === "" && $qty === null && $unit_price === null && $part_no === "") {
                 continue;
             }
 
@@ -101,7 +81,7 @@ class Tender_rfq_items_model extends Crud_model
                 "uom" => $uom ?: null,
                 "qty" => $qty,
                 "unit_price" => $unit_price,
-                "brand" => $brand ?: null,
+                "brand" => $part_no ?: null,
                 "sort_order" => $sort,
                 "created_at" => $now,
                 "updated_at" => $now,

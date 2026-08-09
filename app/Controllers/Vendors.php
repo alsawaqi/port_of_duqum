@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Libraries\Vendor_contact_access;
 use App\Models\Vendors_model;
 use App\Models\Vendor_groups_model;
 use App\Models\Vendor_grades_model;
@@ -12,6 +13,7 @@ class Vendors extends Security_Controller
     protected $Vendors_model;
     protected $Vendor_groups_model;
     protected $Vendor_grades_model;
+    protected $Vendor_contact_access;
     protected $db;
     private $vendor_grades_dropdown_cache = null;
 
@@ -25,6 +27,7 @@ class Vendors extends Security_Controller
         $this->Vendor_groups_model = new Vendor_groups_model();
         $this->Vendor_grades_model = new Vendor_grades_model();
         $this->db = db_connect();
+        $this->Vendor_contact_access = new Vendor_contact_access($this->db);
     }
 
 
@@ -153,12 +156,16 @@ class Vendors extends Security_Controller
         $db = $this->db; // use the same connection everywhere
 
         try {
+            $id = $this->request->getPost("id");
+            $is_create = !$id;
+
             $this->validate_submitted_data([
                 "id"             => "numeric",
                 "vendor_group_id" => "required|numeric",
                 "vendor_grade_id" => "permit_empty|numeric",
                 "vendor_name"    => "required",
                 "email"          => "required|valid_email",
+                "cr_number"      => $is_create ? "required" : "permit_empty",
 
 
                 "address"     => "permit_empty",
@@ -170,50 +177,104 @@ class Vendors extends Security_Controller
                 "region_id"      => "permit_empty|numeric",
                 "city_id"        => "permit_empty|numeric",
 
-                // login user fields (required on create)
-                "user_name"      => "required",
-                "user_email"     => "required|valid_email",
                 "currency"       => "required",
                 "payment_terms"  => "required|in_list[45,90,180]",
             ]);
 
-            $id = $this->request->getPost("id");
-            $is_create = !$id;
             if ($is_create) {
                 $this->access_only_vendors_create();
             } else {
                 $this->access_only_vendors_update();
             }
 
-            // vendor email must be unique (excluding current record on edit)
+            // Company email may be shared by multiple CR records.
             $vendor_email = strtolower(trim((string) $this->request->getPost("email")));
+            $cr_number = trim((string)$this->request->getPost("cr_number"));
             $vendors_table = $db->prefixTable("vendors");
-            $existing_vendor = $db->table($vendors_table)
-                ->select("id")
-                ->where("email", $vendor_email)
-                ->where("deleted", 0);
-            if (!$is_create) {
-                $existing_vendor->where("id !=", (int) $id);
-            }
-            $existing_vendor = $existing_vendor->get()->getRow();
-            if ($existing_vendor) {
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("email_already_exists"),
-                    "field" => "email",
-                    "errors" => ["email" => app_lang("email_already_exists")]
-                ]);
-                return;
+
+            if ($cr_number !== "") {
+                $existing_cr_builder = $db->table($vendors_table)
+                    ->select("id")
+                    ->where("cr_number", $cr_number)
+                    ->where("deleted", 0);
+                if (!$is_create) {
+                    $existing_cr_builder->where("id !=", (int)$id);
+                }
+
+                if ($existing_cr_builder->get()->getRow()) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("cr_number_already_exists"),
+                        "field"   => "cr_number",
+                        "errors"  => ["cr_number" => app_lang("cr_number_already_exists")]
+                    ]);
+                    return;
+                }
             }
 
+            $user_email = "";
+            $existing_user = null;
             if ($is_create) {
                 $this->validate_submitted_data([
-                    "password" => "required"
+                    "user_email" => "required|valid_email",
                 ]);
+
+                $user_email = strtolower(trim((string)$this->request->getPost("user_email")));
+                $existing_user = $db->table("users")
+                    ->select("id, user_type, status, disable_login, deleted")
+                    ->where("email", $user_email)
+                    ->orderBy("deleted", "ASC")
+                    ->orderBy("id", "ASC")
+                    ->get()
+                    ->getRow();
+
+                if ($existing_user && ($existing_user->user_type ?? "") !== "staff") {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => app_lang("vendor_email_belongs_to_non_staff_user"),
+                        "field"   => "user_email",
+                        "errors"  => ["user_email" => app_lang("vendor_email_belongs_to_non_staff_user")]
+                    ]);
+                    return;
+                }
+
+                if ($existing_user
+                    && ((int)($existing_user->deleted ?? 0) === 1
+                        || (string)($existing_user->status ?? "") !== "active"
+                        || (int)($existing_user->disable_login ?? 0) === 1)
+                ) {
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "This staff account is inactive. Restore it before linking it to a vendor CR.",
+                        "field"   => "user_email",
+                        "errors"  => ["user_email" => "This staff account is inactive. Restore it before linking it to a vendor CR."]
+                    ]);
+                    return;
+                }
+
+                if (!$existing_user) {
+                    $this->validate_submitted_data([
+                        "user_name" => "required",
+                        "password"  => "required",
+                    ]);
+
+                    $policyErrors = $this->Users_model->password_policy_errors(
+                        (string) $this->request->getPost("password")
+                    );
+                    if ($policyErrors) {
+                        return $this->response->setStatusCode(422)->setJSON([
+                            "success" => false,
+                            "message" => implode(" ", $policyErrors),
+                            "field" => "password",
+                            "errors" => ["password" => implode(" ", $policyErrors)],
+                        ]);
+                    }
+                }
             }
 
             $currency = trim((string)$this->request->getPost("currency"));
             $payment_terms = $this->request->getPost("payment_terms");
+            $current_vendor = $is_create ? null : $this->Vendors_model->get_one((int)$id);
 
             $vendor_data["currency"] = $currency !== "" ? $currency : null;
             $vendor_data["payment_terms"] = ($payment_terms !== "" && $payment_terms !== null) ? (int)$payment_terms : null;
@@ -228,6 +289,7 @@ class Vendors extends Security_Controller
                 "vendor_grade_id" => $this->request->getPost("vendor_grade_id") ? (int) $this->request->getPost("vendor_grade_id") : null,
                 "vendor_name"     => $this->request->getPost("vendor_name"),
                 "email"           => $vendor_email,
+                "cr_number"       => $cr_number !== "" ? $cr_number : null,
 
                 "country_id"      => $country_id ? (int)$country_id : null,
                 "region_id"       => $region_id  ? (int)$region_id  : null,
@@ -244,7 +306,9 @@ class Vendors extends Security_Controller
                 "payment_terms"   => ($payment_terms !== "" && $payment_terms !== null) ? (int)$payment_terms : null,
 
                 // pod_vendors.status has default 'new', but we can still set it
-                "status"          => $is_create ? "new" : ($this->request->getPost("status") ?: "new"),
+                "status"          => $is_create
+                    ? "new"
+                    : ($this->request->getPost("status") ?: ($current_vendor->status ?? "new")),
             ];
 
             if ($is_create) {
@@ -265,29 +329,12 @@ class Vendors extends Security_Controller
                 throw new \RuntimeException($err["message"] ?: "Vendor save failed.");
             }
 
-            // 2) Create user + pivot (only on create)
+            // 2) Reuse/create the login identity and link it to this CR.
             if ($is_create) {
-                $user_email = strtolower(trim($this->request->getPost("user_email")));
-
-                // check existing user email (pod_users has deleted=0)
-                $existing = $db->table("users")
-                    ->select("id")
-                    ->where("email", $user_email)
-                    ->where("deleted", 0)
-                    ->get()
-                    ->getRow();
-
-                if ($existing) {
-                    echo json_encode([
-                        "success" => false,
-                        "message" => app_lang("email_already_exists"),
-                        "field" => "user_email",
-                        "errors" => ["user_email" => app_lang("email_already_exists")]
-                    ]);
-                    return;
-                }
-
-                $password = $this->request->getPost("password");
+                if ($existing_user) {
+                    $user_id = (int)$existing_user->id;
+                } else {
+                    $password = $this->request->getPost("password");
 
                 // ✅ pod_users required fields: email (NOT NULL), user_type (enum), status (enum), language (NOT NULL)
                 $user_data = [
@@ -312,10 +359,18 @@ class Vendors extends Security_Controller
                     throw new \RuntimeException("User insert error: " . ($err["message"] ?: "unknown"));
                 }
 
-                $user_id = $db->insertID();
+                    $user_id = (int)$db->insertID();
+                }
 
                 // ✅ pod_vendor_users columns: vendor_id, user_id, invited_by, vendor_role_id, is_owner, status, deleted
-                $pivot = [
+                $existing_pivot = $db->table("vendor_users")
+                    ->select("id")
+                    ->where("vendor_id", (int)$save_vendor_id)
+                    ->where("user_id", (int)$user_id)
+                    ->get()
+                    ->getRow();
+
+                $pivot_data = clean_data([
                     "vendor_id"      => (int) $save_vendor_id,
                     "user_id"        => (int) $user_id,
                     "invited_by"     => (int) $this->login_user->id,
@@ -323,12 +378,19 @@ class Vendors extends Security_Controller
                     "is_owner"       => 1,
                     "status"         => "active",
                     "deleted"        => 0
-                ];
+                ]);
 
-                $ok = $db->table("vendor_users")->insert(clean_data($pivot));
+                if ($existing_pivot) {
+                    $ok = $db->table("vendor_users")
+                        ->where("id", (int)$existing_pivot->id)
+                        ->update($pivot_data);
+                } else {
+                    $ok = $db->table("vendor_users")->insert($pivot_data);
+                }
+
                 if (!$ok) {
                     $err = $db->error();
-                    throw new \RuntimeException("Vendor user pivot insert error: " . ($err["message"] ?: "unknown"));
+                    throw new \RuntimeException("Vendor user pivot save error: " . ($err["message"] ?: "unknown"));
                 }
             }
 
@@ -354,6 +416,19 @@ class Vendors extends Security_Controller
                     $db->transRollback();
                 } catch (\Throwable $t) {
                 }
+            }
+
+            $message = $e->getMessage();
+            if (stripos($message, "Duplicate entry") !== false
+                && (stripos($message, "cr_number") !== false || stripos($message, "cr identity") !== false)
+            ) {
+                echo json_encode([
+                    "success" => false,
+                    "message" => app_lang("cr_number_already_exists"),
+                    "field"   => "cr_number",
+                    "errors"  => ["cr_number" => app_lang("cr_number_already_exists")]
+                ]);
+                return;
             }
 
             log_message("error", "Vendor save error: " . $e->getMessage());
@@ -913,17 +988,74 @@ class Vendors extends Security_Controller
         $vendor_id = (int)$vendor_id;
 
         $table = $this->db->prefixTable("vendor_contacts"); // -> pod_vendor_contacts
+        $vendorUsers = $this->db->prefixTable("vendor_users");
+        $users = $this->db->prefixTable("users");
 
-        $rows = $this->db->table($table)
-            ->where("vendor_id", $vendor_id)
-            ->where("deleted", 0)
-            ->orderBy("is_primary", "DESC")
-            ->orderBy("id", "DESC")
+        $rows = $this->db->table($table . " AS contacts")
+            ->select(
+                "contacts.*, vendor_memberships.status AS portal_access_status,"
+                . " vendor_memberships.is_owner AS portal_is_owner,"
+                . " users.status AS account_status, users.disable_login"
+            )
+            ->join(
+                $vendorUsers . " AS vendor_memberships",
+                "vendor_memberships.vendor_id = contacts.vendor_id"
+                    . " AND vendor_memberships.user_id = contacts.user_id"
+                    . " AND vendor_memberships.deleted = 0",
+                "left"
+            )
+            ->join($users . " AS users", "users.id = contacts.user_id AND users.deleted = 0", "left")
+            ->where("contacts.vendor_id", $vendor_id)
+            ->where("contacts.deleted", 0)
+            ->orderBy("contacts.is_primary", "DESC")
+            ->orderBy("contacts.id", "DESC")
             ->get()->getResult();
 
         $data = [];
         foreach ($rows as $r) {
             $phone = $r->mobile ?: ($r->phone ?: "-");
+            $accessStatus = strtolower((string) ($r->portal_access_status ?? ""));
+            if ($accessStatus === "active") {
+                $portalAccess = "<span class='badge bg-success'>Portal active</span>";
+            } elseif ($accessStatus === "invited"
+                && ((string) ($r->account_status ?? "") !== "active" || (int) ($r->disable_login ?? 0) === 1)
+            ) {
+                $portalAccess = "<span class='badge bg-warning text-dark'>Vendor password setup required</span>";
+            } elseif ($accessStatus === "invited") {
+                $portalAccess = "<span class='badge bg-warning text-dark'>Access activation pending</span>";
+            } elseif ($accessStatus === "suspended") {
+                $portalAccess = "<span class='badge bg-secondary'>Portal suspended</span>";
+            } elseif ((string) $r->status === "approved") {
+                $portalAccess = "<span class='badge bg-secondary'>Not provisioned</span>";
+            } else {
+                $portalAccess = "<span class='badge bg-light text-dark'>Awaiting approval</span>";
+            }
+
+            $actions = "";
+            if ($this->can_approve_vendor_update_requests()
+                && (string) $r->status === "approved"
+                && (int) $r->is_active === 1
+                && $accessStatus !== "active"
+                && !empty($r->user_id)
+                && (string) ($r->account_status ?? "") === "active"
+                && (int) ($r->disable_login ?? 0) === 0
+            ) {
+                $title = $accessStatus === "invited"
+                    ? "Activate portal access"
+                    : "Reactivate portal access";
+                $actions = ajax_anchor(
+                    get_uri("vendors/provision_vendor_contact_access"),
+                    "<i data-feather='user-check' class='icon-16'></i>",
+                    [
+                        "class" => "btn btn-default btn-sm spinning-btn",
+                        "title" => $title,
+                        "data-post-id" => (int) $r->id,
+                        "data-reload-on-success" => true,
+                        "data-show-response" => true,
+                    ]
+                );
+            }
+
             $data[] = [
                 esc($r->contacts_name ?? "-"),
                 esc($r->email ?? "-"),
@@ -932,10 +1064,78 @@ class Vendors extends Security_Controller
                 esc($r->role ?? "-"),
                 $r->is_primary ? "<span class='badge bg-success'>Yes</span>" : "<span class='badge bg-secondary'>No</span>",
                 $r->is_active ? "<span class='badge bg-success'>Yes</span>" : "<span class='badge bg-danger'>No</span>",
+                $portalAccess,
+                $actions,
             ];
         }
 
         return $this->response->setJSON(["data" => $data]);
+    }
+
+    public function provision_vendor_contact_access()
+    {
+        if (strtolower($this->request->getMethod()) !== "post") {
+            return $this->response
+                ->setStatusCode(405)
+                ->setHeader("Allow", "POST")
+                ->setJSON([
+                    "success" => false,
+                    "message" => "This action requires a POST request.",
+                ]);
+        }
+
+        $this->access_only_vendor_update_requests_approve();
+        $this->validate_submitted_data(["id" => "required|numeric"]);
+
+        $contactId = (int) $this->request->getPost("id");
+        $contact = $this->db->table($this->db->prefixTable("vendor_contacts") . " AS contacts")
+            ->select("contacts.*")
+            ->join(
+                $this->db->prefixTable("vendors") . " AS vendors",
+                "vendors.id = contacts.vendor_id AND vendors.deleted = 0",
+                "inner"
+            )
+            ->where("contacts.id", $contactId)
+            ->where("contacts.deleted", 0)
+            ->get(1)
+            ->getRow();
+
+        if (!$contact || (string) $contact->status !== "approved" || !(int) $contact->is_active) {
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => "Only an approved, active vendor contact can be provisioned.",
+            ]);
+        }
+
+        $transactionStarted = false;
+        try {
+            $this->db->transBegin();
+            $transactionStarted = true;
+            $this->Vendor_contact_access->approveContact(
+                $contactId,
+                (int) ($this->login_user->id ?? 0)
+            );
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException("Unable to provision the vendor contact access.");
+            }
+            $this->db->transCommit();
+            $transactionStarted = false;
+
+            return $this->response->setJSON(["success" => true, "message" => "Vendor contact portal access has been synchronized."]);
+        } catch (\Throwable $e) {
+            if ($transactionStarted) {
+                $this->db->transRollback();
+            }
+            log_message("error", "VENDOR CONTACT PROVISIONING FAILED: " . $e->getMessage());
+            $message = $e instanceof \CodeIgniter\Database\Exceptions\DatabaseException
+                ? app_lang("error_occurred")
+                : ($e instanceof \RuntimeException ? $e->getMessage() : app_lang("error_occurred"));
+
+            return $this->response->setJSON([
+                "success" => false,
+                "message" => $message,
+            ]);
+        }
     }
 
     public function vendor_bank_list_data($vendor_id)

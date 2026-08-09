@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Libraries\Runtime_schema_guard;
+
 class Ptw_applications_model extends Crud_model
 {
     protected $table = null;
@@ -15,14 +17,9 @@ class Ptw_applications_model extends Crud_model
 
     private function ensure_terminal_approval_required_column(): void
     {
-        try {
-            if (!$this->db->fieldExists("terminal_approval_required", $this->table)) {
-                $table = $this->table;
-                $this->db->query("ALTER TABLE `$table` ADD COLUMN `terminal_approval_required` TINYINT(1) NOT NULL DEFAULT 1 AFTER `completed_at`");
-            }
-        } catch (\Throwable $e) {
-            log_message("error", "Failed to ensure PTW terminal approval column: " . $e->getMessage());
-        }
+        Runtime_schema_guard::requireTablesAndColumns($this->db, [
+            $this->table => ["terminal_approval_required"],
+        ], "PTW terminal approval routing");
     }
 
     public function get_details($options = [])
@@ -59,6 +56,19 @@ class Ptw_applications_model extends Crud_model
             $where .= " AND $apps.applicant_user_id=" . (int)$options["applicant_user_id"];
         }
 
+        if (isset($options["company_id"]) && $options["company_id"] !== "") {
+            $where .= " AND $apps.company_id=" . (int)$options["company_id"];
+        }
+
+        if (isset($options["company_ids"]) && is_array($options["company_ids"])) {
+            $company_ids = array_values(array_unique(array_filter(
+                array_map("intval", $options["company_ids"]),
+                static fn(int $company_id): bool => $company_id > 0
+            )));
+            $where .= $company_ids
+                ? " AND $apps.company_id IN (" . implode(",", $company_ids) . ")"
+                : " AND 1=0";
+        }
         if (!empty($options["search"])) {
             $search = $this->db->escapeLikeString($options["search"]);
             $where .= " AND (

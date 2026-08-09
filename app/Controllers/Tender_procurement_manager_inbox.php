@@ -11,6 +11,7 @@ use App\Models\Tender_rfq_items_model;
 use App\Models\Tender_team_members_model;
 use App\Models\Tenders_model;
 use App\Libraries\Tender_testing_stage;
+use App\Libraries\Upload_security;
 
 class Tender_procurement_manager_inbox extends Security_Controller
 {
@@ -726,7 +727,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
         $this->db->query("UPDATE $target_table SET deleted=1 WHERE tender_id=?", [$tender_id]);
         $this->db->query("UPDATE $target_vendors_table SET deleted=1 WHERE tender_id=?", [$tender_id]);
 
-        if ($mode === "specific_vendors") {
+        if (in_array($mode, ["specific_vendors", "group_and_specific_vendors"], true)) {
             foreach ($specific_vendor_ids as $vendor_id) {
                 $this->db->query(
                     "INSERT INTO $target_vendors_table (tender_id, vendor_id, created_by, created_at, deleted)
@@ -735,10 +736,12 @@ class Tender_procurement_manager_inbox extends Security_Controller
                 );
             }
 
-            return;
+            if ($mode === "specific_vendors") {
+                return;
+            }
         }
 
-        if ($mode === "group" && $vendor_group_id > 0) {
+        if (in_array($mode, ["group", "group_and_specific_vendors"], true) && $vendor_group_id > 0) {
             $this->db->query(
                 "INSERT INTO $target_table (tender_id, vendor_category_id, vendor_sub_category_id, vendor_group_id, vendor_grade_id, created_by, created_at, deleted)
                  VALUES (?, 0, NULL, ?, NULL, ?, ?, 0)",
@@ -823,13 +826,15 @@ class Tender_procurement_manager_inbox extends Security_Controller
         $vendor_group_id = (int) ($target["vendor_group_id"] ?? 0);
         $vendor_grade_id = (int) ($target["vendor_grade_id"] ?? 0);
         $specific_vendor_ids = $this->_clean_vendor_ids((array) ($target["specific_vendor_ids"] ?? []));
-        $has_explicit_target = ($mode === "group" && $vendor_group_id > 0)
-            || ($mode === "specific_vendors" && $specific_vendor_ids)
+        $has_explicit_target = (in_array($mode, ["group", "group_and_specific_vendors"], true) && $vendor_group_id > 0)
+            || (in_array($mode, ["specific_vendors", "group_and_specific_vendors"], true) && $specific_vendor_ids)
             || ($mode === "grade" && $vendor_grade_id > 0)
             || ($mode === "specialty" && $vendor_category_id > 0);
 
         if (!$has_explicit_target && $tender_type === "close" && $tender_request_id && $this->_count_request_selected_vendors($tender_request_id) > 0) {
             $this->_sync_invites_from_request($tender_id, $tender_request_id);
+        } elseif ($mode === "group_and_specific_vendors" && $vendor_group_id > 0 && $specific_vendor_ids) {
+            $this->_sync_invites_by_group_and_specific_vendors($tender_id, $vendor_group_id, $specific_vendor_ids);
         } elseif ($mode === "group" && $vendor_group_id > 0) {
             $this->_sync_invites_by_vendor_group($tender_id, $vendor_group_id);
         } elseif ($mode === "specific_vendors" && $specific_vendor_ids) {
@@ -1027,6 +1032,30 @@ class Tender_procurement_manager_inbox extends Security_Controller
         $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
     }
 
+    private function _sync_invites_by_group_and_specific_vendors(int $tender_id, int $vendor_group_id, array $vendor_ids): void
+    {
+        $vendors = $this->db->prefixTable("vendors");
+        $specific_vendor_ids = $this->_clean_vendor_ids($vendor_ids);
+        $params = [$vendor_group_id];
+        $where = "vendor_group_id=?";
+
+        if ($specific_vendor_ids) {
+            $where .= " OR id IN (" . implode(",", array_fill(0, count($specific_vendor_ids), "?")) . ")";
+            $params = array_merge($params, $specific_vendor_ids);
+        }
+
+        $rows = $this->db->query(
+            "SELECT DISTINCT id AS vendor_id
+             FROM $vendors
+             WHERE deleted=0
+               AND status='approved'
+               AND ($where)",
+            $params
+        )->getResult();
+
+        $this->_replace_invites($tender_id, $this->_vendor_ids_from_rows($rows));
+    }
+
     private function _sync_invites_from_specific_vendors(int $tender_id, array $vendor_ids): void
     {
         $vendor_ids = $this->_clean_vendor_ids($vendor_ids);
@@ -1218,8 +1247,11 @@ class Tender_procurement_manager_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
-        $full_path = getcwd() . "/" . ltrim((string) ($doc->path ?? ""), "/");
-        if (!is_file($full_path)) {
+        $full_path = (new Upload_security())->resolveStoredFile(
+            (string) ($doc->path ?? ""),
+            "tender_documents"
+        );
+        if (!$full_path) {
             show_404();
         }
 
@@ -1242,22 +1274,22 @@ class Tender_procurement_manager_inbox extends Security_Controller
 
     private function _serve_document_file($doc, string $full_path, bool $download)
     {
-        $mime = !empty($doc->mime_type ?? "")
-            ? (string) $doc->mime_type
-            : (function_exists("mime_content_type") ? mime_content_type($full_path) : "application/octet-stream");
-        $name = $doc->original_name ?: basename($full_path);
-        $inline = !$download && (
-            strpos($mime, "image/") === 0
-            || strpos($mime, "video/") === 0
-            || strpos($mime, "audio/") === 0
-            || $mime === "application/pdf"
-            || strpos($mime, "text/") === 0
-        );
+        $mime = function_exists("mime_content_type") ? mime_content_type($full_path) : "";
+        $mime = strtolower((string) ($mime ?: "application/octet-stream"));
+        $name = str_replace(["\r", "\n", '"'], "", (string) ($doc->original_name ?: basename($full_path)));
+        $inline_mimes = [
+            "application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp",
+            "video/mp4", "video/webm", "video/ogg", "audio/mpeg", "audio/ogg", "audio/wav", "text/plain",
+        ];
+        $inline = !$download && in_array($mime, $inline_mimes, true);
 
-        return $this->response
-            ->setHeader("Content-Type", $mime)
-            ->setHeader("Content-Disposition", ($inline ? "inline" : "attachment") . '; filename="' . addslashes($name) . '"')
-            ->setBody(file_get_contents($full_path));
+        $response = $this->response
+            ->download($full_path, null)
+            ->setFileName($name)
+            ->setContentType($mime, "")
+            ->setHeader("X-Content-Type-Options", "nosniff");
+
+        return $inline ? $response->inline() : $response;
     }
 
     private function _get_tender_for_manager(int $tender_id)
@@ -1386,7 +1418,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
 
         $rfq_items = $payload["rfq"]["items"] ?? null;
         if (is_array($rfq_items)) {
-            $changes[] = "<strong>RFQ Items:</strong> " . count($rfq_items) . " line item(s)";
+            $changes[] = "<strong>Tender Items:</strong> " . count($rfq_items) . " line item(s)";
         }
 
         if ($this->_has_any_team_selection((array)($payload["team_ids"] ?? []))) {

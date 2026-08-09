@@ -220,7 +220,7 @@ class Help extends Security_Controller {
 
         // save banner image
         $files_data = move_files_from_temp_dir_to_permanent_dir(get_setting("timeline_file_path"), "help_and_kb");
-        $unserialize_files_data = unserialize($files_data);
+        $unserialize_files_data = safe_unserialize($files_data);
         $banner_image = get_array_value($unserialize_files_data, 0);
 
         if ($banner_image) {
@@ -245,7 +245,7 @@ class Help extends Security_Controller {
     private function _delete_banner_image($category_id) {
         $category_info = $this->Help_categories_model->get_one($category_id);
         if ($category_info->banner_image) {
-            delete_app_files(get_setting("timeline_file_path"), unserialize($category_info->banner_image));
+            delete_app_files(get_setting("timeline_file_path"), safe_unserialize($category_info->banner_image));
         }
     }
 
@@ -333,7 +333,7 @@ class Help extends Security_Controller {
 
         $target_path = get_setting("timeline_file_path");
         $files_data = move_files_from_temp_dir_to_permanent_dir($target_path, "help");
-        $new_files = unserialize($files_data);
+        $new_files = safe_unserialize($files_data);
 
         $description = decode_ajax_post_data($this->request->getPost('description'));
 

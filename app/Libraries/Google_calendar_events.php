@@ -16,13 +16,13 @@ class Google_calendar_events {
     }
 
     //authorize connection
-    public function authorize($user_id = "") {
+    public function authorize($user_id = "", string $state = '') {
         $client = $this->_get_client_credentials();
-        $this->_check_access_token($client, $user_id, true);
+        $this->_check_access_token($client, $user_id, true, $state);
     }
 
     //check access token
-    private function _check_access_token($client, $user_id = "", $redirect_to_settings = false) {
+    private function _check_access_token($client, $user_id = "", $redirect_to_settings = false, string $state = '') {
         //load previously authorized token from database, if it exists.
         $oauth_access_token_setting_name = "user_" . $user_id . "_oauth_access_token";
         $accessToken = decode_id(get_setting($oauth_access_token_setting_name), $oauth_access_token_setting_name);
@@ -41,6 +41,10 @@ class Google_calendar_events {
                     app_redirect("events");
                 }
             } else {
+                if (!$redirect_to_settings || $state === '') {
+                    throw new \RuntimeException('Google Calendar authorization is required.');
+                }
+                $client->setState($state);
                 $authUrl = $client->createAuthUrl();
                 app_redirect($authUrl, true);
             }
@@ -59,7 +63,7 @@ class Google_calendar_events {
             return true;
         }
 
-        $calendar_ids_array = unserialize($calendar_ids);
+        $calendar_ids_array = safe_unserialize($calendar_ids);
         if (!count($calendar_ids_array)) {
             return true;
         }
@@ -312,7 +316,7 @@ class Google_calendar_events {
                     //otherwise get only his primary events
                     $calendar_ids = get_setting("user_" . $user_id . "_calendar_ids");
                     if ($calendar_ids) {
-                        $calendar_ids_array = unserialize($calendar_ids);
+                        $calendar_ids_array = safe_unserialize($calendar_ids);
                         if (count($calendar_ids_array)) {
                             foreach ($calendar_ids_array as $calendar_id) {
                                 if ($calendar_id !== $user_google_calendar_gmail) { //user's private calender id and his email is same
@@ -410,7 +414,7 @@ class Google_calendar_events {
             $share_with = "";
             $permissions = array();
             if ($user_info->permissions) {
-                $unserialize_permissions = unserialize($user_info->permissions);
+                $unserialize_permissions = safe_unserialize($user_info->permissions);
                 if (is_array($unserialize_permissions)) {
                     $permissions = $unserialize_permissions;
                 }
@@ -601,7 +605,7 @@ class Google_calendar_events {
                 return false;
             }
 
-            $calendar_ids_array = unserialize($calendar_ids);
+            $calendar_ids_array = safe_unserialize($calendar_ids);
             if (!count($calendar_ids_array)) {
                 return false;
             }

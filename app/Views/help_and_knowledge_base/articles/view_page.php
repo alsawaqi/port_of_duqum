@@ -24,7 +24,7 @@
 
                 <?php
                 if ($page_type == "articles_list_view" && $category_info->banner_image) {
-                    $banner_image = unserialize($category_info->banner_image);
+                    $banner_image = safe_unserialize($category_info->banner_image);
                     $banner = "<div class='rounded-top-2 overflow-hidden'>";
 
                     if ($category_info->banner_url) {

@@ -2498,7 +2498,7 @@ class Projects extends Security_Controller {
 
             //delete the files
             $file_path = get_setting("timeline_file_path");
-            $files = unserialize($comment_info->files);
+            $files = safe_unserialize($comment_info->files);
 
             foreach ($files as $file) {
                 delete_app_files($file_path, array($file));
