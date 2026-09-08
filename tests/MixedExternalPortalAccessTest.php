@@ -6,6 +6,8 @@ $signin = file_get_contents($root . "/app/Controllers/Signin.php");
 $security = file_get_contents($root . "/app/Controllers/Security_Controller.php");
 $menu = file_get_contents($root . "/app/Libraries/Left_menu.php");
 $topbar = file_get_contents($root . "/app/Views/includes/topbar.php");
+$generalHelper = file_get_contents($root . "/app/Helpers/general_helper.php");
+$widgetHelper = file_get_contents($root . "/app/Helpers/widget_helper.php");
 
 $fail = static function (string $message): void {
     fwrite(STDERR, "Assertion failed: {$message}" . PHP_EOL);
@@ -41,7 +43,15 @@ $contains('app_redirect("forbidden")', $security, 'an external identity with no 
 $contains('$hasActiveVendorPortalAccess', $menu, 'the reduced menu uses current vendor access');
 $contains('$hasActiveGatePassPortalAccess', $menu, 'the reduced menu uses current Gate Pass access');
 $contains('$hasActivePtwPortalAccess', $menu, 'the reduced menu uses current PTW access');
+if (!preg_match('/return view\("includes\/left_menu",\s*\[\s*"sidebar_menu"\s*=>\s*\$this->_get_active_menu\(\$sidebar_menu\),\s*"login_user"\s*=>\s*\$this->ci->login_user,\s*\]\);/s', $menu)) {
+    $fail('the reduced external menu must pass login_user to the shared left-menu view');
+}
 $contains('$has_active_vendor_portal_access', $topbar, 'topbar portal links use current access rather than historical identity alone');
 $contains('"portal_account/change_password"', $topbar, 'non-vendor external identities receive the shared password route');
+$contains('function can_access_reminders_module()', $generalHelper, 'shared topbar reminder access is controlled centrally');
+$contains('$ci = new Security_Controller(false);', $generalHelper, 'topbar helpers must not redirect external portal identities during layout rendering');
+$contains('return false;', $generalHelper, 'external portal users are denied internal chat/reminder helpers without redirecting');
+$contains('function reminders_widget($return_reminders_only = false)', $widgetHelper, 'reminder widgets are guarded for external portal layouts');
+$contains('return $return_reminders_only ? [] : null;', $widgetHelper, 'external portal reminder widgets fail closed without redirecting');
 
 echo "Mixed external portal access contracts passed." . PHP_EOL;

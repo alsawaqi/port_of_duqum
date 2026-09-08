@@ -4,6 +4,8 @@ namespace App\Models;
 
 class Tender_bids_model extends Crud_model
 {
+    use \App\Libraries\Sms\QueuesWorkflowSms;
+
     protected $table = null;
 
     public function __construct()

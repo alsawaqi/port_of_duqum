@@ -19,7 +19,7 @@ class Guest_gate_pass extends App_Controller
         // ✅ Public page (no login required)
         // Use the public layout (no sidebar) like Guest_vendor/Request_estimate.
         $view_data = [];
-        $view_data["topbar"] = "includes/public/topbar";
+        $view_data["topbar"] = "includes/public/registration_topbar";
         $view_data["left_menu"] = false;
         $view_data["intl_dial_codes"] = require APPPATH . "Config/intl_phone_dial_codes.php";
         return $this->template->rander("guest_gate_pass/index", $view_data);

@@ -1,5 +1,7 @@
 # The application is installed directly below Apache's document root.
 # Deny configuration, source, test, and database artifacts before routing.
+
+
 Options -Indexes
 LimitRequestBody 67108864
 

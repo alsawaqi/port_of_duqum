@@ -18,6 +18,19 @@ class Security_Controller extends App_Controller {
 
     protected $permission_manager;
 
+    protected function can_payment_accounting(string $module, string $action = 'view'): bool
+    {
+        return \App\Libraries\Payments\Payment_accounting_policy::allows($this->login_user, $module, $action);
+    }
+
+    protected function access_only_payment_accounting(string $module, string $action = 'view'): void
+    {
+        if (!$this->can_payment_accounting($module, $action)) {
+            app_redirect('forbidden');
+            exit;
+        }
+    }
+
     public function __construct($redirect = true) {
         parent::__construct();
 
@@ -79,8 +92,27 @@ class Security_Controller extends App_Controller {
             $this->_confine_vendor_only_identity(true);
             $this->_confine_gate_pass_only_identity(true);
             $this->_confine_ptw_applicant_only_identity(true);
+            $this->_confine_accounting_only_identity();
         }
         $this->permission_manager = new Permission_manager($this);
+    }
+
+    private function _confine_accounting_only_identity(): void
+    {
+        $policy = \App\Libraries\Payments\Payment_accounting_policy::class;
+        if (!$policy::isAccountingOnly($this->login_user)) {
+            return;
+        }
+        $controller = strtolower((new \ReflectionClass($this))->getShortName());
+        $method = strtolower(service('router')->methodName());
+        if ($controller === 'dashboard' && in_array($method, ['index', 'view'], true)) {
+            app_redirect($policy::home($this->login_user));
+            exit;
+        }
+        if (!$policy::accountingRouteAllowed($controller, $method)) {
+            app_redirect('forbidden');
+            exit;
+        }
     }
 
     /**

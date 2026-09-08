@@ -21,8 +21,11 @@ use CodeIgniter\Commands\Utilities\Routes\FilterCollector;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\AutoRouterImproved\AutoRouteCollectorTest
  */
-final readonly class AutoRouteCollector
+final class AutoRouteCollector
 {
+    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
+    use \CodeIgniter\Compatibility\NoDynamicProperties;
+
     /**
      * @param string             $namespace            namespace to search
      * @param list<class-string> $protectedControllers List of controllers in Defined
@@ -31,12 +34,12 @@ final readonly class AutoRouteCollector
      * @param string             $prefix               URI prefix for Module Routing
      */
     public function __construct(
-        private string $namespace,
-        private string $defaultController,
-        private string $defaultMethod,
-        private array $httpMethods,
-        private array $protectedControllers,
-        private string $prefix = '',
+        private readonly string $namespace,
+        private readonly string $defaultController,
+        private readonly string $defaultMethod,
+        private readonly array $httpMethods,
+        private readonly array $protectedControllers,
+        private readonly string $prefix = '',
     ) {
     }
 

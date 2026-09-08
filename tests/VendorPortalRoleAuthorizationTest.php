@@ -24,6 +24,10 @@ $membership = static function (string $code, int $owner = 0, string $status = 'a
 $auth = new Vendor_portal_authorizer();
 $assert($auth->can($membership('VIEWER'), Vendor_portal_authorizer::PROFILE_VIEW), 'viewer can view its selected CR');
 $assert(!$auth->can($membership('VIEWER'), Vendor_portal_authorizer::PROFILE_EDIT), 'viewer cannot edit CR data');
+$assert($auth->can($membership(''), Vendor_portal_authorizer::PROFILE_VIEW), 'missing role code falls back to least-privilege selected-CR view');
+$assert(!$auth->can($membership(''), Vendor_portal_authorizer::PROFILE_EDIT), 'missing role code fallback cannot edit CR data');
+$assert(!$auth->can($membership(''), Vendor_portal_authorizer::CONTACTS_MANAGE), 'missing role code fallback cannot manage contacts');
+$assert($auth->can($membership('VIEWER', 0, 'Active '), Vendor_portal_authorizer::PROFILE_VIEW), 'membership status is normalized before authorization');
 $assert(!$auth->can($membership('CONTACT'), Vendor_portal_authorizer::TENDER_PARTICIPATE), 'legacy contact is fail-safe read-only');
 $assert($auth->can($membership('BIDDER'), Vendor_portal_authorizer::TENDER_PARTICIPATE), 'bidder can participate');
 $assert(!$auth->can($membership('BIDDER'), Vendor_portal_authorizer::PROFILE_EDIT), 'bidder cannot edit CR data');

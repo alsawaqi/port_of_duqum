@@ -306,6 +306,7 @@
                     </div>
                 </div>
 
+                <?php if (!empty($can_edit_profile)) { ?>
                 <div class="vbz-add-btn">
                     <?php echo modal_anchor(
                         get_uri("vendor_portal/branch_modal_form"),
@@ -313,6 +314,7 @@
                         ["class" => "btn btn-default", "title" => app_lang('add_branch')]
                     ); ?>
                 </div>
+                <?php } ?>
             </div>
 
             <div class="vbz-toolbar">

@@ -12,9 +12,9 @@ class UploadSecurityException extends \RuntimeException
  * Central, fail-safe validation and storage for untrusted uploads.
  *
  * Malware scanners can register app_filter_secure_upload_malware_scan and
- * return ["configured" => true, "clean" => true|false]. Production rejects
- * uploads when no scanner is configured unless
- * UPLOAD_MALWARE_SCAN_FAIL_CLOSED is explicitly set to false.
+ * return ["configured" => true, "clean" => true|false]. The application keeps
+ * the scanner as an integration hook by default, and can be configured to fail
+ * closed by setting UPLOAD_MALWARE_SCAN_FAIL_CLOSED=true once a scanner exists.
  */
 class Upload_security
 {
@@ -592,6 +592,6 @@ class Upload_security
         if ($configured !== false && $configured !== "") {
             return filter_var($configured, FILTER_VALIDATE_BOOL);
         }
-        return defined("ENVIRONMENT") && ENVIRONMENT === "production";
+        return false;
     }
 }

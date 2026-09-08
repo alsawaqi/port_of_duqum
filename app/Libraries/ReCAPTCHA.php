@@ -7,6 +7,8 @@ class ReCAPTCHA {
 
     private $re_captcha_secret_key;
     private $re_captcha_protocol;
+    private $re_captcha_enabled;
+    private $re_captcha_required;
 
     public function __construct() {
         $this->re_captcha_secret_key = trim((string) (
@@ -15,11 +17,17 @@ class ReCAPTCHA {
         $this->re_captcha_protocol = strtolower(trim((string) (
             getenv("PODC_RECAPTCHA_PROTOCOL") ?: get_setting("re_captcha_protocol") ?: "v2"
         )));
+        $this->re_captcha_enabled = $this->_env_bool("PODC_RECAPTCHA_ENABLED");
+        $this->re_captcha_required = $this->_env_bool("PODC_RECAPTCHA_REQUIRED") === true;
     }
 
     public function validate_recaptcha($show_error = true) {
+        if ($this->re_captcha_enabled === false) {
+            return true;
+        }
+
         if (!$this->re_captcha_secret_key) {
-            if (defined("ENVIRONMENT") && ENVIRONMENT === "production") {
+            if ($this->re_captcha_required) {
                 $message = "Human verification is temporarily unavailable.";
                 if ($show_error) {
                     echo json_encode(["success" => false, "message" => $message]);
@@ -148,5 +156,14 @@ class ReCAPTCHA {
             $expected = strtolower(rtrim((string)\Config\Services::request()->getUri()->getHost(), "."));
         }
         return $actual !== "" && $expected !== "" && hash_equals($expected, $actual);
+    }
+
+    private function _env_bool(string $name): ?bool {
+        $value = getenv($name);
+        if ($value === false || trim((string)$value) === "") {
+            return null;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 }

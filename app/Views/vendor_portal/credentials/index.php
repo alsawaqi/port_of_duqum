@@ -306,6 +306,7 @@
                     </div>
                 </div>
 
+                <?php if (!empty($can_edit_profile)) { ?>
                 <div class="vcr-add-btn">
                     <?php
                     echo modal_anchor(
@@ -315,6 +316,7 @@
                     );
                     ?>
                 </div>
+                <?php } ?>
             </div>
 
             <div class="vcr-toolbar">

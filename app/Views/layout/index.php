@@ -8,6 +8,8 @@ helper('cookie');
 $left_menu_minimized = get_cookie("left_menu_minimized");
 
 $dynamic_class = "public-view";
+$is_accounting_only_identity = isset($login_user)
+    && \App\Libraries\Payments\Payment_accounting_policy::isAccountingOnly($login_user);
 if (isset($login_user)) {
     if (isset($login_user->is_admin) && $login_user->is_admin) {
         $dynamic_class = "admin-view";
@@ -38,7 +40,9 @@ $dynamic_class .= " " . strtolower(get_actual_controller_name($router)) . "-page
     $scrollable_page_class = "scrollable-page main-scrollable-page";
 
     if ($left_menu) {
-        echo view('messages/chat/index.php');
+        if (!$is_accounting_only_identity) {
+            echo view('messages/chat/index.php');
+        }
     } else {
         //don't have left menu. So it's a public page. 
         $page_container_class .= " public-page-container";
@@ -106,13 +110,13 @@ $dynamic_class .= " " . strtolower(get_actual_controller_name($router)) . "-page
             <a class="menu-item sidebar-toggle-btn" aria-current="page" href="#">
                 <i data-feather="menu" class="icon"></i>
             </a>
-            <?php if (get_setting("module_todo")) { ?>
+            <?php if (!$is_accounting_only_identity && get_setting("module_todo")) { ?>
                 <a class="menu-item todo-btn" href="<?php echo_uri('todo'); ?>">
                     <i data-feather="check-circle" class="icon"></i>
                 </a>
             <?php } ?>
             <div id="mobile-function-button" class=""></div>
-            <?php if (get_setting("module_chat")) { ?>
+            <?php if (!$is_accounting_only_identity && get_setting("module_chat")) { ?>
                 <div id="mobile-chat-menu-button" class="menu-item"></div>
             <?php } ?>
             <div id="mobile-quick-add-button" class="menu-item dropdown"></div>

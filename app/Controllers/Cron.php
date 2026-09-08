@@ -38,6 +38,7 @@ class Cron extends App_Controller {
             // only from this authenticated scheduler, never from page reads.
             (new Tenders_model())->auto_progress_workflow(true);
             (new Tender_bid_openings_model())->expire_old_sessions();
+            (new \App\Libraries\Sms\WorkflowSmsOutbox())->process(20);
             app_hooks()->do_action("app_hook_after_cron_run");
             $this->Settings_model->save_setting("last_cron_job_time", $current_time);
             echo "Cron job executed.";

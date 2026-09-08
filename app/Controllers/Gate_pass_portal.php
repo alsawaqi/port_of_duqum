@@ -1516,7 +1516,7 @@ HTML;
         echo json_encode(["success" => true, "message" => app_lang("record_saved"), "id" => $request_id]);
     }
 
-    /** Begin a fail-closed hosted checkout; only the signed webhook settles it. */
+    /** Begin hosted checkout; only an independently verified bank result settles it. */
     function save_payment()
     {
         $this->validate_submitted_data([
@@ -1551,8 +1551,14 @@ HTML;
             return;
         }
 
+        $db = db_connect();
+        if ((new \App\Libraries\Payments\Eservice_payment_state($db))->latestPaid('gate_pass_fee', $request_id, null)) {
+            return $this->response->setStatusCode(409)->setJSON(['success' => false,
+                'message' => 'A verified payment already exists for this request. Please contact Accounting before paying again.']);
+        }
+
         $return_url = get_uri("gate_pass_portal/request_details/" . $request_id);
-        $payments = new Eservice_payment_manager($this->db);
+        $payments = new Eservice_payment_manager($db);
         $result = $payments->start(
             Eservice_payment_manager::GATE_PASS_FEE,
             $request_id,
@@ -1560,8 +1566,9 @@ HTML;
             (int)$this->login_user->id,
             (string)$request->fee_amount,
             "Gate pass fee " . ((string)($request->reference ?? "#" . $request_id)),
-            $return_url . "?payment=processing&session_id={CHECKOUT_SESSION_ID}",
-            $return_url . "?payment=cancelled"
+            $return_url,
+            $return_url,
+            ['currency' => strtoupper((string) ($request->currency ?? 'OMR'))]
         );
         $status_code = (int)($result["status_code"] ?? 500);
         unset($result["status_code"]);

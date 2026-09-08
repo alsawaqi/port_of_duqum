@@ -7,6 +7,8 @@ use CodeIgniter\I18n\Time;
 
 class Tenders_model extends Crud_model
 {
+    use \App\Libraries\Sms\QueuesWorkflowSms;
+
     protected $table = null;
     private static bool $procurement_manager_change_schema_checked = false;
     private static bool $specific_vendor_target_schema_checked = false;
@@ -274,6 +276,15 @@ class Tenders_model extends Crud_model
         // or a manually signed opening form is uploaded.
 
         // 4) Any bid still left as submitted after the technical deadline is auto-rejected.
+        $smsExpiredBids = [];
+        if (get_setting('sms_notifications_enabled') && get_setting('sms_tender_enabled')) {
+            $smsExpiredBids = $this->db->query(
+                "SELECT $tb.* FROM $tb INNER JOIN $t ON $t.id=$tb.tender_id
+                 WHERE $tb.deleted=0 AND $tb.status='submitted' AND $t.deleted=0
+                 AND $t.status='closed' AND $t.workflow_stage='technical'
+                 AND $t.technical_end_at IS NOT NULL AND $t.technical_end_at <= ? FOR UPDATE", [$now]
+            )->getResultArray();
+        }
         $this->db->query(
             "UPDATE $tb
              INNER JOIN $t ON $t.id = $tb.tender_id
@@ -291,6 +302,11 @@ class Tenders_model extends Crud_model
         $affected += max(0, (int) $this->db->affectedRows());
 
         // 5) Once technical review is complete or deadline is reached, move directly to commercial evaluation.
+        foreach ($smsExpiredBids as $smsBid) {
+            (new \App\Libraries\Sms\WorkflowSmsOutbox($this->db))->capture(
+                'tender_bids', $smsBid, array_replace($smsBid, ['status' => 'rejected'])
+            );
+        }
         $commercialSql = "SELECT id, status, workflow_stage
                           FROM $t
                           WHERE deleted = 0
@@ -317,12 +333,12 @@ class Tenders_model extends Crud_model
         $this->db->query(
             "UPDATE $t
              SET workflow_stage = 'commercial',
-                 technical_locked_at = IFNULL(technical_locked_at, IFNULL(technical_end_at, ?)),
-                 commercial_unlocked_at = IFNULL(commercial_unlocked_at, IFNULL(technical_end_at, ?)),
-                 commercial_start_at = IFNULL(commercial_start_at, IFNULL(technical_end_at, ?)),
+                 technical_locked_at = IFNULL(technical_locked_at, LEAST(IFNULL(technical_end_at, ?), ?)),
+                 commercial_unlocked_at = IFNULL(commercial_unlocked_at, LEAST(IFNULL(technical_end_at, ?), ?)),
+                 commercial_start_at = IFNULL(commercial_start_at, LEAST(IFNULL(technical_end_at, ?), ?)),
                  commercial_end_at = IFNULL(
                     commercial_end_at,
-                    IFNULL(commercial_eval_deadline, DATE_ADD(IFNULL(commercial_start_at, IFNULL(technical_end_at, ?)), INTERVAL {$commercialDays} DAY))
+                    IFNULL(commercial_eval_deadline, DATE_ADD(IFNULL(commercial_start_at, LEAST(IFNULL(technical_end_at, ?), ?)), INTERVAL {$commercialDays} DAY))
                  ),
                  updated_at = ?
              WHERE deleted = 0
@@ -338,7 +354,7 @@ class Tenders_model extends Crud_model
                           AND pending_bids.status = 'submitted'
                     )
                )",
-            [$now, $now, $now, $now, $now, $now]
+            [$now, $now, $now, $now, $now, $now, $now, $now, $now, $now]
         );
         $affected += max(0, (int) $this->db->affectedRows());
 

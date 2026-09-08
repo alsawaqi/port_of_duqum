@@ -4,6 +4,7 @@
     $is_vendor_only_identity = !empty($login_user->is_vendor_only_identity);
     $is_gate_pass_only_identity = !empty($login_user->is_gate_pass_only_identity);
     $is_ptw_applicant_only_identity = !empty($login_user->is_ptw_applicant_only_identity);
+    $is_accounting_only_identity = \App\Libraries\Payments\Payment_accounting_policy::isAccountingOnly($login_user);
     $is_external_portal_only_identity = $is_vendor_only_identity
         || $is_gate_pass_only_identity
         || $is_ptw_applicant_only_identity;
@@ -15,10 +16,12 @@
         : ($has_active_gate_pass_portal_access
             ? "gate_pass_portal"
             : ($has_active_ptw_portal_access ? "ptw_portal" : "portal_account/change_password"));
-    $dashboard_link = get_uri($is_external_portal_only_identity ? $portal_home : "dashboard");
+    $dashboard_link = get_uri($is_accounting_only_identity
+        ? \App\Libraries\Payments\Payment_accounting_policy::home($login_user)
+        : ($is_external_portal_only_identity ? $portal_home : "dashboard"));
     $app_title = get_setting("app_title") ? get_setting("app_title") : "Port of Duqm";
     $user_dashboard = get_setting("user_" . $user . "_dashboard");
-    if ($user_dashboard && !$is_external_portal_only_identity) {
+    if ($user_dashboard && !$is_external_portal_only_identity && !$is_accounting_only_identity) {
         $dashboard_link = get_uri("dashboard/view/" . $user_dashboard);
     }
     ?>

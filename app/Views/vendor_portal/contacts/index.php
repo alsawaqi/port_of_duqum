@@ -316,7 +316,7 @@
                          </div>
                          <div>
                              <h4><?php echo app_lang("contacts"); ?></h4>
-                             <p class="vp-header-sub">Approved contacts receive full portal access for this vendor CR.</p>
+                             <p class="vp-header-sub">Approved contacts can access this vendor CR according to their assigned role.</p>
                          </div>
                      </div>
                  </div>

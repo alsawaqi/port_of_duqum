@@ -21,6 +21,7 @@ class Rise extends BaseConfig {
         "paytm_redirect", "paytm_redirect/index", "paytm_redirect.*+",
         "stripe_redirect", "stripe_redirect/index",
         "eservice_payment_webhook/stripe",
+        "eservice_payment/return_from_bank",
         "pay_invoice", "pay_invoice/*",
         "webhooks_listener.*+",
         "external_tickets.*+",

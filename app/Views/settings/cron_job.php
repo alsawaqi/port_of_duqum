@@ -52,20 +52,23 @@
                         <div class="row">
                             <label for="recommended_execution_intervals" class=" col-md-2"><?php echo app_lang('recommended_execution_interval'); ?></label>
                             <div class=" col-md-10">
-                                Every 10 minutes
+                                Every 5 minutes for general application jobs; every minute for workflow SMS.
                             </div>
                         </div>
                     </div>
                     <div class="form-group clearfix">
                         <div class="row">
-                            <label class=" col-md-2">cPanel Cron Job Command *</label>
+                            <label class=" col-md-2">Hosting scheduler commands</label>
                             <div class=" col-md-10">
                                 <div>
-                                    <?php echo "<pre>wget -q -O- " . get_uri("cron") . "</pre>"; ?>
+                                    <p>General application jobs require an authenticated POST. Ask your hosting administrator to create a private curl configuration file at the path below, with the request URL, POST method, and the <code>X-PODC-Cron-Key</code> header matching <code>PODC_CRON_KEY</code> in the production environment.</p>
+                                    <pre><?php echo esc('/usr/bin/curl --config ' . escapeshellarg(WRITEPATH . 'cron-http.conf')); ?></pre>
+                                    <p>Run workflow SMS every minute using the hosting account's PHP command. Replace the PHP path if your host uses a different location.</p>
+                                    <pre><?php echo esc('cd ' . escapeshellarg(ROOTPATH) . ' && /opt/cpanel/ea-php81/root/usr/bin/php spark sms:process'); ?></pre>
                                 </div>
 
                                 <div class="">
-                                    <?php echo anchor(get_uri("cron"), app_lang("trigger_manually"), array("target" => "_blank", "class" => "btn btn-default mt15")); ?>
+                                    <p class="text-muted">Opening the cron URL in a browser does not run jobs. Keep the cron configuration file private, set its permissions to 600, and write scheduler errors to a protected log. The last-run indicator above confirms when general jobs have executed.</p>
                                 </div>
                             </div>
                         </div>

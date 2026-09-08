@@ -1,5 +1,6 @@
 <?php
 $user = $login_user->id;
+$is_accounting_only = \App\Libraries\Payments\Payment_accounting_policy::isAccountingOnly($login_user);
 $is_vendor_only_identity = !empty($login_user->is_vendor_only_identity);
 $is_gate_pass_only_identity = !empty($login_user->is_gate_pass_only_identity);
 $is_ptw_applicant_only_identity = !empty($login_user->is_ptw_applicant_only_identity);
@@ -29,9 +30,9 @@ $external_portal_home = $has_active_vendor_portal_access
                 <li class="nav-item d-block d-sm-none">
                     <?php
                     $user = $login_user->id;
-                    $dashboard_link = get_uri($is_external_portal_only_identity ? $external_portal_home : "dashboard");
+                    $dashboard_link = get_uri($is_accounting_only ? \App\Libraries\Payments\Payment_accounting_policy::home($login_user) : ($is_external_portal_only_identity ? $external_portal_home : "dashboard"));
                     $user_dashboard = get_setting("user_" . $user . "_dashboard");
-                    if ($user_dashboard && !$is_external_portal_only_identity) {
+                    if ($user_dashboard && !$is_external_portal_only_identity && !$is_accounting_only) {
                         $dashboard_link = get_uri("dashboard/view/" . $user_dashboard);
                     }
                     ?>
@@ -135,7 +136,7 @@ $external_portal_home = $has_active_vendor_portal_access
 
                     <?php } ?>
 
-                    <?php if (can_access_reminders_module()) { ?>
+                    <?php if (!$is_accounting_only && can_access_reminders_module()) { ?>
                         <li class="nav-item dropdown">
                             <?php
 
@@ -151,6 +152,7 @@ $external_portal_home = $has_active_vendor_portal_access
                         ?>
                     <?php } ?>
 
+                    <?php if (!$is_accounting_only) { ?>
                     <li class="nav-item dropdown pod-notification-item">
                         <?php
 
@@ -187,7 +189,8 @@ $external_portal_home = $has_active_vendor_portal_access
                         </div>
                     </li>
 
-                    <!-- <?php if (get_setting("module_message") && can_access_messages_module()) { ?>
+                    <?php } ?>
+                    <!-- <?php if (!$is_accounting_only && get_setting("module_message") && can_access_messages_module()) { ?>
                         <li class="nav-item dropdown hidden-sm <?php echo ($login_user->user_type === "client" && !get_setting("client_message_users")) ? "hide" : ""; ?>">
                             <?php echo js_anchor("<i data-feather='mail' class='icon'></i><span class='notification-badge-container'></span>", array(
                                     "id" => "message-notification-icon",
@@ -226,7 +229,9 @@ $external_portal_home = $has_active_vendor_portal_access
                                 <span class="pod-user-menu-name"><?php echo esc($login_user->first_name . " " . $login_user->last_name); ?></span>
                                 <span class="pod-user-menu-email"><?php echo esc($login_user->email); ?></span>
                             </li>
-                            <?php if ($is_external_portal_only_identity) { ?>
+                            <?php if ($is_accounting_only) { ?>
+                                <li><a href="<?php echo get_uri('portal_account/change_password'); ?>" class="dropdown-item"><i data-feather="key" class="icon-16 me-2"></i><?php echo app_lang('change_password'); ?></a></li>
+                            <?php } else if ($is_external_portal_only_identity) { ?>
                                 <?php if ($has_active_vendor_portal_access) { ?>
                                     <li><a href="<?php echo get_uri("vendor_portal"); ?>" class="dropdown-item"><i data-feather="briefcase" class="icon-16 me-2"></i>Vendor Portal</a></li>
                                 <?php } ?>
@@ -252,7 +257,7 @@ $external_portal_home = $has_active_vendor_portal_access
                                 <li><?php echo get_team_member_profile_link($login_user->id . '/my_preferences', "<i data-feather='settings' class='icon-16 me-2'></i>" . app_lang('my_preferences'), array("class" => "dropdown-item")); ?></li>
                             <?php } ?>
 
-                            <?php if (get_setting("show_theme_color_changer") === "yes") { ?>
+                            <?php if (!$is_accounting_only && get_setting("show_theme_color_changer") === "yes") { ?>
 
                                 <li class="dropdown-divider"></li>
                                 <li class="pl10 ms-2 mt10 theme-changer">
@@ -262,7 +267,13 @@ $external_portal_home = $has_active_vendor_portal_access
                             <?php } ?>
 
                             <li class="dropdown-divider"></li>
-                            <li><a href="<?php echo_uri('signin/sign_out'); ?>" class="dropdown-item pod-signout-link"><i data-feather="log-out" class='icon-16 me-2'></i> <?php echo app_lang('sign_out'); ?></a></li>
+                            <li>
+                                <?php echo form_open("signin/sign_out", ["class" => "m-0"]); ?>
+                                    <button type="submit" class="dropdown-item pod-signout-link">
+                                        <i data-feather="log-out" class='icon-16 me-2'></i> <?php echo app_lang('sign_out'); ?>
+                                    </button>
+                                <?php echo form_close(); ?>
+                            </li>
                         </ul>
                     </li>
                 </ul>

@@ -138,6 +138,8 @@ class Roles extends Security_Controller {
             $view_data['can_comment_on_projects'] = get_array_value($permissions, "can_comment_on_projects");
 
             $view_data['permissions'] = $permissions;
+            $view_data['accounting_companies'] = db_connect()->table('companies')
+                ->select('id, name')->where('deleted', 0)->where('is_active', 1)->orderBy('name', 'ASC')->get()->getResult();
 
             $view_data['can_view_pod_reports'] = get_array_value($permissions, "can_view_pod_reports");
 
@@ -747,6 +749,52 @@ foreach ($ptw_sections as $section) {
         );
         $permissions = array_merge($permissions, $tender_permissions);
         $permissions = array_merge($permissions, $gate_pass_permissions);
+
+        // Accounting is read-only except for a bank status recheck. Viewing
+        // records does not implicitly grant response access, export or recheck.
+        foreach (\App\Libraries\Payments\Payment_accounting_policy::MODULES as $module => $_types) {
+            foreach (\App\Libraries\Payments\Payment_accounting_policy::ACTIONS as $action) {
+                $key = 'can_' . $action . '_' . $module . '_accounting';
+                $permissions[$key] = $this->request->getPost($key) === '1' ? '1' : '0';
+            }
+        }
+
+        // Accounting company access is independent of operational inbox assignments.
+        // An explicit empty selection must never fall back to those assignments.
+        $saved_role = $this->Roles_model->get_one($id);
+        $saved_permissions = $saved_role->permissions ? safe_unserialize($saved_role->permissions) : [];
+        $saved_permissions = is_array($saved_permissions) ? $saved_permissions : [];
+        $permissions['accounting_only'] = $this->request->getPost('accounting_only') === '1' ? '1' : '0';
+        foreach (\App\Libraries\Payments\Payment_accounting_policy::COMPANY_MODULES as $module) {
+            $key = $module . '_accounting_company_ids';
+            $mode = $this->request->getPost($module . '_accounting_scope_mode');
+            if ($mode === null) {
+                if (array_key_exists($key, $saved_permissions)) {
+                    $permissions[$key] = \App\Libraries\Payments\Payment_accounting_policy::companyIds((object) ['permissions' => $saved_permissions], $module);
+                }
+                continue;
+            }
+            if ($mode === 'legacy' && $module !== 'ptw') {
+                continue;
+            }
+            try {
+                if ($mode !== 'selected') {
+                    throw new \InvalidArgumentException('Invalid accounting scope mode.');
+                }
+                $company_ids = \App\Libraries\Payments\Payment_accounting_policy::normalizeCompanyIds($this->request->getPost($key) ?? []);
+                if ($company_ids) {
+                    $active_count = db_connect()->table('companies')->where('deleted', 0)->where('is_active', 1)
+                        ->whereIn('id', $company_ids)->countAllResults();
+                    if ((int) $active_count !== count($company_ids)) {
+                        throw new \InvalidArgumentException('Invalid accounting company selection.');
+                    }
+                }
+                $permissions[$key] = $company_ids;
+            } catch (\InvalidArgumentException $exception) {
+                return $this->response->setStatusCode(422)->setJSON(['success' => false,
+                    'message' => app_lang('payment_accounting_invalid_companies')]);
+            }
+        }
 
         // PTW Master (granular)
         $permissions = array_merge($permissions, $ptw_permissions);

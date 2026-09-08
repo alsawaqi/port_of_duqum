@@ -37,7 +37,8 @@ class SafeHttpMethods implements FilterInterface
 
     public function before(RequestInterface $request, $arguments = null)
     {
-        $action = strtolower((string) $request->getUri()->getSegment(2));
+        $segments = $request->getUri()->getSegments();
+        $action = strtolower((string) ($segments[1] ?? ''));
         if ($action !== '' && str_starts_with($action, '_')) {
             return Services::response()
                 ->setStatusCode(404)

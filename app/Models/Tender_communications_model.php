@@ -6,6 +6,8 @@ use App\Libraries\Runtime_schema_guard;
 
 class Tender_communications_model extends Crud_model
 {
+    use \App\Libraries\Sms\QueuesWorkflowSms;
+
     protected $table = null;
     private static bool $clarification_scope_attachment_schema_checked = false;
 

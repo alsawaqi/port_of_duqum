@@ -16,6 +16,10 @@ final class MfaProviderFactory
             return new EmailMfaProvider();
         }
 
+        if ($provider === 'ismartsms') {
+            return new IsmartSmsMfaProvider();
+        }
+
         if ($provider === 'ibulk') {
             $config = $config ?? config('AuthSecurity');
             return new IBulkSmsMfaProvider([

@@ -83,6 +83,35 @@ class Signin extends App_Controller {
                 && empty($redirectParts["user"])
                 && empty($redirectParts["pass"])
                 && !preg_match('/[\r\n]/', (string) $redirect)) {
+                $redirectPath = strtolower(trim((string) ($redirectParts["path"] ?? ""), "/"));
+                $basePath = strtolower(trim((string) ($baseParts["path"] ?? ""), "/"));
+                if ($basePath !== "" && str_starts_with($redirectPath, $basePath . "/")) {
+                    $redirectPath = substr($redirectPath, strlen($basePath) + 1);
+                }
+                $redirectPath = preg_replace('#^index\.php/?#', '', $redirectPath) ?: "";
+
+                if (in_array($redirectPath, ["", "signin", "forbidden"], true)) {
+                    return get_uri($vendor_login ? "vendor_portal" : "dashboard");
+                }
+
+                if ($vendor_login) {
+                    $allowedVendorRedirects = [
+                        "vendor_portal",
+                        "portal_account",
+                        "notifications",
+                    ];
+                    $isAllowedVendorRedirect = false;
+                    foreach ($allowedVendorRedirects as $allowedPath) {
+                        if ($redirectPath === $allowedPath || str_starts_with($redirectPath, $allowedPath . "/")) {
+                            $isAllowedVendorRedirect = true;
+                            break;
+                        }
+                    }
+                    if (!$isAllowedVendorRedirect) {
+                        return get_uri("vendor_portal");
+                    }
+                }
+
                 return $redirect;
             }
         }
@@ -134,8 +163,8 @@ class Signin extends App_Controller {
             $this->signin_validation_errors = $validation;
         }
 
-        // Development may run without provider keys; production fails closed
-        // inside ReCAPTCHA when the provider is missing or unreachable.
+        // ReCAPTCHA is optional until provider keys are configured. It can be
+        // forced fail-closed with PODC_RECAPTCHA_REQUIRED=true.
         $this->has_recaptcha_error();
 
         //don't check password if there is any error
@@ -262,6 +291,14 @@ class Signin extends App_Controller {
 
         $config = $this->Auth_security_model->config();
         $provider = $this->Auth_security_model->mfa_provider($user_info);
+        // Correct passwords must not reset the independent OTP delivery limit.
+        $otpLimiter = service('throttler');
+        $otpKey = 'signin_otp_user_' . (int) $user_info->id;
+        if (!$otpLimiter->check($otpKey . '_minute', 1, 60)
+            || !$otpLimiter->check($otpKey . '_window', 5, 900)) {
+            $this->response->setStatusCode(429)->setHeader('Retry-After', '60');
+            return $this->signin_error_response('Please wait before requesting another sign-in code.');
+        }
         $destination = $this->Auth_security_model->mfa_destination($user_info, $provider);
         $destinationHint = $this->Auth_security_model->mfa_destination_hint($user_info, $provider);
         $challenge = null;

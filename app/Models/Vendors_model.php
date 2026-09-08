@@ -4,6 +4,8 @@ namespace App\Models;
 
 class Vendors_model extends Crud_model
 {
+    use \App\Libraries\Sms\QueuesWorkflowSms;
+
     protected $table = null;
 
     function __construct()

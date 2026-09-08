@@ -112,7 +112,9 @@
         <div class="form-group">
             <div class="row">
                 <label class="col-md-3"><?php echo app_lang("mobile"); ?></label>
-                <div class="col-md-9"><?php echo form_input(array("name" => "mobile", "value" => $model_info->mobile, "class" => "form-control")); ?></div>
+                <div class="col-md-9"><?php echo form_input(array("name" => "mobile", "value" => $model_info->mobile, "class" => "form-control", "type" => "tel", "maxlength" => 30)); ?>
+                    <small class="text-muted"><?php echo app_lang('vendor_contact_login_mobile_help'); ?></small>
+                </div>
             </div>
         </div>
 

@@ -1,0 +1,71 @@
+{
+  "base_framework": "4.7.4",
+  "project_patch": "pod-php81-20260908",
+  "minimum_php": "8.1.34",
+  "files": {
+    "system/Cache/FactoriesCache.php": {
+      "bytes": 1668,
+      "sha256": "8a6155184408097dc7b952be5ab4517f74796c97df424837aef81d45e03b2b59"
+    },
+    "system/DataConverter/DataConverter.php": {
+      "bytes": 5739,
+      "sha256": "f1b4e0c62e18ddadb8e222bcb21cbe920d3062ec8cdfbd03e90afbab17e760b4"
+    },
+    "system/HTTP/SiteURIFactory.php": {
+      "bytes": 8165,
+      "sha256": "1d92febd0d20b7ced825999435bd18bcace9c379f4ac356ab777a2678282d4e8"
+    },
+    "system/Router/DefinedRouteCollector.php": {
+      "bytes": 2008,
+      "sha256": "fc37be04ee15f59e98d4b360f05e91cba0eb956cc51bbddfb301aa6d056532e0"
+    },
+    "system/Commands/Utilities/Routes/AutoRouteCollector.php": {
+      "bytes": 1578,
+      "sha256": "69e6e313475bb6c721c4fffa903e7bd1ae60f2b2c531d860afe245b1c0f826f4"
+    },
+    "system/Commands/Utilities/Routes/ControllerFinder.php": {
+      "bytes": 1936,
+      "sha256": "ad09c66ba17f46644fb93d21b63cbc42f01778155d389155f9483d1605ec0bc1"
+    },
+    "system/Commands/Utilities/Routes/ControllerMethodReader.php": {
+      "bytes": 5163,
+      "sha256": "9fdcc0816203f0d92643482ac2902aee2eb6175b920efed85a8f70f0992c03d8"
+    },
+    "system/Commands/Utilities/Routes/FilterCollector.php": {
+      "bytes": 4962,
+      "sha256": "efafe0bb30f412f4d66eab55d89b14e67be9e410b171b08494ca0100385497ed"
+    },
+    "system/Commands/Utilities/Routes/FilterFinder.php": {
+      "bytes": 5508,
+      "sha256": "873f7ad3a5f9da9e98ff9f89a21b8edf6323e87ebc528b4be1c0ef7adfd7c3bc"
+    },
+    "system/Commands/Utilities/Routes/AutoRouterImproved/AutoRouteCollector.php": {
+      "bytes": 4996,
+      "sha256": "6fba187e4e100b80dd149c1aeabaa57f6b7d3f2c36b43176f4065f0b488d3e45"
+    },
+    "system/Commands/Utilities/Routes/AutoRouterImproved/ControllerMethodReader.php": {
+      "bytes": 8181,
+      "sha256": "5c13c0565e24996b82a7a81a776b6eb5c91d2d73afe557cbd5757b08f3d701ae"
+    },
+    "system/Test/Mock/MockCache.php": {
+      "bytes": 7408,
+      "sha256": "7848ab14e3129b3fa6cce55a59d51df9b80d7657b820d1b9a467622a17569562"
+    },
+    "system/Compatibility/NoDynamicProperties.php": {
+      "bytes": 505,
+      "sha256": "1dcb87fd840da84d0d3c92e50ce7e110b08c010eab4c14e48b47d3d622159a40"
+    },
+    "app/Config/Boot/production.php": {
+      "bytes": 1199,
+      "sha256": "1a6c9ec50403513a66881ba2eabf5edfc704b5152226004fa704fcb366e50bc7"
+    },
+    "spark": {
+      "bytes": 949,
+      "sha256": "72087e65a14c891a3e73b878702d58cac6033e27c292c1779e533d45e7203cf6"
+    },
+    "index.php": {
+      "bytes": 2302,
+      "sha256": "a9be93fefcfd26c8c8b442ea2be65139b2468a2ca3e4153ea64bbc93c38a0222"
+    }
+  }
+}

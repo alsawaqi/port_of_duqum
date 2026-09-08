@@ -14,6 +14,10 @@ error_reporting(E_ALL & ~E_DEPRECATED);
 // error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_STRICT & ~E_USER_NOTICE & ~E_USER_DEPRECATED);
 ini_set('display_errors', '0');
 
+// PHP 8.1 has no engine-level SensitiveParameter redaction. Omit every
+// argument from exception traces so credentials and OTPs cannot enter logs.
+ini_set('zend.exception_ignore_args', '1');
+
 /*
  |--------------------------------------------------------------------------
  | DEBUG MODE

@@ -38,7 +38,7 @@ class Guest_vendor extends App_Controller
         $view_data = [];
 
         // Public layout (same pattern as Request_estimate)
-        $view_data["topbar"] = "includes/public/topbar";
+        $view_data["topbar"] = "includes/public/registration_topbar";
         $view_data["left_menu"] = false;
 
         // Vendor groups dropdown
@@ -123,6 +123,7 @@ class Guest_vendor extends App_Controller
                 // login user fields
                 "user_name"       => "required",
                 "user_email"      => "required|valid_email",
+                "user_mobile"     => "required|max_length[30]",
                 "password"        => "required",
                 "password_confirm" => "permit_empty",
                 // optional vendor address fields
@@ -143,6 +144,15 @@ class Guest_vendor extends App_Controller
             $password_confirm = (string) $this->request->getPost("password_confirm");
             $phone_country_code = $this->_normalize_dial_code($this->request->getPost("phone_country_code"));
             $phone = $this->_merge_e164($phone_country_code, (string) $this->request->getPost("phone_local"));
+            $login_mobile = \App\Libraries\Auth\OmanMobileNumber::normalize((string) $this->request->getPost("user_mobile"));
+            if ($login_mobile === null) {
+                return $this->response->setJSON([
+                    "success" => false,
+                    "message" => app_lang("vendor_login_mobile_invalid"),
+                    "field" => "user_mobile",
+                    "errors" => ["user_mobile" => app_lang("vendor_login_mobile_invalid")],
+                ]);
+            }
 
             if (!$this->_is_allowed_dial($phone_country_code)) {
                 echo json_encode([
@@ -306,6 +316,11 @@ class Guest_vendor extends App_Controller
             ];
 
             $vendor_data = clean_data($vendor_data);
+            // The text sanitizer converts null to an empty string. Restore the
+            // database type for optional foreign keys after sanitizing text.
+            foreach (["country_id", "region_id", "city_id"] as $optional_id) {
+                $vendor_data[$optional_id] = (int) $vendor_data[$optional_id] ?: null;
+            }
 
             // ---------- TRANSACTION ----------
             $db->transBegin();
@@ -331,6 +346,7 @@ class Guest_vendor extends App_Controller
                     "last_name"  => "",
 
                     "email"      => $user_email,
+                    "phone"      => $login_mobile,
                     "password"   => password_hash($password, PASSWORD_DEFAULT),
 
                     "user_type"  => "staff",     // keep same as your save()
@@ -407,7 +423,7 @@ class Guest_vendor extends App_Controller
                 "designation"   => trim((string)$this->request->getPost("contact_designation")),
                 "email"         => $user_email,
                 "email_2"       => "",
-                "mobile"        => $phone,
+                "mobile"        => $login_mobile,
                 "role"          => "Owner",
                 "is_primary"    => 1,
                 "is_active"     => 1,
@@ -566,6 +582,9 @@ class Guest_vendor extends App_Controller
                 ];
 
                 $doc_clean = clean_data($doc_data);
+                foreach (["issued_at", "expires_at"] as $optional_date) {
+                    $doc_clean[$optional_date] = $doc_clean[$optional_date] ?: null;
+                }
                 $doc_id    = $this->Vendor_documents_model->ci_save($doc_clean);
 
                 if (!$doc_id) {

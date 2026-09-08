@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Libraries\Excel_import;
 use App\Libraries\App_folders;
 use App\Libraries\Dropdown_list;
+use App\Libraries\UploadSecurityException;
 
 class Projects extends Security_Controller {
 
@@ -2717,15 +2718,29 @@ class Projects extends Security_Controller {
 
             //process the files which has been submitted manually
             if ($_FILES) {
-                $files = $_FILES['manualFiles'];
-                if ($files && count($files) > 0) {
+                $files = $_FILES['manualFiles'] ?? array();
+                if ($files && is_array($files) && count($files) > 0 && isset($files["tmp_name"]) && is_array($files["tmp_name"])) {
                     $description = $this->request->getPost('description');
                     foreach ($files["tmp_name"] as $key => $file) {
-                        $temp_file = $file;
-                        $file_name = $files["name"][$key];
-                        $file_size = $files["size"][$key];
+                        $temp_file = (string)$file;
+                        $file_name = trim((string)($files["name"][$key] ?? ""));
+                        $file_size = (int)($files["size"][$key] ?? 0);
+                        $file_error = (int)($files["error"][$key] ?? UPLOAD_ERR_OK);
 
-                        $file_info = move_temp_file($file_name, $target_path, "", $temp_file);
+                        if ($file_error === UPLOAD_ERR_NO_FILE || $file_name === "" || $temp_file === "") {
+                            continue;
+                        }
+                        if ($file_error !== UPLOAD_ERR_OK) {
+                            log_message('notice', 'Project file manual upload was incomplete.');
+                            continue;
+                        }
+
+                        try {
+                            $file_info = move_temp_file($file_name, $target_path, "", $temp_file, "", "", false, $file_size);
+                        } catch (UploadSecurityException $e) {
+                            log_message('notice', 'Project file manual upload rejected.');
+                            continue;
+                        }
                         if ($file_info) {
                             $data = array(
                                 "project_id" => $project_id,

@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Libraries\Vendor_contact_access;
+use App\Libraries\Payments\Vendor_billing_service;
 use App\Models\Vendors_model;
 use App\Models\Vendor_groups_model;
 use App\Models\Vendor_grades_model;
@@ -275,6 +276,18 @@ class Vendors extends Security_Controller
             $currency = trim((string)$this->request->getPost("currency"));
             $payment_terms = $this->request->getPost("payment_terms");
             $current_vendor = $is_create ? null : $this->Vendors_model->get_one((int)$id);
+            if (!$is_create) {
+                $postedStatus = trim((string) $this->request->getPost('status'));
+                if ($postedStatus !== '' && $postedStatus !== (string) $current_vendor->status) {
+                    return $this->response->setStatusCode(422)->setJSON(['success' => false,
+                        'message' => 'Use the vendor status review action to change status. Payment must be verified before approval.']);
+                }
+                $feeRequest = (new Vendor_billing_service($db))->latestOpen((int) $id);
+                if ($feeRequest && (int) $this->request->getPost('vendor_group_id') !== (int) $feeRequest->vendor_group_id) {
+                    return $this->response->setStatusCode(409)->setJSON(['success' => false,
+                        'message' => 'The vendor group is fixed while its fee request is open. Please reconcile the fee request first.']);
+                }
+            }
 
             $vendor_data["currency"] = $currency !== "" ? $currency : null;
             $vendor_data["payment_terms"] = ($payment_terms !== "" && $payment_terms !== null) ? (int)$payment_terms : null;
@@ -492,18 +505,20 @@ class Vendors extends Security_Controller
             return;
         }
 
-        $data = [
-            "status" => $status,
-            "updated_by" => $this->login_user->id
-        ];
-
-        if ($status === "approved") {
-            $data["registration_valid_from"] = date("Y-m-d");
-            $valid_to = $this->_calculate_vendor_valid_to($vendor);
-            if ($valid_to) {
-                $data["registration_valid_to"] = $valid_to;
+        $this->db->transBegin();
+        try {
+            $vendorsTable = $this->db->prefixTable('vendors');
+            $vendor = $this->db->query("SELECT * FROM {$vendorsTable} WHERE id=? AND deleted=0 FOR UPDATE", [$id])->getRow();
+            if (!$vendor) {
+                throw new \DomainException('Vendor not found.');
             }
-        }
+            $from_status = (string) $vendor->status;
+            if ($from_status === $status) {
+                $this->db->transCommit();
+                return $this->response->setJSON(['success' => true, 'message' => app_lang('record_saved')]);
+            }
+            $dates = (new Vendor_billing_service($this->db))->review($vendor, $status, (int) $this->login_user->id);
+            $data = ['status' => $status, 'updated_by' => $this->login_user->id] + $dates;
 
         if ($status === vendor_blocked_status()) {
             $data["blocked_reason"] = $data["blocked_reason"] ?? null;
@@ -519,15 +534,23 @@ class Vendors extends Security_Controller
 
         $ok = $this->Vendors_model->ci_save($data, $id);
 
-        if (!$ok) {
-            $err = $this->db->error();
-            echo json_encode(["success" => false, "message" => $err["message"] ?? "Failed to update"]);
-            return;
+            if (!$ok || $this->db->transStatus() === false) {
+                throw new \RuntimeException('Vendor status update failed.');
+            }
+            $this->_record_vendor_status_history($id, $from_status, $status);
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException('Vendor status audit failed.');
+            }
+            $this->db->transCommit();
+            return $this->response->setJSON(['success' => true, 'message' => app_lang('record_saved')]);
+        } catch (\DomainException $e) {
+            $this->db->transRollback();
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'Vendor status/payment review failed: {class}', ['class' => get_class($e)]);
+            return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
         }
-
-        $this->_record_vendor_status_history($id, $from_status, $status);
-
-        echo json_encode(["success" => true, "message" => app_lang("record_saved")]);
     }
 
     public function update_grade()
@@ -657,15 +680,8 @@ class Vendors extends Security_Controller
             "updated_by" => $this->login_user->id
         ]);
 
-        if ($to_status === "approved") {
-            $data["registration_valid_from"] = $vendor->registration_valid_from ?: date("Y-m-d");
-            if (empty($vendor->registration_valid_to)) {
-                $valid_to = $this->_calculate_vendor_valid_to($vendor);
-                if ($valid_to) {
-                    $data["registration_valid_to"] = $valid_to;
-                }
-            }
-        }
+        // Unblocking restores recorded access only. Registration dates are
+        // established exclusively by the paid registration/renewal review.
 
         if (!$this->Vendors_model->ci_save($data, $id)) {
             echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
@@ -699,7 +715,8 @@ class Vendors extends Security_Controller
             return $previous;
         }
 
-        return "approved";
+        // Missing block history cannot establish that registration was approved.
+        return "new";
     }
 
 

@@ -58,12 +58,20 @@ final class Vendor_portal_authorizer
             return 'OWNER';
         }
 
-        return strtoupper(trim((string) ($membership->vendor_role_code ?? '')));
+        $rawRole = $membership->vendor_role_code ?? '';
+        $roleCode = strtoupper(trim((string) $rawRole));
+
+        // Old/partially upgraded databases may have active vendor_users rows
+        // whose vendor_role_id no longer resolves to a role record. Keep those
+        // selected-CR memberships usable at least privilege instead of locking
+        // the user out of the portal after CR selection.
+        return $roleCode !== '' ? $roleCode : 'VIEWER';
     }
 
     public function can(?object $membership, string $capability): bool
     {
-        if (!$membership || (string) ($membership->membership_status ?? '') !== 'active') {
+        $membershipStatus = strtolower(trim((string) ($membership->membership_status ?? '')));
+        if (!$membership || $membershipStatus !== 'active') {
             return false;
         }
 

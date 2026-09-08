@@ -92,7 +92,19 @@ class Left_menu
             }
         }
 
+        if ($item = $this->_payment_accounting_menu('tender')) {
+            $submenu[] = $item;
+        }
+
         return $submenu;
+    }
+
+    private function _payment_accounting_menu(string $module): ?array
+    {
+        if (!\App\Libraries\Payments\Payment_accounting_policy::allows($this->ci->login_user, $module)) {
+            return null;
+        }
+        return ['name' => $module . '_accounting', 'url' => 'payment_accounting/index/' . $module, 'class' => 'credit-card'];
     }
 
     private function _get_sidebar_menu_items($type = "")
@@ -351,6 +363,9 @@ class Left_menu
             if ($gp_view("activity_logs")) {
                 $gitpass_master_submenu[] = array("name" => "gate_pass_admin_activity_logs", "url" => "gate_pass_activity_logs", "class" => "activity");
             }
+            if ($item = $this->_payment_accounting_menu('gate_pass')) {
+                $gitpass_master_submenu[] = $item;
+            }
             if (count($gitpass_master_submenu)) {
                 $sidebar_menu["gitpass_master"] = array(
                     "name" => "gitpass_master",
@@ -400,6 +415,9 @@ class Left_menu
                     }
                 }
 
+                if ($item = $this->_payment_accounting_menu('vendor')) {
+                    $vendors_master_submenu[] = $item;
+                }
                 if (count($vendors_master_submenu)) {
                     $sidebar_menu["vendors_master"] = array(
                         "name" => "vendors_master",
@@ -427,6 +445,10 @@ class Left_menu
                 if ($ptw_view("ppe"))             $ptw_master_submenu[] = array("name" => "ptw_ppe_master",           "url" => "ptw_requirement_definitions/ppe",             "class" => "shield");
                 if ($ptw_view("preparation"))     $ptw_master_submenu[] = array("name" => "ptw_preparation_master",   "url" => "ptw_requirement_definitions/preparation",     "class" => "check-square");
                 if ($ptw_view("reasons"))         $ptw_master_submenu[] = array("name" => "ptw_reasons_master",       "url" => "ptw_reasons",                                 "class" => "alert-circle");
+
+                if ($item = $this->_payment_accounting_menu('ptw')) {
+                    $ptw_master_submenu[] = $item;
+                }
 
                 if (count($ptw_master_submenu)) {
                     $sidebar_menu["ptw_master"] = array(
@@ -966,6 +988,15 @@ class Left_menu
 
                             $sub_menu_url = get_array_value($sub_menu, "url");
 
+                            if ($controller_name === 'payment_accounting') {
+                                $accounting_parts = explode('/', trim($uri_string, '/'));
+                                $accounting_module = $accounting_parts[2] ?? 'vendor';
+                                if (get_array_value($sub_menu, 'name') === $accounting_module . '_accounting') {
+                                    $found_url_active_key = $key;
+                                    $found_submenu_active_key = $sub_key;
+                                }
+                            }
+
                             if ($controller_name == $sub_menu_url) {
                                 $found_url_active_key = $key;
                                 $found_submenu_active_key = $sub_key;
@@ -1231,6 +1262,7 @@ class Left_menu
 
             return view("includes/left_menu", [
                 "sidebar_menu" => $this->_get_active_menu($sidebar_menu),
+                "login_user" => $this->ci->login_user,
             ]);
         }
 
@@ -1819,8 +1851,42 @@ $submenu_names = [];
             }
         }
 
+        // Keep accounting available in saved/customized master menus and remove
+        // stale accounting entries after a role permission has been revoked.
+        if (!$is_preview) {
+            foreach (['vendor' => 'vendors_master', 'gate_pass' => 'gitpass_master', 'tender' => 'tender_master', 'ptw' => 'ptw_master'] as $accounting_module => $master_name) {
+                $accounting_item = $this->_payment_accounting_menu($accounting_module);
+                $master_found = false;
+                foreach ($view_data['sidebar_menu'] as $key => $master) {
+                    if (get_array_value($master, 'name') !== $master_name) {
+                        continue;
+                    }
+                    $master_found = true;
+                    $submenu = (array) get_array_value($master, 'submenu');
+                    $submenu = array_values(array_filter($submenu, static function ($item) use ($accounting_module) {
+                        return get_array_value($item, 'name') !== $accounting_module . '_accounting';
+                    }));
+                    if ($accounting_item) {
+                        $submenu[] = $accounting_item;
+                    }
+                    $view_data['sidebar_menu'][$key]['submenu'] = $submenu;
+                }
+                if (!$master_found && $accounting_item) {
+                    $view_data['sidebar_menu'][] = ['name' => $master_name, 'url' => '#', 'class' => 'layers', 'submenu' => [$accounting_item]];
+                }
+            }
+        }
+
         // mark active after any injected menu items are added
         if (!$is_preview) {
+            if (\App\Libraries\Payments\Payment_accounting_policy::isAccountingOnly($this->ci->login_user)) {
+                $view_data['sidebar_menu'] = [];
+                foreach (['vendor' => 'vendors_master', 'gate_pass' => 'gitpass_master', 'tender' => 'tender_master', 'ptw' => 'ptw_master'] as $module => $master_name) {
+                    if ($item = $this->_payment_accounting_menu($module)) {
+                        $view_data['sidebar_menu'][] = ['name' => $master_name, 'url' => '#', 'class' => 'layers', 'submenu' => [$item]];
+                    }
+                }
+            }
             $view_data["sidebar_menu"] = $this->_get_active_menu($view_data["sidebar_menu"]);
         }
 

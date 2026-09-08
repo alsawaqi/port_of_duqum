@@ -170,7 +170,8 @@ class Auth_security_model extends Crud_model
         $storedUserType = strtolower(trim((string) ($user->user_type ?? '')));
         return $this->authConfig->mfaEnabled
             && (
-                in_array($userType, $this->authConfig->mfaRequiredUserTypes, true)
+                in_array('*', $this->authConfig->mfaRequiredUserTypes, true)
+                || in_array($userType, $this->authConfig->mfaRequiredUserTypes, true)
                 || in_array($storedUserType, $this->authConfig->mfaRequiredUserTypes, true)
             );
     }
@@ -188,7 +189,7 @@ class Auth_security_model extends Crud_model
         ?MfaProviderInterface $provider = null
     ): ?string {
         $provider = $provider ?? $this->mfa_provider($user);
-        $rawDestination = $provider->name() === 'ibulk'
+        $rawDestination = in_array($provider->name(), ['ibulk', 'ismartsms'], true)
             ? (string) ($user->phone ?? '')
             : (string) ($user->email ?? '');
 
@@ -202,12 +203,12 @@ class Auth_security_model extends Crud_model
         $provider = $provider ?? $this->mfa_provider($user);
         $destination = $this->mfa_destination($user, $provider);
         if ($destination === null) {
-            return $provider->name() === 'ibulk'
+            return in_array($provider->name(), ['ibulk', 'ismartsms'], true)
                 ? 'registered mobile number'
                 : 'registered address';
         }
 
-        if ($provider->name() === 'ibulk') {
+        if (in_array($provider->name(), ['ibulk', 'ismartsms'], true)) {
             return OmanMobileNumber::mask($destination);
         }
 

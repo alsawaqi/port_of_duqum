@@ -1618,6 +1618,13 @@ if (!function_exists('can_access_messages_module')) {
 
         $can_chat = false;
 
+        $is_external_portal_identity = !empty($ci->login_user->is_vendor_only_identity)
+            || !empty($ci->login_user->is_gate_pass_only_identity)
+            || !empty($ci->login_user->is_ptw_applicant_only_identity);
+        if ($is_external_portal_identity) {
+            return false;
+        }
+
         $client_message_users = get_setting("client_message_users");
         $client_message_users_array = explode(",", $client_message_users);
 
@@ -2363,7 +2370,14 @@ if (!function_exists('create_invoice_from_subscription')) {
 if (!function_exists('can_access_reminders_module')) {
 
     function can_access_reminders_module() {
-        $ci = new Security_Controller();
+        $ci = new Security_Controller(false);
+
+        $is_external_portal_identity = !empty($ci->login_user->is_vendor_only_identity)
+            || !empty($ci->login_user->is_gate_pass_only_identity)
+            || !empty($ci->login_user->is_ptw_applicant_only_identity);
+        if ($is_external_portal_identity) {
+            return false;
+        }
 
         if (get_setting("module_reminder") && ($ci->login_user->user_type === "staff" || ($ci->login_user->user_type === "client" && get_setting("client_can_create_reminders")))) {
             return true;
@@ -4826,7 +4840,9 @@ if (!function_exists('vendor_login_allowed_statuses')) {
 
     function vendor_login_allowed_statuses(): array
     {
-        return ["new", "pending_payment", "submitted", "approved", "revise"];
+        // Expired registrations may maintain the profile and pay for renewal;
+        // tender eligibility remains governed by its separate status allowlist.
+        return ["new", "pending_payment", "submitted", "approved", "revise", "expired"];
     }
 }
 

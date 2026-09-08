@@ -34,6 +34,10 @@ if (is_dir($dir)) {
 $routes->post('collect_leads/save', 'Collect_leads::save', ['filter' => 'cors']);
 $routes->options('collect_leads/save', 'Collect_leads::save', ['filter' => 'cors']);
 
+// Match the exact CSRF-exempt scheduler URI. Cron still authenticates the
+// POST with PODC_CRON_KEY before running any application jobs.
+$routes->post('cron', 'Cron::index');
+
 foreach ($controller_dropdown as $controller) {
     $routes->get(strtolower($controller), "$controller::index");
     $routes->get(strtolower($controller) . '/(:any)', "$controller::$1");

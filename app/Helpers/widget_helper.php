@@ -1472,7 +1472,14 @@ if (!function_exists('projects_overview_widget')) {
 if (!function_exists('reminders_widget')) {
     function reminders_widget($return_reminders_only = false)
     {
-        $ci = new Security_Controller();
+        $ci = new Security_Controller(false);
+
+        $is_external_portal_identity = !empty($ci->login_user->is_vendor_only_identity)
+            || !empty($ci->login_user->is_gate_pass_only_identity)
+            || !empty($ci->login_user->is_ptw_applicant_only_identity);
+        if ($is_external_portal_identity) {
+            return $return_reminders_only ? [] : null;
+        }
 
         $Events_model = model('App\Models\Events_model');
         $local_time = get_my_local_time('Y-m-d H:i').':00';
@@ -1728,7 +1735,14 @@ if (!function_exists('invoice_overview_widget')) {
 if (!function_exists('next_reminder_widget')) {
     function next_reminder_widget()
     {
-        $ci = new Security_Controller();
+        $ci = new Security_Controller(false);
+
+        $is_external_portal_identity = !empty($ci->login_user->is_vendor_only_identity)
+            || !empty($ci->login_user->is_gate_pass_only_identity)
+            || !empty($ci->login_user->is_ptw_applicant_only_identity);
+        if ($is_external_portal_identity) {
+            return "";
+        }
 
         $Events_model = model('App\Models\Events_model');
         $options = [

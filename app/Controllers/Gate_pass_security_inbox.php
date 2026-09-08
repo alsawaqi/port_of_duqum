@@ -21,6 +21,7 @@ use App\Models\Gate_pass_blocked_visitors_model;
 
 class Gate_pass_security_inbox extends Security_Controller
 {
+    private \CodeIgniter\Database\BaseConnection $db;
     protected $Gate_pass_requests_model;
     protected $Gate_pass_security_users_model;
     protected $Gate_pass_request_approvals_model;
@@ -37,6 +38,7 @@ class Gate_pass_security_inbox extends Security_Controller
     {
         parent::__construct();
         $this->access_only_team_members();
+        $this->db = db_connect();
 
         $this->Gate_pass_requests_model = new Gate_pass_requests_model();
         $this->Gate_pass_security_users_model = new Gate_pass_security_users_model();
@@ -185,7 +187,9 @@ public function lookup_by_qr()
     }
 
     if (!$this->_can_scan_request($request)) {
-        return $this->response->setJSON(["success" => false, "message" => app_lang("forbidden")]);
+        return $this->response->setJSON(["success" => false, "message" => app_lang(
+            $this->_can_act_on_request($request) ? "gate_pass_scan_request_inactive" : "forbidden"
+        )]);
     }
 
     // Recommended constraints: only issued/rop approved passes + active + within validity
@@ -337,7 +341,7 @@ public function vehicles_list_data($request_id = 0)
     $request_id = (int)$request_id;
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
 
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_review_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || (!$this->_can_review_request($request) && !$this->_can_scan_request($request))) {
         return $this->response->setJSON(["data" => []]);
     }
 
@@ -347,13 +351,13 @@ public function vehicles_list_data($request_id = 0)
 
     $rows = [];
     foreach ($list as $row) {
-        $rows[] = $this->_make_vehicle_row($row);
+        $rows[] = $this->_make_vehicle_row($row, $this->_can_review_request($request));
     }
 
     return $this->response->setJSON(["data" => $rows]);
 }
 
-private function _make_vehicle_row($row)
+private function _make_vehicle_row($row, bool $allow_edit = true)
 {
     $edit = modal_anchor(
         get_uri("gate_pass_security_inbox/vehicle_modal_form"),
@@ -383,7 +387,7 @@ private function _make_vehicle_row($row)
         gate_pass_vehicle_plate_display($row),
         $row->type ?: "-",
         $mul,
-        $edit . " " . $delete
+        $allow_edit ? $edit . " " . $delete : ""
     ];
 }
 
@@ -723,7 +727,7 @@ public function visitors_list_data($request_id = 0)
     $request_id = (int)$request_id;
     $request = $this->Gate_pass_requests_model->get_details(["id" => $request_id])->getRow();
 
-    if (!$request || (int)$request->deleted === 1 || !$this->_can_review_request($request)) {
+    if (!$request || (int)$request->deleted === 1 || (!$this->_can_review_request($request) && !$this->_can_scan_request($request))) {
         return $this->response->setJSON(["data" => []]);
     }
 
@@ -735,7 +739,7 @@ public function visitors_list_data($request_id = 0)
 
     $rows = [];
     foreach ($list as $row) {
-        $rows[] = $this->_make_visitor_row($row, $allow_visitor_block);
+        $rows[] = $this->_make_visitor_row($row, $allow_visitor_block, $this->_can_review_request($request));
     }
 
     return $this->response->setJSON(["data" => $rows]);
@@ -792,7 +796,7 @@ public function visitors_list_data($request_id = 0)
             . "</div>";
     }
 
-private function _make_visitor_row($row, ?bool $allow_visitor_block = null)
+private function _make_visitor_row($row, ?bool $allow_visitor_block = null, bool $allow_edit = true)
 {
     if ($allow_visitor_block === null) {
         $reqRow = $this->Gate_pass_requests_model->get_details(["id" => (int)($row->gate_pass_request_id ?? 0)])->getRow();
@@ -869,7 +873,7 @@ private function _make_visitor_row($row, ?bool $allow_visitor_block = null)
         $blocked_badge,
         $block_reason !== "" ? esc($block_reason) : "-",
         '<div class="gp-sec-scan-visitor-opts" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:flex-end;">'
-            . $edit . $row_block_btn . $delete
+            . ($allow_edit ? $edit : "") . $row_block_btn . ($allow_edit ? $delete : "")
         . '</div>'
     ];
 }
@@ -1286,6 +1290,14 @@ public function delete_visitor()
         if (($request->status ?? "") === "returned") {
             echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
             return;
+        }
+
+        if ($decision === "approved"
+            && !(new \App\Libraries\Payments\Gate_pass_payment_clearance($this->db))->allowsApproval($request)) {
+            return $this->response->setStatusCode(409)->setJSON([
+                "success" => false,
+                "message" => "Verified Bank Muscat payment, an approved Commercial waiver, or an explicit zero fee is required before approval. Please contact Accounting.",
+            ]);
         }
 
         $approval_data = [

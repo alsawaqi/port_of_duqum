@@ -7,9 +7,8 @@ use CodeIgniter\Config\BaseConfig;
 /**
  * Authentication controls that can be overridden with environment variables.
  *
- * MFA is deliberately off until both AUTH_SECURITY_MFA_ENABLED and a provider
- * are configured. For the bundled email provider, the application's outbound
- * mail transport must also be configured and tested before enabling it.
+ * The saved Settings > SMS login policy overrides the MFA environment defaults.
+ * Before it is saved, AUTH_SECURITY_MFA_ENABLED and the deployment provider apply.
  */
 class AuthSecurity extends BaseConfig
 {
@@ -72,7 +71,7 @@ class AuthSecurity extends BaseConfig
 
                 $userType = strtolower($parts[0]);
                 $provider = strtolower($parts[1]);
-                if ($userType !== '' && in_array($provider, ['email', 'ibulk', 'null'], true)) {
+                if ($userType !== '' && in_array($provider, ['email', 'ibulk', 'ismartsms', 'null'], true)) {
                     $this->mfaProvidersByUserType[$userType] = $provider;
                 }
             }
@@ -106,6 +105,10 @@ class AuthSecurity extends BaseConfig
             )));
         }
 
+        if (function_exists('db_connect')) {
+            (new \App\Libraries\Auth\SmsLoginSettings())->apply($this);
+        }
+
         if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
             $this->validateProductionMfa();
         }
@@ -133,7 +136,7 @@ class AuthSecurity extends BaseConfig
             return;
         }
 
-        if (!in_array('staff', $this->mfaRequiredUserTypes, true)) {
+        if (!in_array('staff', $this->mfaRequiredUserTypes, true) && !in_array('*', $this->mfaRequiredUserTypes, true)) {
             throw new \RuntimeException('Enabled production MFA must include staff accounts.');
         }
 
@@ -145,8 +148,12 @@ class AuthSecurity extends BaseConfig
 
         foreach ($this->mfaRequiredUserTypes as $userType) {
             $provider = $this->mfaProviderForUserType($userType);
-            if (!in_array($provider, ['email', 'ibulk'], true)) {
+            if (!in_array($provider, ['email', 'ibulk', 'ismartsms'], true)) {
                 throw new \RuntimeException('Every production MFA user type requires an enabled provider.');
+            }
+
+            if ($provider === 'ismartsms' && !(new \App\Libraries\Sms\IsmartSmsGateway())->isConfigured()) {
+                throw new \RuntimeException('Production SMS MFA requires an enabled iSmartSMS account.');
             }
 
             if ($provider === 'ibulk') {

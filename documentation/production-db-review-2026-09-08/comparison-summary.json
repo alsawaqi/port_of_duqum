@@ -1,0 +1,11 @@
+{
+  "source_sha256": "eb473aa26e182692e3bdceae89d92716cf36400fabeaff4c1e3fc95966e4348e",
+  "production_table_count": 211,
+  "required_new_tables": [
+    "pod_eservice_payments",
+    "pod_eservice_payment_events",
+    "pod_vendor_fee_requests",
+    "pod_sms_outbox"
+  ],
+  "required_new_column_count": 84
+}

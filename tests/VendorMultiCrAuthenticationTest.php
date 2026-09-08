@@ -57,6 +57,9 @@ $assertContains('$requires_vendor_selection = $is_vendor_login && count($members
 $assertContains('$is_vendor_login = $is_vendor_only_user', $signin, "internal staff keep their normal dashboard login");
 $assertContains('is_vendor_only_identity($user_id, $user_info)', $signin, "mixed operational identities are not forced into the vendor flow");
 $assertContains('get_accessible_memberships($user_id)) > 0', $usersModel, "legacy authentication cannot bypass vendor approval");
+$assertContains('in_array($redirectPath, ["", "signin", "forbidden"], true)', $signin, "login cannot bounce users back to forbidden after successful authentication");
+$assertContains('return get_uri($vendor_login ? "vendor_portal" : "dashboard")', $signin, "unsafe post-login redirects fall back to the correct landing page");
+$assertContains('$allowedVendorRedirects = [', $signin, "vendor-only logins are confined to vendor-safe redirect targets");
 $assertContains('$this->session->remove(["user_id", Vendor_users_model::SESSION_VENDOR_ID])', $signin, "selector state is not a logged-in session");
 $assertContains('"pending_vendor_user_id" => $user_id', $signin, "verified identity is retained temporarily");
 $assertContains('"pending_vendor_authenticated_at" => time()', $signin, "pending authentication is timestamped");

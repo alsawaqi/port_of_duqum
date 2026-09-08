@@ -33,6 +33,8 @@ use App\Models\Tender_rfq_items_model;
 use App\Libraries\Vendor_contact_access;
 use App\Libraries\Vendor_portal_authorizer;
 use App\Libraries\Payments\Eservice_payment_manager;
+use App\Libraries\Payments\Eservice_payment_state;
+use App\Libraries\Payments\Vendor_billing_service;
 use App\Libraries\Upload_security;
 use App\Libraries\UploadSecurityException;
 
@@ -83,6 +85,11 @@ class Vendor_portal extends Security_Controller
 
         // Vendor Portal is for staff users (vendor logins should be staff)
         if ($this->login_user->user_type !== "staff") {
+            log_message("warning", "VENDOR PORTAL ACCESS DENIED: non_staff_user " . json_encode([
+                "user_id" => (int) ($this->login_user->id ?? 0),
+                "user_type" => (string) ($this->login_user->user_type ?? ""),
+                "active_vendor_id" => (int) $this->session->get(Vendor_users_model::SESSION_VENDOR_ID),
+            ]));
             app_redirect("forbidden");
         }
 
@@ -453,10 +460,22 @@ class Vendor_portal extends Security_Controller
             ]);
         }
 
+        if (!$this->_is_tender_submission_open($tender)) {
+            return $this->response->setStatusCode(409)->setJSON([
+                'success' => false, 'message' => 'This tender is no longer open for payment.'
+            ]);
+        }
+
         if ($this->_is_tender_fee_paid($tender)) {
             return $this->response->setJSON([
                 "success" => true,
                 "message" => "Tender fee is already marked as paid."
+            ]);
+        }
+
+        if ((new Eservice_payment_state($this->db))->latestPaid('tender_fee', $tender_id, $vendor_id)) {
+            return $this->response->setStatusCode(409)->setJSON([
+                'success' => false, 'message' => 'A verified payment already exists. Please ask Accounting to reconcile it before paying again.'
             ]);
         }
 
@@ -469,8 +488,9 @@ class Vendor_portal extends Security_Controller
             (int) $this->login_user->id,
             trim((string) ($tender->tender_fee ?? "0")),
             "Tender fee " . ((string) ($tender->title ?? "#" . $tender_id)),
-            $return_url . "?payment=processing&session_id={CHECKOUT_SESSION_ID}",
-            $return_url . "?payment=cancelled"
+            $return_url,
+            $return_url,
+            ['currency' => strtoupper((string) ($tender->currency ?? 'OMR'))]
         );
         $status_code = (int) ($result["status_code"] ?? 500);
         unset($result["status_code"]);
@@ -1029,7 +1049,10 @@ class Vendor_portal extends Security_Controller
             return true;
         }
 
-        return strtolower((string) ($tender->fee_payment_status ?? "")) === "paid";
+        return (new Eservice_payment_state($this->db))->hasVerifiedPayment(
+            'tender_fee', (int) $tender->id, $this->_my_vendor_id(),
+            (string) $tender->tender_fee, strtoupper((string) ($tender->currency ?? 'OMR'))
+        );
     }
 
     private function _tender_fee_payment_status($tender): string
@@ -1253,6 +1276,19 @@ class Vendor_portal extends Security_Controller
     {
         $membership = $this->_active_vendor_membership();
         if (!$membership) {
+            $user_id = (int) ($this->login_user->id ?? 0);
+            $memberships = $user_id ? $this->Vendor_users_model->get_accessible_memberships($user_id) : [];
+            log_message("warning", "VENDOR PORTAL ACCESS DENIED: missing_vendor_context " . json_encode([
+                "user_id" => $user_id,
+                "active_vendor_id" => (int) $this->session->get(Vendor_users_model::SESSION_VENDOR_ID),
+                "accessible_memberships" => count($memberships),
+                "capability" => $capability,
+            ]));
+
+            if (count($memberships) > 1) {
+                app_redirect("signin/vendor_selection");
+            }
+
             app_redirect("forbidden");
         }
 
@@ -1262,7 +1298,19 @@ class Vendor_portal extends Security_Controller
             ? vendor_can_access_tender_portal($status)
             : vendor_can_access_profile_portal($status);
 
-        if (!$statusAllowed || !$this->Vendor_portal_authorizer->can($membership, $capability)) {
+        $capabilityAllowed = $this->Vendor_portal_authorizer->can($membership, $capability);
+        if (!$statusAllowed || !$capabilityAllowed) {
+            log_message("warning", "VENDOR PORTAL ACCESS DENIED: capability_or_status_denied " . json_encode([
+                "user_id" => (int) ($this->login_user->id ?? 0),
+                "vendor_id" => $vendor_id,
+                "vendor_status" => $status,
+                "status_allowed" => $statusAllowed,
+                "membership_status" => (string) ($membership->membership_status ?? ""),
+                "vendor_role_code" => (string) ($membership->vendor_role_code ?? ""),
+                "is_owner" => (int) ($membership->is_owner ?? 0),
+                "capability" => $capability,
+                "capability_allowed" => $capabilityAllowed,
+            ]));
             app_redirect("forbidden");
         }
 
@@ -1272,6 +1320,14 @@ class Vendor_portal extends Security_Controller
     private function _require_vendor_access(): int
     {
         return $this->_require_vendor_capability(Vendor_portal_authorizer::PROFILE_VIEW);
+    }
+
+    private function _can_edit_vendor_profile(): bool
+    {
+        return $this->Vendor_portal_authorizer->can(
+            $this->_active_vendor_membership(),
+            Vendor_portal_authorizer::PROFILE_EDIT
+        );
     }
 
     private function _require_vendor_profile_write_access(): int
@@ -1415,6 +1471,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $view_data["is_locked"] = $this->_is_vendor_module_locked($vendor_id, "bank");
+        $view_data["can_edit_profile"] = $this->_can_edit_vendor_profile();
 
         // ✅ NEW: show latest "review" request comment (if any)
         $view_data["review_request"] = $this->_get_vendor_latest_review_request($vendor_id, "bank");
@@ -1714,7 +1771,7 @@ class Vendor_portal extends Security_Controller
         }
 
         $actions = "";
-        if (!$is_locked) {
+        if (!$is_locked && $this->_can_edit_vendor_profile()) {
             $actions = modal_anchor(
                 get_uri("vendor_portal/bank_account_modal_form"),
                 "<i data-feather='edit' class='icon-16'></i>",
@@ -2014,6 +2071,10 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
         $view_data["vendor_info"] = $this->Vendors_model->get_one($vendor_id);
         $view_data["profile_checklist"] = $this->_get_vendor_profile_checklist($vendor_id);
+        $view_data["billing"] = (new Vendor_billing_service($this->db))->summary($view_data["vendor_info"]);
+        $view_data["can_pay_vendor_fee"] = $this->Vendor_portal_authorizer->can(
+            $this->_active_vendor_membership(), Vendor_portal_authorizer::PROFILE_EDIT
+        );
 
         return $this->template->view("vendor_portal/overview/index", $view_data);
     }
@@ -2027,7 +2088,7 @@ class Vendor_portal extends Security_Controller
         }
 
         $status = strtolower((string)($vendor->status ?? ""));
-        if (!in_array($status, ["new", "pending_payment", "revise"], true)) {
+        if (!in_array($status, ["new", "pending_payment", "submitted", "revise"], true)) {
             return $this->response->setJSON(["success" => false, "message" => app_lang("vendor_profile_already_submitted")]);
         }
 
@@ -2036,22 +2097,49 @@ class Vendor_portal extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("vendor_profile_incomplete")]);
         }
 
-        $this->db->transBegin();
+        $billing = new Vendor_billing_service($this->db);
+        $open = $billing->latestOpen($vendor_id);
+        return $this->_start_vendor_fee($vendor, $open->fee_type ?? 'registration');
+    }
 
-        $ok = $this->Vendors_model->ci_save(clean_data([
-            "status" => "submitted",
-            "updated_by" => $this->login_user->id ?? null
-        ]), $vendor_id);
-
-        if (!$ok || $this->db->transStatus() === false) {
-            $this->db->transRollback();
-            return $this->response->setJSON(["success" => false, "message" => app_lang("error_occurred")]);
+    public function renew_registration()
+    {
+        $vendor_id = $this->_require_vendor_profile_write_access();
+        $vendor = $this->Vendors_model->get_one($vendor_id);
+        if (!$vendor || empty($vendor->id) || (int) $vendor->deleted === 1) {
+            return $this->response->setStatusCode(404)->setJSON(['success' => false, 'message' => 'Vendor not found.']);
         }
+        $checklist = $this->_get_vendor_profile_checklist($vendor_id);
+        if ((int) $checklist['completed'] < (int) $checklist['total']) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => app_lang('vendor_profile_incomplete')]);
+        }
+        return $this->_start_vendor_fee($vendor, 'renewal');
+    }
 
-        $this->_record_vendor_status_history($vendor_id, $status, "submitted");
-        $this->db->transCommit();
-
-        return $this->response->setJSON(["success" => true, "message" => app_lang("vendor_profile_submitted")]);
+    private function _start_vendor_fee(object $vendor, string $type)
+    {
+        try {
+            $billing = new Vendor_billing_service($this->db);
+            $request = $billing->prepare((int) $vendor->id, (int) $this->login_user->id, $type);
+            if ($billing->isSettled($request) || Vendor_billing_service::normalizedFee((string) $request->amount) === '0.000') {
+                $billing->submitSettled((int) $request->id, (int) $this->login_user->id);
+                return $this->response->setJSON(['success' => true, 'message' => 'Submitted to Procurement for review.']);
+            }
+            $return = get_uri('vendor_portal');
+            $result = (new Eservice_payment_manager($this->db))->start(
+                'vendor_' . $type, (int) $vendor->id, (int) $vendor->id, (int) $this->login_user->id,
+                (string) $request->amount, 'Vendor ' . $type . ' fee', $return, $return, $billing->metadata($request)
+            );
+            $code = (int) ($result['status_code'] ?? 500);
+            unset($result['status_code']);
+            return $this->response->setStatusCode($code)->setJSON($result);
+        } catch (\DomainException $e) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Vendor fee initiation failed: {class}', ['class' => get_class($e)]);
+            return $this->response->setStatusCode(503)->setJSON(['success' => false,
+                'message' => 'Unable to prepare vendor payment. Please contact the administrator.']);
+        }
     }
 
     private function _get_vendor_profile_checklist(int $vendor_id): array
@@ -2172,6 +2260,7 @@ class Vendor_portal extends Security_Controller
 
         // lock only if there's a pending request for branches
         $view_data["is_locked"] = $this->_is_vendor_module_locked($vendor_id, "branches");
+        $view_data["can_edit_profile"] = $this->_can_edit_vendor_profile();
 
         // show latest review comment (if admin marked request as review)
         $view_data["review_request"] = $this->_get_vendor_latest_review_request($vendor_id, "branches");
@@ -2185,6 +2274,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $view_data["is_locked"] = $this->_is_vendor_module_locked($vendor_id, "credentials");
+        $view_data["can_edit_profile"] = $this->_can_edit_vendor_profile();
 
         // ✅ show latest "review" request comment for this module
         $view_data["review_request"] = $this->_get_vendor_latest_review_request($vendor_id, "credentials");
@@ -2198,6 +2288,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $view_data["is_locked"] = $this->_is_vendor_module_locked($vendor_id, "specialties");
+        $view_data["can_edit_profile"] = $this->_can_edit_vendor_profile();
 
         // ✅ show latest "review" request comment for this module
         $view_data["review_request"] = $this->_get_vendor_latest_review_request($vendor_id, "specialties");
@@ -2211,6 +2302,7 @@ class Vendor_portal extends Security_Controller
         $vendor_id = $this->_require_vendor_access();
 
         $view_data["is_locked"] = $this->_is_vendor_module_locked($vendor_id, "documents");
+        $view_data["can_edit_profile"] = $this->_can_edit_vendor_profile();
 
         // ✅ NEW: show latest "review" request comment (if any)
         $view_data["review_request"] = $this->_get_vendor_latest_review_request($vendor_id, "documents");
@@ -2505,7 +2597,7 @@ class Vendor_portal extends Security_Controller
         $approval = $this->_approval_badge($data->status ?? "pending");
 
         $actions = "";
-        if (!$is_locked) {
+        if (!$is_locked && $this->_can_edit_vendor_profile()) {
             $actions =
                 modal_anchor(
                     get_uri("vendor_portal/specialty_modal_form"),
@@ -2881,7 +2973,7 @@ class Vendor_portal extends Security_Controller
         $approval = $this->_approval_badge($data->status ?? "pending");
 
         $actions = "";
-        if (!$is_locked) {
+        if (!$is_locked && $this->_can_edit_vendor_profile()) {
             $actions =
                 modal_anchor(
                     get_uri("vendor_portal/branch_modal_form"),
@@ -3217,7 +3309,7 @@ class Vendor_portal extends Security_Controller
         $uploaded_by = $data->uploaded_by_name ?? "-";
 
         $actions = "";
-        if (!$is_locked) {
+        if (!$is_locked && $this->_can_edit_vendor_profile()) {
             $actions =
                 modal_anchor(
                     get_uri("vendor_portal/document_modal_form"),
@@ -3492,7 +3584,7 @@ class Vendor_portal extends Security_Controller
 
         $actions = "";
 
-        if (!$is_locked) {
+        if (!$is_locked && $this->_can_edit_vendor_profile()) {
             $actions =
                 modal_anchor(
                     get_uri("vendor_portal/credential_modal_form"),

@@ -3,7 +3,13 @@ $profile_checklist = $profile_checklist ?? ["items" => [], "completed" => 0, "to
 $expiring_documents = $profile_checklist["expiring_documents"] ?? [];
 $vendor_status = strtolower((string)($vendor_info->status ?? ""));
 $profile_complete = (int)($profile_checklist["completed"] ?? 0) >= (int)($profile_checklist["total"] ?? 0);
-$can_submit_for_review = in_array($vendor_status, ["new", "pending_payment", "revise"], true);
+$billing = $billing ?? [];
+$billing_type = $billing['type'] ?? 'registration';
+$billing_quote = $billing['quote'] ?? [];
+$billing_settled = !empty($billing['settled']);
+$billing_zero = isset($billing_quote['amount']) && (string) $billing_quote['amount'] === '0.000';
+$can_submit_for_review = !empty($can_pay_vendor_fee) && !empty($billing['can_start']) && empty($billing['error']);
+$billing_button = $billing_settled || $billing_zero ? 'Submit for review' : 'Pay ' . $billing_type . ' fee';
 ?>
 
 <div class="vp-overview ps-ready p15">
@@ -24,6 +30,17 @@ $can_submit_for_review = in_array($vendor_status, ["new", "pending_payment", "re
             </div>
 
             <div class="ps-stats-grid">
+                <?php foreach (['registration_valid_from', 'registration_valid_to'] as $registration_date): ?>
+                    <?php if (!empty($vendor_info->$registration_date)): ?>
+                    <div class="ps-stat-card">
+                        <div class="ps-stat-icon ps-icon-neutral"><i data-feather="calendar" class="icon-20"></i></div>
+                        <div>
+                            <div class="ps-stat-label"><?php echo app_lang('vendor_' . $registration_date); ?></div>
+                            <div class="ps-stat-value" style="font-size:14px;"><?php echo esc(format_to_date($vendor_info->$registration_date, false)); ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
 
                 <div class="ps-stat-card" style="animation-delay:.05s;">
                     <div class="ps-stat-icon">
@@ -31,7 +48,7 @@ $can_submit_for_review = in_array($vendor_status, ["new", "pending_payment", "re
                     </div>
                     <div>
                         <div class="ps-stat-label"><?php echo app_lang("status"); ?></div>
-                        <div class="ps-stat-value"><?php echo esc($vendor_info->status ? ucfirst($vendor_info->status) : '-'); ?></div>
+                        <div class="ps-stat-value"><?php echo esc($vendor_info->status ? ucfirst(str_replace('_', ' ', $vendor_info->status)) : '-'); ?></div>
                     </div>
                 </div>
 
@@ -121,10 +138,22 @@ $can_submit_for_review = in_array($vendor_status, ["new", "pending_payment", "re
                                 </div>
                             <?php } ?>
                         </div>
+                        <div class="mt15 p15 border rounded">
+                            <strong><?php echo $billing_type === 'renewal' ? 'Registration renewal' : 'Registration payment'; ?></strong>
+                            <?php if (!empty($billing['error'])) { ?>
+                                <div class="text-danger mt5"><?php echo esc($billing['error']); ?></div>
+                            <?php } elseif ($billing_quote) { ?>
+                                <div class="mt5"><?php echo esc($billing_quote['currency'] . ' ' . $billing_quote['amount']); ?></div>
+                                <div class="text-muted small mt5"><?php echo $billing_settled
+                                    ? 'Payment is recorded for this registration period. Revisions do not require another payment.'
+                                    : ($billing_zero ? 'Your vendor group has an explicitly configured zero fee.'
+                                        : 'Continue to Bank Muscat Smart Gateway. Procurement review starts after payment is verified.'); ?></div>
+                            <?php } ?>
+                        </div>
                         <?php if ($can_submit_for_review) { ?>
                             <div class="mt15">
                                 <button type="button" id="vendor-submit-review-btn" class="btn btn-primary" <?php echo $profile_complete ? "" : "disabled"; ?>>
-                                    <i data-feather="send" class="icon-16"></i> <?php echo app_lang("submit_for_review"); ?>
+                                    <i data-feather="credit-card" class="icon-16"></i> <?php echo esc($billing_button); ?>
                                 </button>
                                 <?php if (!$profile_complete) { ?>
                                     <div class="text-muted mt10"><?php echo app_lang("vendor_profile_incomplete"); ?></div>
@@ -172,7 +201,7 @@ $(document).ready(function () {
         $btn.prop("disabled", true);
 
         $.ajax({
-            url: "<?php echo get_uri('vendor_portal/submit_for_review'); ?>",
+            url: "<?php echo get_uri($billing_type === 'renewal' ? 'vendor_portal/renew_registration' : 'vendor_portal/submit_for_review'); ?>",
             type: "POST",
             dataType: "json",
             data: {
@@ -180,6 +209,10 @@ $(document).ready(function () {
             },
             success: function (result) {
                 if (result && result.success) {
+                    if (result.checkout_url) {
+                        window.location.assign(result.checkout_url);
+                        return;
+                    }
                     appAlert.success(result.message || "<?php echo app_lang('record_saved'); ?>");
                     setTimeout(function () {
                         location.reload();
@@ -189,8 +222,8 @@ $(document).ready(function () {
                     $btn.prop("disabled", false);
                 }
             },
-            error: function () {
-                appAlert.error("<?php echo app_lang('error_occurred'); ?>");
+            error: function (xhr) {
+                appAlert.error((xhr.responseJSON && xhr.responseJSON.message) || "<?php echo app_lang('error_occurred'); ?>");
                 $btn.prop("disabled", false);
             }
         });

@@ -15,7 +15,11 @@ $assertContains = static function (string $needle, string $source, string $messa
 $safeHttpSource = (string) file_get_contents($root . "/app/Filters/SafeHttpMethods.php");
 $actionResolution = strpos(
     $safeHttpSource,
-    '$action = strtolower((string) $request->getUri()->getSegment(2));'
+    '$segments = $request->getUri()->getSegments();'
+);
+$safeActionResolution = strpos(
+    $safeHttpSource,
+    '$action = strtolower((string) ($segments[1] ?? \'\'));'
 );
 $privateActionGuard = strpos($safeHttpSource, "str_starts_with(\$action, '_')");
 $methodResolution = strpos($safeHttpSource, '$method = strtoupper($request->getMethod());');
@@ -24,8 +28,8 @@ $safeVerbReturn = strpos(
     "if (!in_array(\$method, ['GET', 'HEAD'], true))"
 );
 
-if ($actionResolution === false || $privateActionGuard === false) {
-    $fail("underscore-prefixed controller actions are not rejected globally");
+if ($actionResolution === false || $safeActionResolution === false || $privateActionGuard === false) {
+    $fail("underscore-prefixed controller actions are not rejected globally without throwing on short URLs");
 }
 if ($methodResolution === false || $privateActionGuard > $methodResolution) {
     $fail("the private-action guard must run for every HTTP method");

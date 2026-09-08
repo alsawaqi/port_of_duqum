@@ -436,6 +436,15 @@ class Gate_pass_rop_inbox extends Security_Controller
             return;
         }
 
+        if ($decision === "approved"
+            && !(new \App\Libraries\Payments\Gate_pass_payment_clearance($db))->allowsApproval($request)) {
+            $db->transRollback();
+            return $this->response->setStatusCode(409)->setJSON([
+                "success" => false,
+                "message" => "Verified Bank Muscat payment, an approved Commercial waiver, or an explicit zero fee is required before issuing a pass. Please contact Accounting.",
+            ]);
+        }
+
         $approval_data = [
             "gate_pass_request_id" => $request_id,
             "stage" => "rop",

@@ -49,11 +49,13 @@ $is_switching_vendor = !empty($is_switching_vendor);
     <?php echo form_close(); ?>
 
     <div class="pod-signin-links">
-        <?php
-        echo $is_switching_vendor
-            ? anchor("vendor_portal", "Cancel")
-            : anchor("signin/sign_out", "Sign in with another account");
-        ?>
+        <?php if ($is_switching_vendor) { ?>
+            <?php echo anchor("vendor_portal", "Cancel"); ?>
+        <?php } else { ?>
+            <?php echo form_open("signin/sign_out", ["class" => "pod-inline-signout-form"]); ?>
+                <button type="submit" class="pod-link-button">Sign in with another account</button>
+            <?php echo form_close(); ?>
+        <?php } ?>
     </div>
 </div>
 
@@ -70,4 +72,6 @@ $is_switching_vendor = !empty($is_switching_vendor);
     .pod-vendor-option-copy strong { color: #112a42; font-size: 16px; }
     .pod-vendor-option-copy span { color: #52677c; }
     .pod-vendor-option-copy small { color: #7a8b9d; text-transform: uppercase; letter-spacing: .04em; }
+    .pod-inline-signout-form { display: inline; }
+    .pod-link-button { appearance: none; border: 0; background: transparent; color: #145b8f; padding: 0; cursor: pointer; text-decoration: underline; }
 </style>

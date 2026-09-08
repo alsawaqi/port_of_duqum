@@ -187,8 +187,10 @@ if (!empty($can_create_vendors)) {
          });
 
          $(document).on("change", ".js-vendor-status", function() {
+             var $statusSelect = $(this);
              var id = $(this).data("id");
              var status = $(this).val();
+             $statusSelect.prop("disabled", true);
 
              $.ajax({
                  url: "<?php echo get_uri('vendors/update_status'); ?>",
@@ -200,25 +202,25 @@ if (!empty($can_create_vendors)) {
                      "<?php echo csrf_token(); ?>": "<?php echo csrf_hash(); ?>" // ✅ include if CSRF enabled
                  },
                  success: function(res) {
-                     console.log(res);
                      if (res && res.success) {
                          appAlert.success(res.message || "Saved", {
                              duration: 2000
                          });
-                         $("#vendors-table").appTable({
-                             reload: true
-                         }); // ✅ refresh to reflect
                      } else {
-                         appAlert.error(res.message || "Error", {
+                         appAlert.error((res && res.message) || "Error", {
                              duration: 3000
                          });
                      }
                  },
                  error: function(xhr) {
-                     console.log(xhr.responseText);
-                     appAlert.error("Request failed", {
-                         duration: 3000
+                     appAlert.error((xhr.responseJSON && xhr.responseJSON.message) || "Request failed", {
+                         duration: 6000
                      });
+                 },
+                 complete: function() {
+                     // Show the saved status even when approval was rejected.
+                     $statusSelect.prop("disabled", false);
+                     $("#vendors-table").appTable({reload: true});
                  }
              });
          });

@@ -20,7 +20,8 @@ $contains = static function (string $needle, string $haystack, string $message) 
     }
 };
 
-$contains('ENVIRONMENT === "production"', $captcha, 'production CAPTCHA must fail closed when unconfigured');
+$contains('PODC_RECAPTCHA_ENABLED', $captcha, 'CAPTCHA can be explicitly disabled for current deployment testing');
+$contains('PODC_RECAPTCHA_REQUIRED', $captcha, 'CAPTCHA can be made fail-closed again when production keys are ready');
 $contains('PODC_RECAPTCHA_SECRET_KEY', $captcha, 'CAPTCHA secret supports environment provisioning');
 $contains('CURLOPT_SSL_VERIFYPEER => true', $captcha, 'provider TLS certificates must be verified');
 $contains('CURLOPT_CONNECTTIMEOUT => 3', $captcha, 'provider requests need a bounded connection timeout');

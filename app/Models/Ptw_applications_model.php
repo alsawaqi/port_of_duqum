@@ -6,6 +6,8 @@ use App\Libraries\Runtime_schema_guard;
 
 class Ptw_applications_model extends Crud_model
 {
+    use \App\Libraries\Sms\QueuesWorkflowSms;
+
     protected $table = null;
 
     public function __construct()

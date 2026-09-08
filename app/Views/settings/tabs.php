@@ -4,6 +4,7 @@ $settings_menu = array(
         array("name" => "general", "url" => "settings/general"),
         array("name" => "localization", "url" => "settings/localization"),
         array("name" => "email", "url" => "settings/email"),
+        array("name" => "sms", "url" => "settings/sms"),
         array("name" => "email_templates", "url" => "email_templates"),
         array("name" => "modules", "url" => "settings/modules"),
         array("name" => "left_menu", "url" => "left_menus"),

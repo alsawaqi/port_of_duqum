@@ -200,7 +200,7 @@ if (!function_exists('secure_upload_configured_extensions')) {
 
         $configured = array_filter(array_map(
             'trim',
-            explode(',', strtolower((string)get_setting(accepted_file_formats)))
+            explode(',', strtolower((string)get_setting('accepted_file_formats')))
         ));
 
         return $configured ?: null;
@@ -218,10 +218,10 @@ if (!function_exists('secure_upload_context_token')) {
         }
 
         $payload = base64_encode(json_encode([
-            context => $context,
-            user_id => (int)$session->get(user_id),
-            expires => time() + max(60, min($ttl, 3600)),
-            nonce => bin2hex(random_bytes(12)),
+            'context' => $context,
+            'user_id' => (int)$session->get('user_id'),
+            'expires' => time() + max(60, min($ttl, 3600)),
+            'nonce' => bin2hex(random_bytes(12)),
         ], JSON_UNESCAPED_SLASHES));
 
         return rtrim(strtr($payload, '+/', '-_'), '=')
@@ -264,11 +264,11 @@ if (!function_exists('register_secure_temp_upload')) {
         }
 
         $entry = [
-            original_name => $originalName,
-            path => (string)($metadata['path'] ?? ''),
-            context => $context,
-            size_bytes => (int)($metadata['size_bytes'] ?? 0),
-            expires => time() + 1800,
+            'original_name' => $originalName,
+            'path' => (string)($metadata['path'] ?? ''),
+            'context' => $context,
+            'size_bytes' => (int)($metadata['size_bytes'] ?? 0),
+            'expires' => time() + 1800,
         ];
         $entry['signature'] = hash_hmac('sha256', json_encode($entry), $secret);
         $uploads = (array)$session->get('secure_temp_uploads');
@@ -424,53 +424,59 @@ if (!function_exists('move_temp_file')) {
             : Upload_security::CONTEXT_GENERIC);
         $security = new Upload_security();
         $hasFileContent = is_string($file_content) ? $file_content !== "" : $file_content !== null;
-        if ($hasFileContent) {
-            $contentMetadata = $security->validateUntrustedBytes(
-                (string)$file_content,
-                (string)$file_name,
-                $securityContext,
-                secure_upload_configured_extensions($securityContext)
-            );
-            $file_size = (int)$contentMetadata["size_bytes"];
-        } else {
-            $security->validateClientClaim(
-                (string)$file_name,
-                max(1, (int)$file_size),
-                $securityContext,
-                secure_upload_configured_extensions($securityContext)
-            );
-        }
         $secureTemp = null;
 
-        if (!$source_path) {
-            $secureTemp = resolve_secure_temp_upload((string)$file_name);
-            if ($secureTemp) {
-                $source_path = $secureTemp['path'];
-                $file_size = (int)$secureTemp['size_bytes'];
-                if (!$security_context) {
-                    $securityContext = (string)$secureTemp['context'];
-                }
-                $direct_upload = true;
+        try {
+            if ($hasFileContent) {
+                $contentMetadata = $security->validateUntrustedBytes(
+                    (string)$file_content,
+                    (string)$file_name,
+                    $securityContext,
+                    secure_upload_configured_extensions($securityContext)
+                );
+                $file_size = (int)$contentMetadata["size_bytes"];
+            } else {
+                $security->validateClientClaim(
+                    (string)$file_name,
+                    max(1, (int)$file_size),
+                    $securityContext,
+                    secure_upload_configured_extensions($securityContext)
+                );
             }
-        }
 
-        //if not provide any source path we'll find the default path
-        if (!$source_path) {
-            $source_path = getcwd() . "/" . get_setting("temp_file_path") . $file_name;
-        }
+            if (!$source_path) {
+                $secureTemp = resolve_secure_temp_upload((string)$file_name);
+                if ($secureTemp) {
+                    $source_path = $secureTemp['path'];
+                    $file_size = (int)$secureTemp['size_bytes'];
+                    if (!$security_context) {
+                        $securityContext = (string)$secureTemp['context'];
+                    }
+                    $direct_upload = true;
+                }
+            }
 
-        if (!$hasFileContent
-            && !starts_with((string)$source_path, 'data')
-            && (!$secureTemp || $security_context)
-        ) {
-            $actualSize = is_file($source_path) ? (int)filesize($source_path) : 0;
-            $security->validatePath(
-                (string)$source_path,
-                (string)$file_name,
-                $actualSize,
-                $securityContext,
-                secure_upload_configured_extensions($securityContext)
-            );
+            //if not provide any source path we'll find the default path
+            if (!$source_path) {
+                $source_path = getcwd() . "/" . get_setting("temp_file_path") . $file_name;
+            }
+
+            if (!$hasFileContent
+                && !starts_with((string)$source_path, 'data')
+                && (!$secureTemp || $security_context)
+            ) {
+                $actualSize = is_file($source_path) ? (int)filesize($source_path) : 0;
+                $security->validatePath(
+                    (string)$source_path,
+                    (string)$file_name,
+                    $actualSize,
+                    $securityContext,
+                    secure_upload_configured_extensions($securityContext)
+                );
+            }
+        } catch (UploadSecurityException $e) {
+            log_message('notice', 'Upload file rejected while moving from temp.');
+            return false;
         }
 
         //remove unsupported values from the file name
@@ -850,11 +856,23 @@ if (!function_exists('move_files_from_temp_dir_to_permanent_dir')) {
         $file_names = $request->getPost("file_names");
         $file_sizes = $request->getPost("file_sizes");
 
-        if ($file_names && get_array_value($file_names, 0)) {
+        if ($file_names && is_array($file_names) && get_array_value($file_names, 0)) {
             foreach ($file_names as $key => $file_name) {
+                $file_name = trim((string)$file_name);
+                if ($file_name === "") {
+                    continue;
+                }
 
-                $file_size = get_array_value($file_sizes, $key);
-                $file_data = move_temp_file($file_name, $target_path, $related_to, null, "", "", false, $file_size);
+                $file_size = (int)get_array_value((array)$file_sizes, $key);
+                try {
+                    $file_data = move_temp_file($file_name, $target_path, $related_to, null, "", "", false, $file_size);
+                } catch (UploadSecurityException $e) {
+                    log_message('notice', 'Upload attachment rejected while moving from temp.');
+                    continue;
+                }
+                if (!$file_data || !get_array_value($file_data, "file_name")) {
+                    continue;
+                }
                 $files_data[] = array(
                     "file_name" => get_array_value($file_data, "file_name"),
                     "file_size" => $file_size,
@@ -867,13 +885,30 @@ if (!function_exists('move_files_from_temp_dir_to_permanent_dir')) {
         //process the files which has been submitted manually
         if ($_FILES) {
             $files = isset($_FILES['manualFiles']) ? $_FILES['manualFiles'] : array();
-            if ($files && count($files) > 0) {
+            if ($files && is_array($files) && count($files) > 0 && isset($files["tmp_name"]) && is_array($files["tmp_name"])) {
                 foreach ($files["tmp_name"] as $key => $file) {
-                    $temp_file = $file;
-                    $file_name = $files["name"][$key];
-                    $file_size = $files["size"][$key];
+                    $temp_file = (string)$file;
+                    $file_name = trim((string)($files["name"][$key] ?? ""));
+                    $file_size = (int)($files["size"][$key] ?? 0);
+                    $file_error = (int)($files["error"][$key] ?? UPLOAD_ERR_OK);
 
-                    $file_data = move_temp_file($file_name, $target_path, $related_to, $temp_file, "", "", false, $file_size);
+                    if ($file_error === UPLOAD_ERR_NO_FILE || $file_name === "" || $temp_file === "") {
+                        continue;
+                    }
+                    if ($file_error !== UPLOAD_ERR_OK) {
+                        log_message('notice', 'Manual upload attachment was incomplete.');
+                        continue;
+                    }
+
+                    try {
+                        $file_data = move_temp_file($file_name, $target_path, $related_to, $temp_file, "", "", false, $file_size);
+                    } catch (UploadSecurityException $e) {
+                        log_message('notice', 'Manual upload attachment rejected while moving from temp.');
+                        continue;
+                    }
+                    if (!$file_data || !get_array_value($file_data, "file_name")) {
+                        continue;
+                    }
                     $files_data[] = array(
                         "file_name" => get_array_value($file_data, "file_name"),
                         "file_size" => $file_size,

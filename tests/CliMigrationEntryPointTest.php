@@ -13,8 +13,8 @@ if (!is_string($spark)
 }
 
 foreach (["spark" => $spark, "index.php" => $index] as $name => $source) {
-    if (!is_string($source) || !str_contains($source, '$minPhpVersion = \'8.2\';')) {
-        fwrite(STDERR, "Assertion failed: {$name} does not enforce the CodeIgniter 4.7 PHP minimum." . PHP_EOL);
+    if (!is_string($source) || !str_contains($source, '$minPhpVersion = \'8.1.34\';')) {
+        fwrite(STDERR, "Assertion failed: {$name} does not enforce the project PHP 8.1.34 compatibility minimum." . PHP_EOL);
         exit(1);
     }
 }

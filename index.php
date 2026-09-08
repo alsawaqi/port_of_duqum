@@ -6,7 +6,7 @@
  *---------------------------------------------------------------
  */
 
-$minPhpVersion = '8.2'; // CodeIgniter 4.7.x runtime minimum; keep spark aligned.
+$minPhpVersion = '8.1.34'; // Project compatibility build; see documentation/PHP81_COMPATIBILITY.md.
 if (version_compare(PHP_VERSION, $minPhpVersion, '<')) {
     $message = sprintf(
         'Your PHP version must be %s or higher to run CodeIgniter. Current version: %s',

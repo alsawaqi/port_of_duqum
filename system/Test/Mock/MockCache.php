@@ -176,7 +176,7 @@ class MockCache extends BaseHandler implements CacheInterface
     /**
      * Will delete all items in the entire cache.
      */
-    public function clean(): true
+    public function clean(): bool
     {
         $this->cache       = [];
         $this->expirations = [];

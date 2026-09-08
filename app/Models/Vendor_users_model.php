@@ -261,6 +261,10 @@ class Vendor_users_model extends Crud_model
             $save["invited_at"] = date("Y-m-d H:i:s");
         }
 
+        if (array_key_exists("credentials_ready_at", $data)) {
+            $save["credentials_ready_at"] = $data["credentials_ready_at"] ?: null;
+        }
+
         if (!$existing) {
             $save["created_at"] = date("Y-m-d H:i:s");
         }
@@ -400,7 +404,7 @@ class Vendor_users_model extends Crud_model
             return (array) vendor_login_allowed_statuses();
         }
 
-        return ["new", "pending_payment", "submitted", "approved", "revise"];
+        return ["new", "pending_payment", "submitted", "approved", "revise", "expired"];
     }
 
     private function normalizeStatuses($statuses, array $allowed): array

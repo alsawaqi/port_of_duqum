@@ -130,6 +130,10 @@ class Vendor_contact_access
             }
         } else {
             $this->assertInitialPassword($initialPassword);
+            $loginMobile = \App\Libraries\Auth\OmanMobileNumber::normalize((string) $contact->mobile);
+            if ($loginMobile === null) {
+                throw new \RuntimeException("Enter the contact's personal Oman mobile number for SMS login verification.");
+            }
             $name = $this->splitContactName((string) $contact->contacts_name);
             $credentialsReadyAt = get_current_utc_time();
             $userId = $this->users->ci_save([
@@ -143,7 +147,7 @@ class Vendor_contact_access
                 "status" => "inactive",
                 "disable_login" => 1,
                 "job_title" => mb_substr(trim((string) ($contact->designation ?: "Vendor contact")), 0, 100),
-                "phone" => mb_substr(trim((string) ($contact->mobile ?: $contact->phone)), 0, 20),
+                "phone" => $loginMobile,
                 "language" => get_setting("language") ?: "english",
                 "created_at" => $credentialsReadyAt,
                 "deleted" => 0,
@@ -283,6 +287,7 @@ class Vendor_contact_access
         );
         $this->clearPreparedCredentials($userId);
         $this->revokeOutstandingInvitations($userId);
+        (new Vendor_login_mobile($this->db))->fillMissingFromApprovedContacts($userId);
 
         return true;
     }

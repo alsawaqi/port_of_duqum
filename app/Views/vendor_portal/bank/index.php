@@ -305,6 +305,7 @@
                     </div>
                 </div>
 
+                <?php if (!empty($can_edit_profile)) { ?>
                 <div class="vp-banks-add-btn">
                     <?php echo modal_anchor(
                         get_uri("vendor_portal/bank_account_modal_form"),
@@ -312,6 +313,7 @@
                         ["class" => "btn btn-default", "title" => app_lang("add")]
                     ); ?>
                 </div>
+                <?php } ?>
             </div>
 
             <div class="vp-banks-toolbar">

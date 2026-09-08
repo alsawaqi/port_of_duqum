@@ -16,9 +16,12 @@ namespace CodeIgniter\Cache;
 use CodeIgniter\Cache\FactoriesCache\FileVarExportHandler;
 use CodeIgniter\Config\Factories;
 
-final readonly class FactoriesCache
+final class FactoriesCache
 {
-    private CacheInterface|FileVarExportHandler $cache;
+    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
+    use \CodeIgniter\Compatibility\NoDynamicProperties;
+
+    private readonly CacheInterface|FileVarExportHandler $cache;
 
     public function __construct(CacheInterface|FileVarExportHandler|null $cache = null)
     {

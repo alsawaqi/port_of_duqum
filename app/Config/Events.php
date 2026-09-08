@@ -115,6 +115,7 @@ function set_default_csp_directives() {
         $csp->setDefaultSrc('self');
         $csp->addBaseURI('self');
         $csp->addFormAction('self');
+        $csp->addFormAction(['https://spayuattrns.bmtest.om', 'https://smartpaytrns.bankmuscat.com']);
         $csp->addFrameAncestor('self');
         $csp->addObjectSrc('none');
 

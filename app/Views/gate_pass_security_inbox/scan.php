@@ -99,13 +99,6 @@
                 <div id="gp_scan_visitors_list" class="gp-scan-visitor-checks"></div>
             </div>
 
-            <div class="mt15">
-                <?php echo modal_anchor(
-                    get_uri("gate_pass_security_inbox/request_edit_modal_form"),
-                    "<i data-feather='edit' class='icon-16'></i> Edit Request",
-                    ["class" => "btn btn-default gp-pro-btn-secondary gp-pro-btn-icon", "title" => "Edit Request", "id" => "btn_edit_request", "data-post-request_id" => 0]
-                ); ?>
-            </div>
         </div>
     </div>
 </div>
@@ -120,11 +113,6 @@
                     "<i data-feather='slash' class='icon-16'></i> Block / Unblock visitor",
                     ["class" => "btn btn-warning btn-sm gp-pro-btn gp-pro-btn-icon", "title" => "Block/Unblock Visitor", "id" => "btn_visitor_block_scan", "data-post-request_id" => 0]
                 ); ?>
-                <?php echo modal_anchor(
-                    get_uri("gate_pass_security_inbox/visitor_modal_form"),
-                    "<i data-feather='plus-circle' class='icon-16'></i> Add Visitor",
-                    ["class" => "btn btn-primary btn-sm gp-pro-btn gp-pro-btn-icon", "title" => "Add Visitor", "id" => "btn_add_visitor", "data-post-gate_pass_request_id" => 0]
-                ); ?>
             </div>
         </div>
         <div class="table-responsive gp-pro-table-shell">
@@ -135,13 +123,6 @@
     <div class="card gp-pro-card">
         <div class="p15 clearfix gp-pro-section-head">
             <h4 class="pull-left mt0 mb0"><?php echo app_lang("vehicles"); ?></h4>
-            <div class="pull-right">
-                <?php echo modal_anchor(
-                    get_uri("gate_pass_security_inbox/vehicle_modal_form"),
-                    "<i data-feather='plus-circle' class='icon-16'></i> Add Vehicle",
-                    ["class" => "btn btn-primary btn-sm gp-pro-btn gp-pro-btn-icon", "title" => "Add Vehicle", "id" => "btn_add_vehicle", "data-post-gate_pass_request_id" => 0]
-                ); ?>
-            </div>
         </div>
         <div class="table-responsive gp-pro-table-shell">
             <table id="gp-scan-vehicles-table" class="display" width="100%"></table>
@@ -184,9 +165,6 @@ $(document).ready(function () {
     }
 
     function initTables(requestId){
-        $("#btn_add_visitor").attr("data-post-gate_pass_request_id", requestId);
-        $("#btn_add_vehicle").attr("data-post-gate_pass_request_id", requestId);
-        $("#btn_edit_request").attr("data-post-request_id", requestId);
         $("#btn_visitor_block_scan").attr("data-post-request_id", requestId);
 
         const $v = $("#gp-scan-visitors-table");

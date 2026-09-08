@@ -4,6 +4,8 @@ namespace App\Models;
 
 class Gate_pass_requests_model extends Crud_model
 {
+    use \App\Libraries\Sms\QueuesWorkflowSms;
+
     protected $table = null;
 
     public function __construct()

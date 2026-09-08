@@ -10,6 +10,9 @@ final class Payment_gateway_factory
     public static function make(?EservicesPayments $config = null): Payment_gateway_interface
     {
         $config = $config ?: config('EservicesPayments');
+        if ($config->provider === 'bank_muscat') {
+            return new Bank_muscat_gateway($config);
+        }
         if ($config->provider === 'stripe') {
             return new Stripe_payment_gateway($config);
         }

@@ -9,8 +9,12 @@ use Throwable;
 /** Secure checkout initiation and signed, idempotent provider settlement. */
 final class Eservice_payment_manager
 {
+    use Smartpay_payment_processing;
+
     public const TENDER_FEE = 'tender_fee';
     public const GATE_PASS_FEE = 'gate_pass_fee';
+    public const VENDOR_REGISTRATION = 'vendor_registration';
+    public const VENDOR_RENEWAL = 'vendor_renewal';
 
     private BaseConnection $db;
     private EservicesPayments $config;
@@ -32,9 +36,10 @@ final class Eservice_payment_manager
         string $amount,
         string $description,
         string $successUrl,
-        string $cancelUrl
+        string $cancelUrl,
+        array $metadata = []
     ): array {
-        if (!in_array($subjectType, [self::TENDER_FEE, self::GATE_PASS_FEE], true)
+        if (!in_array($subjectType, [self::TENDER_FEE, self::GATE_PASS_FEE, self::VENDOR_REGISTRATION, self::VENDOR_RENEWAL], true)
             || $subjectId < 1
             || $userId < 1
         ) {
@@ -42,6 +47,14 @@ final class Eservice_payment_manager
         }
         if (!$this->config->isReady() || !$this->db->tableExists('eservice_payments')) {
             return $this->failure(503, 'Online payment is not configured. No fee has been marked as paid.');
+        }
+        $smartpay = $this->config->provider === 'bank_muscat';
+        if (array_key_exists('currency', $metadata)
+            && strtoupper(trim((string)$metadata['currency'])) !== $this->config->currency) {
+            return $this->failure(422, 'The fee currency does not match the configured payment currency. No checkout was created.');
+        }
+        if ($smartpay && !$this->smartpaySchemaReady()) {
+            return $this->failure(503, 'The SmartPay database upgrade is required before taking payments.');
         }
 
         try {
@@ -57,16 +70,37 @@ final class Eservice_payment_manager
         $now = get_current_utc_time();
         $this->db->transBegin();
         try {
+            // Never charge an already paid subject twice. A vendor renewal has its own immutable quote/cycle.
+            $paid = $this->db->query(
+                "SELECT metadata FROM {$table} WHERE subject_type = ? AND subject_id = ? AND vendor_id <=> ? AND deleted = 0 AND status = 'paid' FOR UPDATE",
+                [$subjectType, $subjectId, $vendorId]
+            )->getResult();
+            foreach ($paid as $prior) {
+                $priorMetadata = json_decode((string)$prior->metadata, true) ?: [];
+                if (!in_array($subjectType, [self::VENDOR_REGISTRATION, self::VENDOR_RENEWAL], true)
+                    || (int)($priorMetadata['vendor_fee_request_id'] ?? 0) === (int)($metadata['vendor_fee_request_id'] ?? 0)) {
+                    $this->db->transRollback();
+                    return $this->failure(409, 'Payment has already been received for this fee. Contact accounting if reconciliation is required.');
+                }
+            }
             $existing = $this->db->query(
                 "SELECT * FROM {$table}
                  WHERE subject_type = ? AND subject_id = ? AND vendor_id <=> ?
-                   AND deleted = 0 AND status IN ('pending', 'processing')
+                   AND deleted = 0 AND status IN ('pending', 'processing', 'verification_required')
                  ORDER BY id DESC LIMIT 1 FOR UPDATE",
                 [$subjectType, $subjectId, $vendorId]
             )->getRow();
 
             if ($existing) {
-                $expiresAt = strtotime((string)($existing->expires_at ?? '')) ?: 0;
+                if ((string)$existing->status === 'verification_required' || ($smartpay && !empty($existing->handed_off_at))) {
+                    $this->db->transRollback();
+                    return $this->failure(409, 'A bank transaction is awaiting confirmation. Please return from the bank or ask accounting to recheck its status before paying again.');
+                }
+                if ((int)$existing->amount_minor !== $amountMinor || (string)$existing->currency !== $currency || (string)$existing->provider !== $this->config->provider) {
+                    $this->db->transRollback();
+                    return $this->failure(409, 'The fee changed while a checkout was open. Accounting must reconcile the existing transaction first.');
+                }
+                $expiresAt = strtotime((string)($existing->expires_at ?? '') . ' UTC') ?: 0;
                 if ($expiresAt > time() && !empty($existing->checkout_url)) {
                     $this->db->transCommit();
                     return [
@@ -89,7 +123,8 @@ final class Eservice_payment_manager
 
             $publicId = bin2hex(random_bytes(16));
             $idempotencyKey = bin2hex(random_bytes(32));
-            $inserted = $this->db->table($table)->insert([
+            $orderId = $smartpay ? 'POD' . strtoupper(bin2hex(random_bytes(11))) : null;
+            $row = [
                 'public_id' => $publicId,
                 'subject_type' => $subjectType,
                 'subject_id' => $subjectId,
@@ -101,21 +136,31 @@ final class Eservice_payment_manager
                 'provider' => $this->config->provider,
                 'status' => 'pending',
                 'idempotency_key' => $idempotencyKey,
-                'metadata' => json_encode(['description' => mb_substr($description, 0, 120)], JSON_UNESCAPED_UNICODE),
+                'metadata' => json_encode(array_merge($metadata, ['description' => mb_substr($description, 0, 120), 'success_url' => $successUrl, 'cancel_url' => $cancelUrl]), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
                 'initiated_at' => $now,
+                'expires_at' => gmdate('Y-m-d H:i:s', time() + $this->config->checkoutTtlSeconds),
                 'created_at' => $now,
                 'updated_at' => $now,
                 'deleted' => 0,
-            ]);
+            ];
+            if ($smartpay) {
+                $row['provider_checkout_id'] = $orderId;
+                $row['gateway_merchant_id'] = $this->config->smartpayMerchantId;
+            }
+            $inserted = $this->db->table($table)->insert($row);
             if (!$inserted || $this->db->transStatus() === false) {
                 throw new \RuntimeException('Unable to create the payment record.');
             }
             $paymentId = (int)$this->db->insertID();
+            if ($smartpay) {
+                $this->insertSmartpayEvent($paymentId, 'checkout.created', 'recorded', [], [], hash('sha256', (string)$orderId));
+            }
             $this->db->transCommit();
 
             try {
                 $checkout = $gateway->createCheckout([
                     'public_id' => $publicId,
+                    'order_id' => $orderId,
                     'subject_type' => $subjectType,
                     'subject_id' => $subjectId,
                     'amount_minor' => $amountMinor,
@@ -129,7 +174,7 @@ final class Eservice_payment_manager
                     'status' => 'processing',
                     'provider_checkout_id' => $checkout['checkout_id'],
                     'checkout_url' => $checkout['checkout_url'],
-                    'expires_at' => date('Y-m-d H:i:s', $checkout['expires_at']),
+                    'expires_at' => gmdate('Y-m-d H:i:s', $checkout['expires_at']),
                     'updated_at' => get_current_utc_time(),
                 ]);
                 if (!$updated) {
@@ -151,6 +196,9 @@ final class Eservice_payment_manager
                     'checkout_url' => null,
                     'updated_at' => get_current_utc_time(),
                 ]);
+                if ($smartpay) {
+                    $this->insertSmartpayEvent($paymentId, 'checkout.failed', 'rejected', [], ['provider_checkout_failed']);
+                }
                 log_message('error', 'E-SERVICE CHECKOUT CREATION FAILED: {class}', ['class' => get_class($exception)]);
                 return $this->failure(503, 'The secure payment provider is unavailable. No fee has been marked as paid.');
             }
@@ -164,7 +212,7 @@ final class Eservice_payment_manager
     /** @return array{success:bool,status_code:int,message:string} */
     public function processStripeWebhook(string $rawBody, string $signature): array
     {
-        if (!$this->config->isReady()
+        if ($this->config->provider !== 'stripe' || !$this->config->isReady()
             || !$this->db->tableExists('eservice_payments')
             || !$this->db->tableExists('eservice_payment_events')
         ) {
@@ -297,6 +345,10 @@ final class Eservice_payment_manager
             $this->applyPaidGatePassFee($payment, $providerReference);
             return;
         }
+        if (in_array((string)$payment->subject_type, [self::VENDOR_REGISTRATION, self::VENDOR_RENEWAL], true)) {
+            Vendor_payment_settlement::apply($this->db, $payment, $providerReference);
+            return;
+        }
 
         throw new \DomainException('Unknown payment subject.');
     }
@@ -305,6 +357,12 @@ final class Eservice_payment_manager
     {
         if (!$this->db->tableExists('tender_fee_payments')) {
             throw new \RuntimeException('Tender fee payment table is unavailable.');
+        }
+        $tenders = $this->db->prefixTable('tenders');
+        $tender = $this->db->query("SELECT * FROM {$tenders} WHERE id = ? AND deleted = 0 LIMIT 1 FOR UPDATE", [(int)$payment->subject_id])->getRow();
+        if (!$tender || Payment_amount::toMinor((string)($tender->tender_fee ?? '0'), 3) !== (int)$payment->amount_minor
+            || strtoupper((string)($tender->currency ?? 'OMR')) !== (string)$payment->currency) {
+            throw new \DomainException('The tender fee changed after checkout; accounting reconciliation is required.');
         }
         $table = $this->db->prefixTable('tender_fee_payments');
         $existing = $this->db->query(
@@ -342,12 +400,22 @@ final class Eservice_payment_manager
         if (!$request) {
             throw new \DomainException('Gate-pass request no longer exists.');
         }
+        if ((int)$request->requester_id !== (int)$payment->user_id) {
+            throw new \DomainException('The gate-pass payer no longer matches the request owner.');
+        }
         if ((int)($request->fee_is_waived ?? 0) === 1) {
             throw new \DomainException('A waived fee cannot be settled as an online payment.');
         }
+        if (Payment_amount::toMinor((string)($request->fee_amount ?? '0'), 3) !== (int)$payment->amount_minor
+            || strtoupper((string)($request->currency ?? 'OMR')) !== (string)$payment->currency) {
+            throw new \DomainException('The gate-pass fee changed after checkout; accounting reconciliation is required.');
+        }
 
-        // Money remains recorded as paid even if the workflow changed while
-        // checkout was open. Only the expected state is advanced automatically.
+        // Received money is already durable. A concurrent return/rejection must
+        // remain visible as unapplied funds until the request is eligible again.
+        if ((string)$request->status !== 'department_approved') {
+            throw new \DomainException('The gate-pass workflow changed after checkout; accounting reconciliation is required.');
+        }
         if ((string)$request->status === 'department_approved') {
             $this->db->table($requests)->where('id', (int)$request->id)->update([
                 'status' => 'commercial_approved',

@@ -1,0 +1,25 @@
+{
+    "status": "passed",
+    "checks": 229,
+    "source_tables": 211,
+    "upgraded_tables": 215,
+    "new_tables": [
+        "pod_eservice_payments",
+        "pod_eservice_payment_events",
+        "pod_vendor_fee_requests",
+        "pod_sms_outbox"
+    ],
+    "test_server": "10.4.32-MariaDB",
+    "production_server_from_dump": "10.11.19-MariaDB",
+    "notes": [
+        "Executed only extracted CREATE TABLE definitions in a fresh scratch schema.",
+        "utf8mb3 alias normalized to utf8 for local MariaDB 10.4.32.",
+        "Upgrade and preflight/postflight SQL tested; second upgrade run successful.",
+        "All 211 original table definitions unchanged.",
+        "New definitions match current local application schema.",
+        "Verified unique guards for pending payment, bank event, fee period, and SMS event.",
+        "No production data, bank calls, SMS calls, or production connections used."
+    ],
+    "completed_at_utc": "2026-09-08T09:49:09+00:00",
+    "scratch_schema_removed": true
+}

@@ -27,8 +27,10 @@ class Settings extends Security_Controller {
         foreach ($settings as $setting) {
             $value = $this->request->getPost($setting);
 
-            if ($setting == "landing_page" || $setting == "show_logo_in_signin_page" || $setting == "show_background_image_in_signin_page") {
-                $this->Settings_model->save_setting($setting, $value); //can be saved as blank also
+            if ($setting == "landing_page") {
+                $this->Settings_model->save_setting($setting, $value ?? ""); //can be saved as blank also
+            } else if ($setting == "show_logo_in_signin_page" || $setting == "show_background_image_in_signin_page") {
+                $this->Settings_model->save_setting($setting, $value === "yes" ? "yes" : ""); //unchecked checkboxes are not posted
             } else if ($value || $value === "0") {
                 if ($setting === "site_logo") {
                     $value = str_replace("~", ":", $value);
@@ -148,6 +150,86 @@ class Settings extends Security_Controller {
 
     function email() {
         return $this->template->rander("settings/email");
+    }
+
+    function sms() {
+        $this->access_only_admin();
+        $db = db_connect();
+        $loginSettings = new \App\Libraries\Auth\SmsLoginSettings($db);
+        $connection = \App\Libraries\Sms\SmsConnectionSettings::load();
+        return $this->template->rander('settings/sms', [
+            'sms_config' => $connection, 'auth_config' => config('AuthSecurity'),
+            'sms_ready' => (new \App\Libraries\Sms\IsmartSmsGateway())->isConfigured(),
+            'missing_mobile_users' => $loginSettings->accountsMissingMobile(),
+            'sms_login_setup_error' => $loginSettings->enablementError(config('AuthSecurity'), $connection),
+            'sms_records' => $db->table('sms_outbox')->orderBy('id', 'DESC')->limit(100)->get()->getResultArray(),
+        ]);
+    }
+
+    function save_sms_login_settings() {
+        $this->access_only_admin();
+        if (strtoupper($this->request->getMethod()) !== 'POST') { return $this->response->setStatusCode(405); }
+        $value = $this->request->getPost('sms_login_otp_required');
+        if (!in_array($value, ['0', '1'], true)) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => 'Select whether SMS OTP is required.']);
+        }
+        $enabled = $value === '1';
+        $config = config('AuthSecurity');
+        try {
+            (new \App\Libraries\Auth\SmsLoginSettings())->save($enabled, $config, \App\Libraries\Sms\SmsConnectionSettings::load());
+        } catch (\InvalidArgumentException $e) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Unable to save SMS login policy.');
+            return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Unable to save login verification settings. Please try again.']);
+        }
+        (new \App\Models\Auth_security_model())->audit('sms_login_policy_changed', 'success', (int) $this->login_user->id, '', [
+            'previously_enabled' => $config->mfaEnabled, 'enabled' => $enabled, 'provider' => 'ismartsms', 'scope' => '*',
+        ]);
+        return $this->response->setJSON(['success' => true, 'message' => 'Login verification settings saved.']);
+    }
+
+    function save_sms_settings() {
+        $this->access_only_admin();
+        if (strtoupper($this->request->getMethod()) !== 'POST') { return $this->response->setStatusCode(405); }
+        $live = $this->request->getPost('sms_live_notifications') === '1';
+        $connection = \App\Libraries\Sms\SmsConnectionSettings::load();
+        $userId = $this->request->getPost('ismartsms_user_id');
+        $password = $this->request->getPost('ismartsms_password');
+        $header = $this->request->getPost('ismartsms_header');
+        if (!is_string($userId) || !is_string($password) || !is_string($header) || strlen(trim($header)) > 11 || strlen($userId) > 190 || strlen($password) > 512) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => 'Enter valid SMS account settings.']);
+        }
+        $connection->userId = trim($userId);
+        $connection->header = trim($header);
+        if ($password !== '') { $connection->password = $password; }
+        $connection->enabled = $this->request->getPost('ismartsms_enabled') === '1';
+        $ready = (new \App\Libraries\Sms\IsmartSmsGateway($connection))->isConfigured();
+        $authConfig = config('AuthSecurity');
+        if ($authConfig->mfaEnabled && !$ready && ($authConfig->mfaProvider === 'ismartsms'
+            || in_array('ismartsms', $authConfig->mfaProvidersByUserType, true))) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false,
+                'message' => 'SMS OTP is required for login. Keep the SMS connection enabled, or turn off mandatory login OTP first.']);
+        }
+        if (($live || $connection->enabled) && !$ready) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false,
+                'message' => 'Enter the iSmartSMS username, password and approved sender name, and enable the connection before switching to live SMS.']);
+        }
+        if (!\App\Libraries\Sms\SmsConnectionSettings::save($connection)) {
+            return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => 'Unable to save SMS connection settings.']);
+        }
+        foreach (['sms_notifications_enabled', 'sms_vendor_enabled', 'sms_gate_pass_enabled', 'sms_ptw_enabled', 'sms_tender_enabled', 'sms_live_notifications'] as $key) {
+            $this->Settings_model->save_setting($key, $this->request->getPost($key) === '1' ? '1' : '0');
+        }
+        $this->Settings_model->save_setting('sms_language', $this->request->getPost('sms_language') === '64' ? '64' : '0');
+        return $this->response->setJSON(['success' => true, 'message' => app_lang('record_saved')]);
+    }
+
+    function process_sms_queue() {
+        $this->access_only_admin();
+        if (strtoupper($this->request->getMethod()) !== 'POST') { return $this->response->setStatusCode(405); }
+        $count = (new \App\Libraries\Sms\WorkflowSmsOutbox())->process(20);
+        return $this->response->setJSON(['success' => true, 'message' => $count . ' notification records processed.']);
     }
 
     function save_email_settings() {

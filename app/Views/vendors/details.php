@@ -33,6 +33,14 @@
                     <span><?php echo app_lang("status"); ?></span>
                     <strong><?php echo esc($vendor->status ?? "-"); ?></strong>
                 </div>
+                <?php foreach (['registration_valid_from', 'registration_valid_to'] as $registration_date): ?>
+                    <?php if (!empty($vendor->$registration_date)): ?>
+                    <div class="pod-vendor-summary-item">
+                        <span><?php echo app_lang('vendor_' . $registration_date); ?></span>
+                        <strong><?php echo esc(format_to_date($vendor->$registration_date, false)); ?></strong>
+                    </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
                 <?php if (($vendor->status ?? "") === vendor_blocked_status()) { ?>
                     <div class="pod-vendor-summary-item">
                         <span><?php echo app_lang("reason"); ?></span>

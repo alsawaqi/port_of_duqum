@@ -18,12 +18,15 @@ namespace CodeIgniter\Commands\Utilities\Routes;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\AutoRouteCollectorTest
  */
-final readonly class AutoRouteCollector
+final class AutoRouteCollector
 {
+    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
+    use \CodeIgniter\Compatibility\NoDynamicProperties;
+
     /**
      * @param string $namespace namespace to search
      */
-    public function __construct(private string $namespace, private string $defaultController, private string $defaultMethod)
+    public function __construct(private readonly string $namespace, private readonly string $defaultController, private readonly string $defaultMethod)
     {
     }
 

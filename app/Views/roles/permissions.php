@@ -10,6 +10,54 @@
             <ul class="permission-list">
 
             <li>
+                <span data-feather="credit-card" class="icon-14 ml-20"></span>
+                <h5><?php echo app_lang('payment_accounting_permissions'); ?></h5>
+                <p class="text-off"><?php echo app_lang('payment_accounting_permissions_hint'); ?></p>
+                <div class="form-check mb-1">
+                    <?php echo form_checkbox('accounting_only', '1', !empty($permissions['accounting_only']), "id='accounting_only' class='form-check-input'"); ?>
+                    <label class="form-check-label" for="accounting_only"><?php echo app_lang('payment_accounting_only_role'); ?></label>
+                </div>
+                <p class="text-off small mb-3"><?php echo app_lang('payment_accounting_only_role_hint'); ?></p>
+                <div class="row">
+                    <?php foreach (\App\Libraries\Payments\Payment_accounting_policy::MODULES as $accounting_module => $_accounting_types): ?>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <div class="fw-semibold"><?php echo app_lang($accounting_module . '_accounting'); ?></div>
+                            <?php foreach (\App\Libraries\Payments\Payment_accounting_policy::ACTIONS as $accounting_action):
+                                $accounting_key = 'can_' . $accounting_action . '_' . $accounting_module . '_accounting'; ?>
+                                <div class="form-check">
+                                    <?php echo form_checkbox($accounting_key, '1', !empty($permissions[$accounting_key]), "id='" . $accounting_key . "' class='form-check-input'"); ?>
+                                    <label class="form-check-label" for="<?php echo $accounting_key; ?>"><?php echo app_lang('payment_accounting_permission_' . $accounting_action); ?></label>
+                                </div>
+                            <?php endforeach; ?>
+                            <?php if ($accounting_module !== 'vendor'):
+                                $accounting_scope_key = $accounting_module . '_accounting_company_ids';
+                                $accounting_company_ids = \App\Libraries\Payments\Payment_accounting_policy::companyIds((object) ['permissions' => $permissions], $accounting_module);
+                                $accounting_scope_mode = $accounting_company_ids === null && !empty($permissions['can_view_' . $accounting_module . '_accounting']) ? 'legacy' : 'selected'; ?>
+                                <label class="mt-2" for="<?php echo $accounting_module; ?>_accounting_scope_mode"><?php echo app_lang('payment_accounting_scope_mode'); ?></label>
+                                <select class="form-control accounting-scope-mode" name="<?php echo $accounting_module; ?>_accounting_scope_mode" id="<?php echo $accounting_module; ?>_accounting_scope_mode" data-module="<?php echo $accounting_module; ?>">
+                                    <option value="selected" <?php echo $accounting_scope_mode === 'selected' ? 'selected' : ''; ?>><?php echo app_lang('payment_accounting_scope_selected'); ?></option>
+                                    <?php if ($accounting_module !== 'ptw'): ?>
+                                        <option value="legacy" <?php echo $accounting_scope_mode === 'legacy' ? 'selected' : ''; ?>><?php echo app_lang('payment_accounting_scope_legacy'); ?></option>
+                                    <?php endif; ?>
+                                </select>
+                                <div id="<?php echo $accounting_module; ?>_accounting_company_selection">
+                                    <label class="mt-2" for="<?php echo $accounting_scope_key; ?>"><?php echo app_lang('payment_accounting_companies'); ?></label>
+                                    <select multiple class="form-control accounting-company-select" name="<?php echo $accounting_scope_key; ?>[]" id="<?php echo $accounting_scope_key; ?>">
+                                        <?php foreach (($accounting_companies ?? []) as $accounting_company): ?>
+                                            <option value="<?php echo (int) $accounting_company->id; ?>" <?php echo in_array((int) $accounting_company->id, $accounting_company_ids ?? [], true) ? 'selected' : ''; ?>><?php echo esc($accounting_company->name); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="text-off small mt-1"><?php echo app_lang('payment_accounting_companies_hint'); ?></p>
+                                </div>
+                            <?php else: ?>
+                                <p class="text-off small mt-2"><?php echo app_lang('payment_accounting_vendor_scope_hint'); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </li>
+
+            <li>
                     <span data-feather="settings" class="icon-14 ml-20"></span>
                     <h5>Master Data Permissions:</h5>
 
@@ -1863,6 +1911,11 @@
         });
 
 
+
+        $('.accounting-company-select').select2();
+        $('.accounting-scope-mode').on('change', function () {
+            $('#' + $(this).data('module') + '_accounting_company_selection').toggle($(this).val() === 'selected');
+        }).trigger('change');
 
         function linkManageToView(manageId, viewId) {
   $(manageId).on("change", function () {

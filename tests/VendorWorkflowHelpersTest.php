@@ -39,7 +39,8 @@ $assertTrue(vendor_can_access_profile_portal("new"), "new vendors can complete p
 $assertTrue(vendor_can_access_profile_portal("revise"), "revise vendors can correct profile");
 $assertFalse(vendor_can_access_profile_portal("rejected"), "rejected vendors cannot access normal portal");
 $assertFalse(vendor_can_access_profile_portal("suspended"), "suspended vendors cannot access normal portal");
-$assertFalse(vendor_can_access_profile_portal("expired"), "expired vendors cannot access normal portal");
+$assertTrue(vendor_can_access_profile_portal("expired"), "expired vendors can maintain profile and renew registration");
+$assertFalse(vendor_can_access_tender_portal("expired"), "expired vendors still cannot access tenders before renewal");
 
 $assertTrue(vendor_can_access_tender_portal("approved"), "approved vendors can access tender portal");
 $assertTrue(vendor_can_access_tender_portal("submitted"), "submitted vendors can access eligible active tenders");
@@ -48,9 +49,9 @@ $assertFalse(vendor_can_access_tender_portal("suspended"), "suspended vendors ca
 
 $assertSame("suspended", vendor_blocked_status(), "blocked vendors use the suspended status");
 $assertSame(
-    ["new", "pending_payment", "submitted", "approved", "revise"],
+    ["new", "pending_payment", "submitted", "approved", "revise", "expired"],
     vendor_login_allowed_statuses(),
-    "vendor login allowed statuses exclude blocked, rejected, and expired vendors"
+    "vendor login permits renewal while excluding blocked and rejected vendors"
 );
 $assertSame("A - Excellent", vendor_grade_label("Excellent", "A"), "vendor grade labels include code and name");
 $assertSame("B2", vendor_grade_label("", "B2"), "vendor grade labels fall back to code");
