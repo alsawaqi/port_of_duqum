@@ -55,8 +55,17 @@ class Gate_pass_request_list extends Security_Controller
         $nationality = $this->request->getGet("nationality");
         $date_from = $this->request->getGet("date_from");
         $date_to = $this->request->getGet("date_to");
+        $visitor_identity = $this->request->getGet("visitor_identity");
+        if ($visitor_identity !== null && (!is_string($visitor_identity) || mb_strlen($visitor_identity) > 100)) {
+            return $this->response->setStatusCode(422)->setJSON([
+                "data" => [], "message" => app_lang("gate_pass_visitor_identity_invalid")
+            ]);
+        }
 
         $options = [];
+        if (trim((string)$visitor_identity) !== "") {
+            $options["visitor_identity"] = trim($visitor_identity);
+        }
         if ($company_id !== null && $company_id !== "") {
             $options["company_id"] = (int)$company_id;
         }

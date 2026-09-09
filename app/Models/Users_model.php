@@ -87,8 +87,67 @@ class Users_model extends Crud_model {
     }
 
     /**
+     * Resolve the shared sign-in field. Email retains the existing identity
+     * flow; a CR must identify exactly one accessible user by their password.
+     * Never choose the first contact when two people share a password.
+     */
+    function authenticate_signin_credentials($identifier, $password) {
+        $identifier = trim((string) $identifier);
+        if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return $this->authenticate_credentials($identifier, $password);
+        }
+        if ($identifier === "" || strlen($identifier) > 255 || str_contains($identifier, "@")) {
+            return false;
+        }
+
+        $vendors = $this->db->prefixTable("vendors");
+        $matches = $this->db->query(
+            "SELECT id FROM {$vendors} WHERE UPPER(TRIM(cr_number)) = ? AND deleted=0 LIMIT 2",
+            [strtoupper($identifier)]
+        )->getResult();
+        if (count($matches) !== 1) {
+            return false;
+        }
+        $vendorId = (int) $matches[0]->id;
+        $users = $this->db->prefixTable("users");
+        $memberships = $this->db->prefixTable("vendor_users");
+        $candidates = $this->db->query(
+            "SELECT DISTINCT users.id, users.user_type, users.client_id, users.is_admin,
+                    users.role_id, users.email, users.phone, users.password
+             FROM {$users} users
+             INNER JOIN {$memberships} memberships ON memberships.user_id=users.id
+             WHERE memberships.vendor_id=? AND memberships.deleted=0 AND memberships.status='active'
+               AND users.deleted=0 AND users.status='active' AND users.disable_login=0
+               AND users.user_type='staff'",
+            [$vendorId]
+        )->getResult();
+
+        $vendorUsers = new Vendor_users_model();
+        $verified = null;
+        foreach ($candidates as $candidate) {
+            if (!$vendorUsers->get_accessible_membership((int) $candidate->id, $vendorId)
+                || !$this->_password_matches($candidate, $password)) {
+                continue;
+            }
+            if ($verified !== null) {
+                return false;
+            }
+            $verified = $candidate;
+        }
+        if (!$verified) {
+            return false;
+        }
+
+        $this->_rehash_verified_password_if_needed($verified, (string) $password);
+        $verified->authenticated_vendor_id = $vendorId;
+        $verified->mfa_user_type = $this->is_vendor_only_identity((int) $verified->id, $verified)
+            ? 'vendor' : strtolower((string) $verified->user_type);
+        return $verified;
+    }
+
+    /**
      * Validate an email/password pair without creating a login session.
-     * CR numbers are deliberately not authentication credentials.
+     * Legacy callers stay email-only; interactive sign-in also supports CRs.
      */
     function authenticate_credentials($email, $password) {
         $email = strtolower(trim((string) $this->_get_clean_value(array("email" => $email), "email")));
@@ -516,6 +575,7 @@ class Users_model extends Crud_model {
             'pending_mfa_challenge_id',
             'pending_mfa_user_id',
             'pending_mfa_redirect_url',
+            'pending_mfa_vendor_id',
             'pending_mfa_started_at'
         ]);
 

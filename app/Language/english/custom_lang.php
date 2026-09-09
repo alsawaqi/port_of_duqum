@@ -459,6 +459,9 @@ $lang["vehicles"] = "Vehicles";
 $lang["full_name"] = "Full Name";
 $lang["id_type"] = "ID Type";
 $lang["id_number"] = "ID Number";
+$lang["gate_pass_visitor_identity"] = "Visitor ID / Passport number";
+$lang["gate_pass_visitor_identity_placeholder"] = "Enter full or partial ID / passport number";
+$lang["gate_pass_visitor_identity_invalid"] = "Enter an ID or passport number of up to 100 characters.";
 $lang["nationality"] = "Nationality";
 $lang["gate_pass_id_type_passport"] = "Passport";
 $lang["gate_pass_id_type_national_id"] = "National ID";
@@ -664,6 +667,8 @@ $lang["password_no_spaces"] = "Password cannot contain spaces.";
 $lang["password_confirm_required"] = "Password confirmation is required.";
 $lang["passwords_do_not_match"] = "Password and confirmation do not match.";
 $lang["email_or_cr_number"] = "Email or CR number";
+$lang['signin_email_or_cr_hint'] = 'Use your registered email or vendor CR number and your own password to continue.';
+$lang['signin_cr_authentication_failed'] = 'Sign-in failed. Check your CR and password, or sign in using your registered email address.';
 $lang["vendor_onboarding"] = "Vendor onboarding";
 $lang["guest_vendor_application"] = "Vendor Registration Application";
 $lang["guest_vendor_application_subtitle"] = "Create your supplier account and submit the company details procurement needs for review.";
@@ -898,5 +903,9 @@ $lang['vendor_login_mobile'] = 'Personal mobile for login';
 $lang['vendor_login_mobile_help'] = 'Your Oman mobile receives sign-in codes. Use your personal number, not the company telephone. Adding another CR preserves an existing account\'s login mobile.';
 $lang['vendor_login_mobile_invalid'] = 'Enter a valid Oman mobile, for example +968 followed by an eight-digit number starting with 7 or 9.';
 $lang['vendor_contact_login_mobile_help'] = 'A personal Oman mobile is required for a new login. An existing account keeps its login mobile; an administrator must update that account separately.';
+
+$lang['vendor_invalid_country_id'] = 'Please select a valid country, or leave the country blank.';
+$lang['vendor_invalid_region_id'] = 'Please select a valid region belonging to the selected country, or leave the region blank.';
+$lang['vendor_invalid_city_id'] = 'Please select a valid city belonging to the selected region, or leave the city blank.';
 
 return $lang;

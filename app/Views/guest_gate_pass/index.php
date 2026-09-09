@@ -141,7 +141,7 @@
                     </div>
                 </div>
 
-                <?php if (get_setting("re_captcha_secret_key")) { ?>
+                <?php $captcha_markup = view("signin/re_captcha"); if (trim($captcha_markup) !== "") { ?>
                     <div class="ggp-section" style="--section-color: var(--ggp-amber);">
                         <div class="ggp-section-meta">
                             <div class="ggp-section-title">
@@ -151,7 +151,7 @@
                             <p class="ggp-help"><?php echo app_lang("gate_pass_signup_recaptcha_hint"); ?></p>
                         </div>
                         <div class="ggp-section-fields">
-                            <?php echo view("signin/re_captcha"); ?>
+                            <?php echo $captcha_markup; ?>
                         </div>
                     </div>
                 <?php } ?>

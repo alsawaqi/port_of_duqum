@@ -3663,12 +3663,16 @@ if (!function_exists('gate_pass_vehicle_plate_display')) {
 
     function gate_pass_vehicle_plate_display($vehicle): string
     {
-        $plate = trim((string) ($vehicle->international_plate_no ?? $vehicle->plate_no ?? ""));
+        $is_international = (int) ($vehicle->is_international_plate ?? 0) === 1;
+        $plate = $is_international ? trim((string) ($vehicle->international_plate_no ?? "")) : "";
+        if ($plate === "") {
+            $plate = trim((string) ($vehicle->plate_no ?? ""));
+        }
         if ($plate === "") {
             return "-";
         }
 
-        if ((int) ($vehicle->is_international_plate ?? 0) === 1) {
+        if ($is_international) {
             $country = trim((string) ($vehicle->plate_country ?? ""));
             return $country !== "" ? $plate . " (" . $country . ")" : $plate;
         }

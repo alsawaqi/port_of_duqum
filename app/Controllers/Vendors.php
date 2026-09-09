@@ -90,9 +90,28 @@ class Vendors extends Security_Controller
         }
         $view_data["countries_dropdown"] = $countries_dropdown;
 
-        // Regions dropdown (empty initially)
+        // Include the saved location when editing; otherwise the browser submits
+        // the empty placeholder even when the vendor already has a region/city.
         $view_data["regions_dropdown"] = array("" => "- " . app_lang("select_region") . " -");
         $view_data["cities_dropdown"]  = array("" => "- " . app_lang("select_city") . " -");
+        $country_id = (int) ($view_data["model_info"]->country_id ?? 0);
+        $region_id = (int) ($view_data["model_info"]->region_id ?? 0);
+        if ($country_id && isset($countries_dropdown[$country_id])) {
+            $regions = $this->db->table('regions')->select('id, name')
+                ->where(['country_id' => $country_id, 'is_active' => 1, 'deleted' => 0])
+                ->orderBy('name', 'ASC')->get()->getResult();
+            foreach ($regions as $region) {
+                $view_data["regions_dropdown"][$region->id] = $region->name;
+            }
+            if ($region_id && isset($view_data["regions_dropdown"][$region_id])) {
+                $cities = $this->db->table('cities')->select('id, name')
+                    ->where(['regions_id' => $region_id, 'is_active' => 1, 'deleted' => 0])
+                    ->orderBy('name', 'ASC')->get()->getResult();
+                foreach ($cities as $city) {
+                    $view_data["cities_dropdown"][$city->id] = $city->name;
+                }
+            }
+        }
 
 
 
@@ -155,13 +174,20 @@ class Vendors extends Security_Controller
     public function save()
     {
         $db = $this->db; // use the same connection everywhere
+        $transaction_started = false;
 
         try {
             $id = $this->request->getPost("id");
             $is_create = !$id;
 
-            $this->validate_submitted_data([
-                "id"             => "numeric",
+            if ($is_create) {
+                $this->access_only_vendors_create();
+            } else {
+                $this->access_only_vendors_update();
+            }
+
+            $rules = [
+                "id"             => "permit_empty|numeric",
                 "vendor_group_id" => "required|numeric",
                 "vendor_grade_id" => "permit_empty|numeric",
                 "vendor_name"    => "required",
@@ -180,12 +206,59 @@ class Vendors extends Security_Controller
 
                 "currency"       => "required",
                 "payment_terms"  => "required|in_list[45,90,180]",
-            ]);
-
+            ];
             if ($is_create) {
-                $this->access_only_vendors_create();
-            } else {
-                $this->access_only_vendors_update();
+                $rules["user_email"] = "required|valid_email";
+            }
+            $labels = [
+                "vendor_group_id" => "vendor_group", "vendor_grade_id" => "vendor_grade",
+                "country_id" => "country", "region_id" => "region", "city_id" => "city",
+                "user_email" => "email",
+            ];
+            foreach ($rules as $field => $rule) {
+                $rules[$field] = ["label" => app_lang($labels[$field] ?? $field), "rules" => $rule];
+            }
+            // Return safe field validation errors in production as well as development.
+            // The shared validator intentionally hides general errors in production.
+            if (!$this->validateData($this->request->getPost(), $rules)) {
+                $errors = $this->validator->getErrors();
+                return $this->response->setJSON([
+                    "success" => false, "message" => implode(" ", $errors),
+                    "field" => array_key_first($errors), "errors" => $errors,
+                ]);
+            }
+
+            // Validate actual master records and their parent relationships,
+            // before starting a transaction or changing any vendor/user record.
+            $location_ids = [];
+            foreach ([
+                'country_id' => ['country', null, null],
+                'region_id' => ['regions', 'country_id', 'country_id'],
+                'city_id' => ['cities', 'regions_id', 'region_id'],
+            ] as $field => [$table, $parent_column, $parent_field]) {
+                $raw_id = trim((string) $this->request->getPost($field));
+                $location_ids[$field] = $raw_id === '' ? null : (int) $raw_id;
+                if ($raw_id === '') {
+                    continue;
+                }
+                $valid = ctype_digit($raw_id) && $location_ids[$field] > 0;
+                if ($valid) {
+                    $query = $db->table($table)->where([
+                        'id' => $location_ids[$field], 'is_active' => 1, 'deleted' => 0,
+                    ]);
+                    if ($parent_field !== null) {
+                        $valid = $location_ids[$parent_field] !== null;
+                        $query->where($parent_column, $location_ids[$parent_field]);
+                    }
+                    $valid = $valid && $query->countAllResults() === 1;
+                }
+                if (!$valid) {
+                    $message = app_lang('vendor_invalid_' . $field);
+                    return $this->response->setJSON([
+                        'success' => false, 'message' => $message, 'field' => $field,
+                        'errors' => [$field => $message],
+                    ]);
+                }
             }
 
             // Company email may be shared by multiple CR records.
@@ -216,10 +289,6 @@ class Vendors extends Security_Controller
             $user_email = "";
             $existing_user = null;
             if ($is_create) {
-                $this->validate_submitted_data([
-                    "user_email" => "required|valid_email",
-                ]);
-
                 $user_email = strtolower(trim((string)$this->request->getPost("user_email")));
                 $existing_user = $db->table("users")
                     ->select("id, user_type, status, disable_login, deleted")
@@ -289,25 +358,12 @@ class Vendors extends Security_Controller
                 }
             }
 
-            $vendor_data["currency"] = $currency !== "" ? $currency : null;
-            $vendor_data["payment_terms"] = ($payment_terms !== "" && $payment_terms !== null) ? (int)$payment_terms : null;
-
-            // ✅ optional ids: store NULL instead of 0 (0 can break FK logic)
-            $country_id = $this->request->getPost("country_id");
-            $region_id  = $this->request->getPost("region_id");
-            $city_id    = $this->request->getPost("city_id");
-
             $vendor_data = [
                 "vendor_group_id" => (int) $this->request->getPost("vendor_group_id"),
                 "vendor_grade_id" => $this->request->getPost("vendor_grade_id") ? (int) $this->request->getPost("vendor_grade_id") : null,
                 "vendor_name"     => $this->request->getPost("vendor_name"),
                 "email"           => $vendor_email,
                 "cr_number"       => $cr_number !== "" ? $cr_number : null,
-
-                "country_id"      => $country_id ? (int)$country_id : null,
-                "region_id"       => $region_id  ? (int)$region_id  : null,
-                "city_id"         => $city_id    ? (int)$city_id    : null,
-
 
                 // 
                 "address"         => $this->request->getPost("address"),
@@ -331,9 +387,14 @@ class Vendors extends Security_Controller
             }
 
             $vendor_data = clean_data($vendor_data);
+            // clean_data() converts NULL to an empty string. Add validated
+            // location IDs after text sanitization so optional FKs stay NULL.
+            $vendor_data = array_merge($vendor_data, $location_ids);
+            $vendor_data['vendor_grade_id'] = (int) $vendor_data['vendor_grade_id'] ?: null;
 
             // ---------- TRANSACTION ----------
             $db->transBegin();
+            $transaction_started = true;
 
             // 1) Save vendor
             $save_vendor_id = $this->Vendors_model->ci_save($vendor_data, $id);
@@ -413,6 +474,7 @@ class Vendors extends Security_Controller
             }
 
             $db->transCommit();
+            $transaction_started = false;
 
             echo json_encode([
                 "success" => true,
@@ -423,7 +485,7 @@ class Vendors extends Security_Controller
             return;
         } catch (\Throwable $e) {
 
-            if ($db && $db->transStatus() !== false) {
+            if ($transaction_started) {
                 // If a transaction is open, roll it back safely
                 try {
                     $db->transRollback();

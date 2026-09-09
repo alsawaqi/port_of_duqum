@@ -2,7 +2,7 @@
     <?php echo view("includes/gate_pass_page_header", [
         "title" => app_lang("gate_pass_department_requests"),
         "subtitle" => "Monitor department-stage requests, review KPIs, and export the active request queue.",
-        "icon" => "building",
+        "icon" => "briefcase",
         "breadcrumbs" => [
             ["label" => "Gate Pass"],
             ["label" => app_lang("gate_pass_department_requests")]

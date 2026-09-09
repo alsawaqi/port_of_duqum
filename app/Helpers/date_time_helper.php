@@ -372,6 +372,12 @@ if (!function_exists('filter_valid_datetime_string')) {
             return "";
         }
 
+        // MySQL zero dates and impossible dates must not be normalized by DateTime
+        // into another day (for example, 0000-00-00 becomes -0001-11-30).
+        if (!ctype_digit($year . $month . $day) || !checkdate((int) $month, (int) $day, (int) $year)) {
+            return "";
+        }
+
         $time = get_array_value($date_time_parts, 1) ? get_array_value($date_time_parts, 1) : "";
         $time_parts = $time ? explode(":", $time) : [];
 

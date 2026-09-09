@@ -36,13 +36,12 @@ $signinForm = $read("app/Views/signin/signin_form.php");
 $signinIndex = $read("app/Views/signin/index.php");
 $vendorSelection = $read("app/Views/signin/vendor_selection.php");
 
-// Email and password are the complete credential contract. CR is selected only
-// after those credentials have been verified.
+// One identifier field accepts email or CR; all context follows verified credentials.
 $assertContains('"email" => "required"', $signin, "sign-in requires an email");
 $assertContains('"password" => "required"', $signin, "sign-in requires a password");
-$assertContains('authenticate_credentials($email, $password)', $signin, "credentials are checked before vendor selection");
+$assertContains('authenticate_signin_credentials($email, $password)', $signin, "email or CR credentials are checked before vendor selection");
 $assertContains('WHERE LOWER(email) = ?', $usersModel, "accounts are looked up by canonical email");
-$assertNotContains('$this->request->getPost("cr_number")', $signin, "CR must not be submitted as a login credential");
+$assertNotContains('$this->request->getPost("cr_number")', $signin, "a second CR field cannot override the verified identifier");
 $assertNotContains('$this->request->getPost("username")', $signin, "username must not be submitted as a login credential");
 
 // A sole accessible CR is written directly into the authenticated session.
@@ -54,7 +53,7 @@ $assertContains('!$this->is_login_enabled($user_id)', $usersModel, "a disabled a
 // Multiple CRs produce a short-lived, unauthenticated selection state. The
 // full user_id session is deliberately withheld until selection succeeds.
 $assertContains('$requires_vendor_selection = $is_vendor_login && count($memberships) > 1', $signin, "vendor-only users with multiple CRs enter the selector flow");
-$assertContains('$is_vendor_login = $is_vendor_only_user', $signin, "internal staff keep their normal dashboard login");
+$assertContains('$requested_vendor_id > 0 || ($is_vendor_only_user && count($memberships) > 0)', $signin, "email login preserves staff routing while explicit CR opens the vendor");
 $assertContains('is_vendor_only_identity($user_id, $user_info)', $signin, "mixed operational identities are not forced into the vendor flow");
 $assertContains('get_accessible_memberships($user_id)) > 0', $usersModel, "legacy authentication cannot bypass vendor approval");
 $assertContains('in_array($redirectPath, ["", "signin", "forbidden"], true)', $signin, "login cannot bounce users back to forbidden after successful authentication");
@@ -84,13 +83,13 @@ $assertContains('Services::session()->remove(self::SESSION_VENDOR_ID)', $vendorU
 $assertContains('count($this->Vendor_users_model->get_accessible_memberships($user_id)) > 1', $vendorPortal, "missing multi-CR context returns to selector");
 $assertContains('app_redirect("signin/vendor_selection")', $vendorPortal, "portal cannot guess among multiple CRs");
 
-// Login UI exposes email/password only; company and CR labels belong to the
-// post-authentication selection view.
-$assertContains('"type" => "email"', $signinForm, "login renders an email input");
+// Browser validation must allow CRs in the shared identifier input.
+$assertContains('"type" => "text"', $signinForm, "login accepts both email and CR text");
+$assertContains('"placeholder" => app_lang(\'email_or_cr_number\')', $signinForm, "placeholder explains both login methods");
 $assertContains('"name" => "email"', $signinForm, "email is posted by the login form");
 $assertContains('"name" => "password"', $signinForm, "password is posted by the login form");
 $assertNotContains('"name" => "username"', $signinForm, "login has no username input");
-$assertNotContains('"name" => "cr_number"', $signinForm, "login has no CR input");
+$assertNotContains('"name" => "cr_number"', $signinForm, "login uses one identifier input");
 $assertContains('$form_type == "vendor_selection"', $signinIndex, "sign-in shell can render vendor selection");
 $assertContains('name="vendor_id"', $vendorSelection, "selector posts an internal vendor id");
 $assertContains('$membership->vendor_name', $vendorSelection, "selector identifies the vendor company");

@@ -3297,7 +3297,7 @@ class Vendor_portal extends Security_Controller
             ["target" => "_blank"]
         );
 
-        $issued  = $data->issued_at ? format_to_date($data->issued_at, false) : "-";
+        $issued  = format_to_date($data->issued_at ?? null, false) ?: "-";
         $expires = $this->_document_expiry_badge($data->expires_at ?? null);
 
         $approval = $this->_approval_badge($data->status ?? "pending");
@@ -3342,11 +3342,11 @@ class Vendor_portal extends Security_Controller
 
     private function _document_expiry_badge($expires_at): string
     {
-        if (empty($expires_at)) {
+        $date = format_to_date($expires_at, false);
+        if ($date === "") {
             return "-";
         }
 
-        $date = format_to_date($expires_at, false);
         $expiry_ts = strtotime((string) $expires_at);
         if (!$expiry_ts) {
             return esc($date);
@@ -3577,8 +3577,8 @@ class Vendor_portal extends Security_Controller
 
     private function _make_credential_row($data, bool $is_locked = false)
     {
-        $issue  = $data->issue_date ? format_to_date($data->issue_date, false) : "-";
-        $expiry = $data->expiry_date ? format_to_date($data->expiry_date, false) : "-";
+        $issue  = format_to_date($data->issue_date ?? null, false) ?: "-";
+        $expiry = format_to_date($data->expiry_date ?? null, false) ?: "-";
 
         $approval = $this->_approval_badge($data->status ?? "pending");
 

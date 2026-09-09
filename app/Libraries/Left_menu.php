@@ -1277,13 +1277,20 @@ class Left_menu
 $submenu_names = [];
 
             foreach ($custom_left_menu_items as $custom_left_menu_item) {
-                $item_value_array = $this->_get_item_array_value($custom_left_menu_item, $left_menu_items);
                 $is_sub_menu = get_array_value($custom_left_menu_item, "is_sub_menu");
+                if ($is_sub_menu && $last_final_menu_item !== "") {
+                    $custom_left_menu_item = $this->_normalize_ptw_filter_item(
+                        $custom_left_menu_item,
+                        get_array_value($final_left_menu_items[$last_final_menu_item], "name")
+                    );
+                }
+                // Resolve the corrected item against the user's permitted menu items.
+                $item_value_array = $this->_get_item_array_value($custom_left_menu_item, $left_menu_items);
                 
                 $item_name = get_array_value($item_value_array, "name");
 
                 if ($is_sub_menu) {
-                    if (!$last_final_menu_item || !$item_name) {
+                    if ($last_final_menu_item === "" || !$item_name) {
                         continue;
                     }
                 
@@ -1891,6 +1898,18 @@ $submenu_names = [];
         }
 
         return view("includes/left_menu", $view_data);
+    }
+
+    private function _normalize_ptw_filter_item(array $item, $parent_name): array
+    {
+        // Older saved menu layouts placed the gate-pass filter under PTW.
+        // Preserve explicit custom URLs and gate-pass/ROP groups.
+        if (in_array($parent_name, ["ptw_portal", "ptw_master"], true)
+            && !get_array_value($item, "url")
+            && get_array_value($item, "name") === "gate_pass_filter_requests") {
+            $item["name"] = "ptw_request_list";
+        }
+        return $item;
     }
 
     private function _get_item_array_value($data_array, $left_menu_items)

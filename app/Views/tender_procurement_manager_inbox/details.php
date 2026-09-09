@@ -13,11 +13,11 @@ $rfq_items = $rfq_items ?? [];
 $can_review = $can_review ?? false;
 
 $date_value = function ($value) {
-    return !empty($value) ? format_to_datetime($value) : "-";
+    return format_to_datetime($value) ?: "-";
 };
 
 $date_only_value = function ($value) {
-    return !empty($value) ? format_to_date($value, false) : "-";
+    return format_to_date($value, false) ?: "-";
 };
 
 $money_value = function ($value, string $currency = "OMR") {

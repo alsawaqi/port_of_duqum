@@ -1,0 +1,6 @@
+﻿Section,Vendor ID,Record ID,Database table,Field,Expected path under writable/uploads,Problem
+Vendor documents,19,7,vendor_documents,path,vendor_documents/vendor_19/vd_696e8d7aac6324.80604562.pdf,Original file missing
+Vendor documents,21,8,vendor_documents,path,vendor_documents/vendor_21/vd_69712fa8019362.76271727.pdf,Original file missing
+Vendor bank letter,18,10,vendor_bank_accounts,letter_head_path,vendor_bank_accounts/vendor_18/vh_696e77cbc436d7.62270122.pdf,Original file missing
+Vendor bank letter,18,11,vendor_bank_accounts,letter_head_path,vendor_bank_accounts/vendor_18/vh_696e77e8e69035.99924251.pdf,Original file missing
+Vendor bank letter,19,12,vendor_bank_accounts,letter_head_path,vendor_bank_accounts/vendor_19/vh_696e88d86a06c5.89086386.pdf,Original file missing

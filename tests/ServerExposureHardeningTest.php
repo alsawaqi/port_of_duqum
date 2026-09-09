@@ -67,7 +67,7 @@ $assertContains(
     "dotfiles and dot-directories are denied except for .well-known"
 );
 $assertContains(
-    'RewriteRule ^(?:app|system|tests|writable|updates|documentation|vendor|node_modules|\.git|\.svn)(?:/|$) - [F,L,NC]',
+    'RewriteCond %{REQUEST_URI} ^/(?:app|system|tests|writable|updates|documentation|vendor|node_modules|\.git|\.svn)(?:/|$) [NC]',
     $htaccess,
     "source, dependencies, tests, runtime data, and repository metadata are not web-accessible"
 );

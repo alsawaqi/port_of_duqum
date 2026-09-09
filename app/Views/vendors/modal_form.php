@@ -213,7 +213,7 @@
                         "currency",
                         $currency_dropdown,
                         $model_info->currency ?? "",
-                        "class='select2' id='currency' data-rule-required='true' data-msg-required='" . app_lang('field_required') . "'"
+                        "class='select2 validate-hidden' id='currency' data-rule-required='true' data-msg-required='" . app_lang('field_required') . "'"
                     );
                     ?>
                 </div>
@@ -229,7 +229,7 @@
                         "payment_terms",
                         $payment_terms_dropdown,
                         $model_info->payment_terms ?? "",
-                        "class='select2' id='payment_terms' data-rule-required='true' data-msg-required='" . app_lang('field_required') . "'"
+                        "class='select2 validate-hidden' id='payment_terms' data-rule-required='true' data-msg-required='" . app_lang('field_required') . "'"
                     );
                     ?>
                 </div>
@@ -342,36 +342,19 @@
             }
         });
 
-        var $vendorEmail = $("#email");
-        var $userEmail = $("#user_email");
-
         function clearErrors() {
-            // remove invalid states
-            $vendorEmail.removeClass("is-invalid");
-            $userEmail.removeClass("is-invalid");
-
-            // remove invalid-feedback blocks created by us
-            $vendorEmail.closest(".form-group").find(".invalid-feedback").remove();
-            $userEmail.closest(".form-group").find(".invalid-feedback").remove();
-
-            // hide alert blocks
+            $("#vendors-form .is-invalid").removeClass("is-invalid").removeAttr("aria-invalid");
+            $("#vendors-form .vendor-field-error").remove();
             $("#vendor-email-error").addClass("d-none").text("");
             $("#user-email-error").addClass("d-none").text("");
         }
 
         function showFieldError($input, message) {
-            $input.addClass("is-invalid");
-
-            var $group = $input.closest(".form-group");
-            // remove old feedback if any
-            $group.find(".invalid-feedback").remove();
-
-            // insert new
-            $input.after('<div class="invalid-feedback">' + message + "</div>");
-        }
-
-        function showAlert(targetId, message) {
-            $(targetId).removeClass("d-none").text(message);
+            if (!$input.length) return;
+            $input.addClass("is-invalid").attr("aria-invalid", "true");
+            $input.closest(".form-group").find(".vendor-field-error").remove();
+            $("<div>").addClass("invalid-feedback d-block vendor-field-error")
+                .text(message).insertAfter($input);
         }
 
         $("#vendors-form").appForm({
@@ -382,38 +365,16 @@
             onError: function(result) {
                 clearErrors();
 
-                // ✅ Best: use "errors" map from backend (you already return this)
-                if (result && result.errors) {
-                    if (result.errors.email) {
-                        showFieldError($vendorEmail, result.errors.email);
-                        showAlert("#vendor-email-error", result.errors.email);
-                    }
-                    if (result.errors.user_email) {
-                        showFieldError($userEmail, result.errors.user_email);
-                        showAlert("#user-email-error", result.errors.user_email);
-                    }
-
-                    // If we handled field errors, stop default modal-body error
-                    if (result.errors.email || result.errors.user_email) {
-                        return false;
-                    }
+                var errors = result && result.errors ? result.errors : {};
+                if (result && result.field && result.message && !errors[result.field]) {
+                    errors[result.field] = result.message;
                 }
-
-                // ✅ Fallback: use "field" + "message"
-                if (result && result.field && result.message) {
-                    if (result.field === "email") {
-                        showFieldError($vendorEmail, result.message);
-                        showAlert("#vendor-email-error", result.message);
-                        return false;
-                    }
-                    if (result.field === "user_email") {
-                        showFieldError($userEmail, result.message);
-                        showAlert("#user-email-error", result.message);
-                        return false;
-                    }
-                }
-
-                // Let appForm show the generic error message (modal-body)
+                $.each(errors, function(field, message) {
+                    showFieldError($("#vendors-form :input[name]").filter(function() {
+                        return this.name === field;
+                    }), message);
+                });
+                // appForm must unmask the form so the user can correct and resubmit it.
                 return true;
             },
 
@@ -423,6 +384,10 @@
                     dataId: result.id
                 });
             }
+        });
+
+        $("#vendors-form .validate-hidden").on("change", function() {
+            $(this).valid();
         });
 
     });

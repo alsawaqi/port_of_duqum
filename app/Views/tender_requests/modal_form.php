@@ -237,15 +237,9 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
             <div class="col-md-12">
                 <div class="form-group mb0" id="close-vendors-wrap" style="display:none;">
                     <label>Invited Suppliers (Close Tender)</label>
-                    <select name="invited_vendor_ids[]" id="invited_vendor_ids" class="form-control" data-placeholder="Search and select invited suppliers" multiple="multiple">
-                        <?php if (!empty($selected_vendors)) { ?>
-                            <?php foreach ($selected_vendors as $v) { ?>
-                                <option value="<?php echo (int) $v->id; ?>" selected="selected">
-                                    <?php echo esc($v->vendor_name); ?>
-                                </option>
-                            <?php } ?>
-                        <?php } ?>
-                    </select>
+                    <?php // Select2 3.x requires an input for AJAX-backed choices. ?>
+                    <input type="hidden" id="invited_vendor_ids" class="form-control" data-placeholder="Search and select invited suppliers"
+                           value="<?php echo esc(implode(',', array_map(static fn($v) => (int) $v->id, $selected_vendors ?? []))); ?>" />
                     <input type="hidden" name="invited_vendor_ids" id="invited_vendor_ids_payload" value="" />
                     <small class="text-muted">Required when Tender Type = Close.</small>
                 </div>
@@ -500,12 +494,11 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
                 return;
             }
 
-            if ($el.hasClass("select2-hidden-accessible")) {
+            if ($el.data("select2")) {
                 $el.select2("destroy");
             }
 
             $el.select2({
-                multiple: !!multiple,
                 minimumInputLength: 0,
                 showSearchBox: true,
                 width: "100%",
@@ -545,7 +538,7 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
         $el.val(selectedValues.length ? selectedValues[0] : "");
     }
 
-    if ($el.hasClass("select2-hidden-accessible")) {
+    if ($el.data("select2")) {
         $el.trigger("change");
     }
 }
@@ -654,7 +647,7 @@ if ($selected_department_manager_label !== '' && !empty($department_manager_assi
         function loadDepartmentManagers(companyId, departmentId, selectedId) {
             selectedId = String(selectedId || "");
 
-            if ($("#department-manager-user-id").hasClass("select2-hidden-accessible")) {
+            if ($("#department-manager-user-id").data("select2")) {
                 $("#department-manager-user-id").val("").trigger("change");
             } else {
                 $("#department-manager-user-id").html("<option value=''>- <?php echo app_lang('select'); ?> -</option>");
@@ -827,6 +820,9 @@ $("#tender-company").on("change", function () {
             showSearchBox: true,
             width: "100%",
             dropdownCssClass: "tender-request-select2-dropdown",
+            initSelection: function (element, callback) {
+                callback(<?php echo json_encode(array_map(static fn($v) => ["id" => (int) $v->id, "text" => (string) $v->vendor_name], $selected_vendors ?? []), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>);
+            },
             ajax: {
                 url: "<?php echo get_uri('tender_requests/vendors_suggestion'); ?>",
                 type: "POST",

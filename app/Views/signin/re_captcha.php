@@ -1,4 +1,10 @@
 <?php
+$captcha_enabled = getenv("PODC_RECAPTCHA_ENABLED");
+if ($captcha_enabled !== false && trim((string) $captcha_enabled) !== ""
+    && filter_var($captcha_enabled, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === false) {
+    return;
+}
+
 $re_captcha_protocol = strtolower(trim((string) (getenv("PODC_RECAPTCHA_PROTOCOL") ?: get_setting("re_captcha_protocol") ?: "v2")));
 $site_key = trim((string) (getenv("PODC_RECAPTCHA_SITE_KEY") ?: get_setting("re_captcha_site_key")));
 $secret_key = trim((string) (getenv("PODC_RECAPTCHA_SECRET_KEY") ?: get_setting("re_captcha_secret_key")));

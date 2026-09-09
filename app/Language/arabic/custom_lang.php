@@ -3407,6 +3407,9 @@ $lang['vehicles'] = 'المركبات';
 $lang['full_name'] = 'الاسم الكامل';
 $lang['id_type'] = 'نوع الهوية';
 $lang['id_number'] = 'رقم الهوية';
+$lang['gate_pass_visitor_identity'] = 'رقم هوية الزائر / جواز السفر';
+$lang['gate_pass_visitor_identity_placeholder'] = 'أدخل رقم الهوية أو جواز السفر كاملاً أو جزءاً منه';
+$lang['gate_pass_visitor_identity_invalid'] = 'أدخل رقم الهوية أو جواز السفر بما لا يزيد عن 100 حرف.';
 $lang['nationality'] = 'الجنسية';
 $lang['gate_pass_id_type_passport'] = 'جواز السفر';
 $lang['gate_pass_id_type_national_id'] = 'الهوية الوطنية';
@@ -3528,6 +3531,8 @@ $lang['specialty_name'] = 'اسم التخصص';
 $lang['reset_filters'] = 'إعادة تعيين المرشحات';
 $lang['filter_vendors_by_specialty_category'] = 'تصفية الموردين حسب فئة التخصص';
 $lang['email_or_cr_number'] = 'البريد الإلكتروني أو رقم السجل التجاري';
+$lang['signin_email_or_cr_hint'] = 'استخدم بريدك الإلكتروني المسجل أو رقم السجل التجاري للمورد وكلمة المرور الخاصة بك للمتابعة.';
+$lang['signin_cr_authentication_failed'] = 'تعذر تسجيل الدخول. تحقق من رقم السجل التجاري وكلمة المرور، أو استخدم بريدك الإلكتروني المسجل.';
 $lang['vendor_onboarding'] = 'تسجيل الموردين';
 $lang['guest_vendor_application'] = 'طلب تسجيل مورد';
 $lang['guest_vendor_application_subtitle'] = 'أنشئ حساب المورد وأرسل بيانات الشركة التي تحتاجها المشتريات للمراجعة.';
@@ -3847,5 +3852,9 @@ $lang['vendor_login_mobile'] = 'رقم الجوال الشخصي لتسجيل ا
 $lang['vendor_login_mobile_help'] = 'تُرسل رموز الدخول إلى جوالك العُماني الشخصي، وليس هاتف الشركة. إضافة سجل تجاري آخر لا تغيّر جوال الحساب الحالي.';
 $lang['vendor_login_mobile_invalid'] = 'أدخل رقم جوال عُماني صحيحاً: ‎+968 متبوعاً بثمانية أرقام تبدأ بالرقم 7 أو 9.';
 $lang['vendor_contact_login_mobile_help'] = 'يتطلب الحساب الجديد جوالاً عُمانياً شخصياً. يحتفظ الحساب الحالي بجوال تسجيل الدخول، ويمكن للمسؤول تحديثه من ملف الحساب.';
+
+$lang['vendor_invalid_country_id'] = 'يرجى اختيار دولة صحيحة أو ترك حقل الدولة فارغاً.';
+$lang['vendor_invalid_region_id'] = 'يرجى اختيار منطقة تابعة للدولة المحددة أو ترك حقل المنطقة فارغاً.';
+$lang['vendor_invalid_city_id'] = 'يرجى اختيار مدينة تابعة للمنطقة المحددة أو ترك حقل المدينة فارغاً.';
 
 return $lang;

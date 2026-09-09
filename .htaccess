@@ -54,9 +54,14 @@ LimitRequestBody 67108864
     RewriteCond %{REQUEST_METHOD} ^TRACE$ [NC]
     RewriteRule ^ - [F,L]
     RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
-    RewriteRule ^(?:app|system|tests|writable|updates|documentation|vendor|node_modules|\.git|\.svn)(?:/|$) - [F,L,NC]
+    # Inherited rules see a child-relative path (e.g. system/logo.png inside
+    # files/). Match the full URI to protect the root system/ code directory
+    # without blocking the public files/system/ image directory.
+    RewriteCond %{REQUEST_URI} ^/(?:app|system|tests|writable|updates|documentation|vendor|node_modules|\.git|\.svn)(?:/|$) [NC]
+    RewriteRule ^ - [F,L]
     RewriteRule ^files/(?:temp|tender_files)(?:/|$) - [F,L,NC]
-    RewriteRule ^(?:files|plugins)/.*\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$ - [F,L,NC]
+    RewriteCond %{REQUEST_URI} ^/(?:files|plugins)/.*\.(?:php[0-9]*|phtml|phar|cgi|pl|py|sh|bash|bat|cmd|ps1|asp|aspx|jsp|htaccess|htpasswd|env|ini|conf|log|sql|sqlite|sqlite3|yml|yaml)$ [NC]
+    RewriteRule ^ - [F,L]
 </IfModule>
 
 <IfModule php_module>

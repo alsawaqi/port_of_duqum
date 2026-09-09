@@ -172,7 +172,7 @@ class Signin extends App_Controller {
             return $this->signin_error_response($this->signin_validation_errors);
         }
 
-        // Bound online password guessing without revealing whether an email
+        // Bound online password guessing without revealing whether an identity
         // exists. Pair limits avoid account-wide lockout; the IP bucket also
         // slows broad credential-stuffing attempts.
         $throttler = service("throttler");
@@ -227,7 +227,7 @@ class Signin extends App_Controller {
             return $this->signin_error_response($this->signin_validation_errors);
         }
 
-        $user_info = $this->Users_model->authenticate_credentials($email, $password);
+        $user_info = $this->Users_model->authenticate_signin_credentials($email, $password);
         if (!$user_info) {
             $failure = $this->Auth_security_model->record_login_failure(
                 $identity_hash,
@@ -245,7 +245,8 @@ class Signin extends App_Controller {
                     ->setStatusCode(429)
                     ->setHeader("Retry-After", (string) max(1, $failure["retry_after"]));
             }
-            array_push($this->signin_validation_errors, app_lang("authentication_failed"));
+            array_push($this->signin_validation_errors, filter_var($email, FILTER_VALIDATE_EMAIL)
+                ? app_lang("authentication_failed") : app_lang("signin_cr_authentication_failed"));
             return $this->signin_error_response($this->signin_validation_errors);
         }
 
@@ -265,7 +266,11 @@ class Signin extends App_Controller {
             return $this->_begin_mfa_challenge($user_info, $identity_hash, $ip_hash);
         }
 
-        return $this->_complete_authenticated_login($user_info);
+        return $this->_complete_authenticated_login(
+            $user_info,
+            null,
+            (int) ($user_info->authenticated_vendor_id ?? 0)
+        );
     }
 
     private function _begin_mfa_challenge(
@@ -359,6 +364,7 @@ class Signin extends App_Controller {
             "pending_mfa_challenge_id" => $challenge["challenge_id"],
             "pending_mfa_user_id" => (int) $user_info->id,
             "pending_mfa_redirect_url" => (string) $this->request->getPost("redirect"),
+            "pending_mfa_vendor_id" => (int) ($user_info->authenticated_vendor_id ?? 0),
             "pending_mfa_started_at" => time(),
         ]);
         $this->Auth_security_model->audit(
@@ -383,10 +389,22 @@ class Signin extends App_Controller {
 
     private function _complete_authenticated_login(
         object $user_info,
-        ?string $submitted_redirect = null
+        ?string $submitted_redirect = null,
+        int $requested_vendor_id = 0
     ) {
         $user_id = (int) $user_info->id;
         $memberships = $this->Vendor_users_model->get_accessible_memberships($user_id);
+        // A CR chosen by verified credentials must remain accessible after OTP.
+        // Revocation denies this login instead of opening a different company.
+        if ($requested_vendor_id > 0
+            && !$this->Vendor_users_model->get_accessible_membership($user_id, $requested_vendor_id)) {
+            $this->Auth_security_model->audit(
+                "login_denied", "denied", $user_id,
+                $this->Auth_security_model->identity_hash((string) $user_info->email),
+                ["reason" => "requested_vendor_unavailable"]
+            );
+            return $this->signin_error_response(app_lang("authentication_failed"));
+        }
         $has_vendor_memberships = $this->Vendor_users_model->has_vendor_memberships($user_id);
         $is_vendor_only_user = $has_vendor_memberships
             && $this->Users_model->is_vendor_only_identity($user_id, $user_info);
@@ -411,9 +429,9 @@ class Signin extends App_Controller {
 
         // Internal team members may also be linked to a vendor for legitimate
         // operational reasons. Keep their normal dashboard login; vendor-only
-        // identities use the CR-first portal flow.
-        $is_vendor_login = $is_vendor_only_user && count($memberships) > 0;
-        $requires_vendor_selection = $is_vendor_login && count($memberships) > 1;
+        // identities use the vendor portal. Explicit CR sign-in opens that CR.
+        $is_vendor_login = $requested_vendor_id > 0 || ($is_vendor_only_user && count($memberships) > 0);
+        $requires_vendor_selection = $is_vendor_login && count($memberships) > 1 && !$requested_vendor_id;
         $redirect_url = $this->get_signin_redirect_url(
             $is_vendor_login,
             $submitted_redirect
@@ -429,9 +447,9 @@ class Signin extends App_Controller {
             ]);
             $redirect_url = get_uri("signin/vendor_selection");
         } else {
-            $active_vendor_id = $is_vendor_login && count($memberships) === 1
+            $active_vendor_id = $requested_vendor_id ?: ($is_vendor_login && count($memberships) === 1
                 ? (int) $memberships[0]->vendor_id
-                : 0;
+                : 0);
             if (!$this->Users_model->start_user_session($user_id, $active_vendor_id)) {
                 array_push($this->signin_validation_errors, app_lang("authentication_failed"));
                 return $this->signin_error_response($this->signin_validation_errors);
@@ -533,6 +551,7 @@ class Signin extends App_Controller {
         }
 
         $submittedRedirect = (string) $this->session->get("pending_mfa_redirect_url");
+        $requestedVendorId = (int) $this->session->get("pending_mfa_vendor_id");
         $user = $this->Users_model->get_one($userId);
         if (!$user || !(int) ($user->id ?? 0) || !$this->Users_model->is_login_enabled($userId)) {
             $this->_clear_pending_mfa_login();
@@ -548,7 +567,7 @@ class Signin extends App_Controller {
             $this->Auth_security_model->identity_hash((string) $user->email)
         );
 
-        return $this->_complete_authenticated_login($user, $submittedRedirect);
+        return $this->_complete_authenticated_login($user, $submittedRedirect, $requestedVendorId);
     }
 
     function vendor_selection()
@@ -675,6 +694,7 @@ class Signin extends App_Controller {
             "pending_mfa_challenge_id",
             "pending_mfa_user_id",
             "pending_mfa_redirect_url",
+            "pending_mfa_vendor_id",
             "pending_mfa_started_at",
         ]);
     }

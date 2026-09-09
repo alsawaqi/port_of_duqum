@@ -16,6 +16,12 @@
         <div class="card-body">
             <form id="gp-request-filter-form" class="general-form">
                 <div class="row">
+                    <div class="col-md-4 col-sm-6">
+                        <label for="filter_visitor_identity" class="form-label"><?php echo app_lang("gate_pass_visitor_identity"); ?></label>
+                        <input type="text" name="visitor_identity" id="filter_visitor_identity" class="form-control"
+                               maxlength="100" autocomplete="off"
+                               placeholder="<?php echo esc(app_lang('gate_pass_visitor_identity_placeholder'), 'attr'); ?>">
+                    </div>
                     <div class="col-md-2 col-sm-6">
                         <label class="form-label"><?php echo app_lang("company"); ?></label>
                         <select name="company_id" id="filter_company_id" class="form-control">
@@ -90,7 +96,7 @@
                 </div>
                 <div class="row mt-3">
                     <div class="col-12">
-                        <button type="button" id="gp-filter-btn" class="btn btn-primary gp-pro-btn">
+                        <button type="submit" id="gp-filter-btn" class="btn btn-primary gp-pro-btn">
                             <i data-feather="filter" class="icon-16"></i> <?php echo app_lang("filter"); ?>
                         </button>
                         <button type="button" id="gp-reset-btn" class="btn gp-pro-btn-secondary">
@@ -113,6 +119,7 @@ $(document).ready(function () {
 
     function getFilterParams() {
         return {
+            visitor_identity: $.trim($("#filter_visitor_identity").val() || ""),
             company_id: $("#filter_company_id").val() || "",
             department_id: $("#filter_department_id").val() || "",
             nationality: $("#filter_nationality").val() || "",
@@ -160,7 +167,8 @@ $(document).ready(function () {
 
     initTable();
 
-    $("#gp-filter-btn").on("click", function () {
+    $("#gp-request-filter-form").on("submit", function (event) {
+        event.preventDefault();
         initTable();
         if (typeof feather !== "undefined") feather.replace();
     });

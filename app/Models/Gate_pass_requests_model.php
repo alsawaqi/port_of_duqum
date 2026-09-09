@@ -24,6 +24,7 @@ class Gate_pass_requests_model extends Crud_model
         $visitors = $this->db->prefixTable("gate_pass_request_visitors");
 
         $where = "WHERE $requests.deleted=0";
+        $bindings = [];
 
         $id = get_array_value($options, "id");
         if ($id) {
@@ -78,7 +79,12 @@ class Gate_pass_requests_model extends Crud_model
         // filter by single status (for request list filter page)
         $status = get_array_value($options, "status");
         if ($status !== "" && $status !== null) {
-            $where .= " AND $requests.status=" . $this->db->escape($status);
+            if ($status === "issued") {
+                // ROP issuance uses this status/stage pair; the UI labels it Issued.
+                $where .= " AND ($requests.status='issued' OR ($requests.status='rop_approved' AND $requests.stage='issued'))";
+            } else {
+                $where .= " AND $requests.status=" . $this->db->escape($status);
+            }
         }
 
         // filter by company_id (single)
@@ -107,6 +113,22 @@ class Gate_pass_requests_model extends Crud_model
                   AND gp_nat.deleted=0
                   AND TRIM(gp_nat.nationality)=" . $this->db->escape($nationality) . "
             )";
+        }
+
+        $visitor_identity = trim((string)get_array_value($options, "visitor_identity"));
+        if ($visitor_identity !== "") {
+            // Passport and civil ID values share id_number. EXISTS keeps each
+            // request unique even when several of its visitors match.
+            $where .= " AND EXISTS (
+                SELECT 1 FROM $visitors gp_identity
+                WHERE gp_identity.gate_pass_request_id=$requests.id
+                  AND gp_identity.deleted=0
+                  AND UPPER(gp_identity.id_number) LIKE UPPER(?) ESCAPE '!'";
+            $bindings[] = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $visitor_identity) . '%';
+            if ($nationality !== "") {
+                $where .= " AND TRIM(gp_identity.nationality)=" . $this->db->escape($nationality);
+            }
+            $where .= ")";
         }
 
         // filter by date range (visit_from date)
@@ -147,7 +169,7 @@ class Gate_pass_requests_model extends Crud_model
                     '1970-01-01 00:00:00'
                 ) DESC, $requests.id DESC";
 
-        return $this->db->query($sql);
+        return $this->db->query($sql, $bindings);
     }
 
     /**
