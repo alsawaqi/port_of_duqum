@@ -101,7 +101,34 @@ try {
             throw new RuntimeException($label . ': expected ' . json_encode($expected) . ', got ' . json_encode($actual));
         }
     }
-    echo 'OK: ' . count($cases) . ' visitor identity query checks (local temporary tables only).' . PHP_EOL;
+    // Exercise the server's TIMESTAMP shape, including historical zero values,
+    // without changing its global SQL mode or any permanent application rows.
+    $requests = $db->prefixTable('gate_pass_requests');
+    $db->query('TRUNCATE TABLE `' . $requests . '`');
+    $db->query('ALTER TABLE `' . $requests . '` MODIFY created_at TIMESTAMP NULL DEFAULT NULL, MODIFY submitted_at TIMESTAMP NULL DEFAULT NULL');
+    $db->query("SET SESSION sql_mode=''");
+    $dates = [
+        [11, '2026-09-12 08:00:00', null],
+        [12, null, '2026-09-11 08:00:00'],
+        [13, '0000-00-00 00:00:00', '2026-09-10 08:00:00'],
+        [14, '0000-00-00 00:00:00', '0000-00-00 00:00:00'],
+        [15, null, null],
+    ];
+    foreach ($dates as [$id, $created, $submitted]) {
+        $db->table('gate_pass_requests')->insert(['id' => $id, 'requester_id' => 11,
+            'created_at' => $created, 'submitted_at' => $submitted]);
+    }
+    $db->query("SET SESSION sql_mode='STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
+    $ordered = array_map('intval', array_column($model->get_details(['requester_id' => 11])->getResultArray(), 'id'));
+    if ($ordered !== [11, 12, 13, 15, 14]) {
+        throw new RuntimeException('Strict TIMESTAMP ordering or legacy date fallback failed.');
+    }
+    foreach ([11, 12, 13, 14, 15] as $id) {
+        if ((int) $model->get_details(['id' => $id])->getRow()->id !== $id) {
+            throw new RuntimeException('Strict TIMESTAMP detail lookup failed.');
+        }
+    }
+    echo 'OK: ' . (count($cases) + 6) . ' visitor identity and strict timestamp query checks (local temporary tables only).' . PHP_EOL;
 } finally {
     $db->close(); // Temporary tables disappear; no application rows were changed.
 }

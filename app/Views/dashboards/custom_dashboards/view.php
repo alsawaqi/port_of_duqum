@@ -3,6 +3,11 @@ echo view('dashboards/install_pwa');
 ?>
 
 <div id="page-content" class="page-wrapper clearfix dashboard-view">
+    <?php if (!empty($login_user->is_admin)): ?>
+    <div class="d-flex justify-content-end mb-3">
+        <a class="btn btn-primary" href="<?php echo esc(get_uri('integration_tests'), 'attr'); ?>"><i data-feather="check-circle" class="icon-16 me-1"></i> <?php echo app_lang('integration_tests_title'); ?></a>
+    </div>
+    <?php endif; ?>
 
 
 

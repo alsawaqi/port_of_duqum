@@ -25,13 +25,10 @@ use Config\Feature;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\FilterFinderTest
  */
-final class FilterFinder
+final readonly class FilterFinder
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
-    private readonly Router $router;
-    private readonly Filters $filters;
+    private Router $router;
+    private Filters $filters;
 
     public function __construct(?Router $router = null, ?Filters $filters = null)
     {

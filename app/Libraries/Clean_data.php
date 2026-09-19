@@ -86,6 +86,11 @@ class Clean_data {
      * @return	string
      */
     public function xss_clean($str, $is_image = FALSE) {
+        // Preserve an intentionally absent database value. Empty strings are not
+        // valid substitutes for nullable dates, decimals or foreign keys.
+        if ($str === null) {
+            return null;
+        }
         // Is the string an array?
         if (is_array($str)) {
             foreach ($str as $key => &$value) {
@@ -96,7 +101,6 @@ class Clean_data {
         }
 
         // Remove Invisible Characters
-        $str = is_null($str) ? "" : $str;
         $str = remove_invisible_characters($str);
 
         /*
@@ -666,6 +670,9 @@ class Clean_data {
     }
 
     public function html_escape($data) {
+        if ($data === null) {
+            return null;
+        }
         if (is_array($data)) {
             foreach ($data as $key => $value) {
                 $data[$key] = $this->html_escape($value);

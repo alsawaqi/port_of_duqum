@@ -14,7 +14,6 @@ class Ptw_portal extends Security_Controller
     protected $Ptw_attachments_model;
     protected $Ptw_reviews_model;
     protected $Ptw_audit_logs_model;
-    protected $Ptw_applicant_users_model;
     protected $Gate_pass_companies_model;
 
     public function __construct()
@@ -29,7 +28,6 @@ class Ptw_portal extends Security_Controller
         $this->Ptw_attachments_model = model("App\\Models\\Ptw_attachments_model");
         $this->Ptw_reviews_model = model("App\\Models\\Ptw_reviews_model");
         $this->Ptw_audit_logs_model = model("App\\Models\\Ptw_audit_logs_model");
-        $this->Ptw_applicant_users_model = model("App\\Models\\Ptw_applicant_users_model");
         $this->Gate_pass_companies_model = model("App\\Models\\Gate_pass_companies_model");
     }
 
@@ -82,10 +80,6 @@ class Ptw_portal extends Security_Controller
 
         if ($app && !$this->_can_edit_application($app)) {
             app_redirect("ptw_portal/application_details/" . $app->id);
-        }
-        if (!$app && !$this->login_user->is_admin
-            && !$this->Ptw_applicant_users_model->get_active_company_ids((int) $this->login_user->id)) {
-            app_redirect("forbidden");
         }
 
         $defs = $this->Ptw_requirement_definitions_model->get_active_definitions()->getResult();
@@ -175,12 +169,9 @@ class Ptw_portal extends Security_Controller
             // application exists. Reassignment is an audited admin operation.
             app_redirect("forbidden");
         }
-        if ($postedCompanyId > 0
-            && ($this->login_user->is_admin
-                || $this->Ptw_applicant_users_model->has_active_company_assignment(
-                    (int) $this->login_user->id,
-                    $postedCompanyId
-                ))) {
+        if ($postedCompanyId > 0) {
+            // Applicants select the receiving company; this grants no access
+            // to its other applications or review functions.
             $selected_company = $this->Gate_pass_companies_model
                 ->get_details(["id" => $postedCompanyId])
                 ->getRow();
@@ -280,6 +271,13 @@ if ($submit_mode === "draft") {
 }
 
         $clean_data = clean_data($data);
+        // The shared text sanitizer turns NULL into an empty string. Keep
+        // optional decimal/date values as SQL NULL, including unfinished drafts.
+        foreach ($data as $field => $value) {
+            if ($value === null) {
+                $clean_data[$field] = null;
+            }
+        }
         $save_id = $this->Ptw_applications_model->ci_save($clean_data, $id);
         if (!$save_id) {
             $db->transRollback();
@@ -481,50 +479,17 @@ if ($submit_mode === "draft") {
 
     private function _require_ptw_access()
     {
-        if ($this->login_user->is_admin) {
+        // Security_Controller already enforces an enabled, signed-in account.
+        // Applicant access is available without a PTW company assignment.
+        if ((int) ($this->login_user->id ?? 0) > 0) {
             return;
         }
-
-        $userId = (int) ($this->login_user->id ?? 0);
-        if ($this->Ptw_applicant_users_model->get_active_company_ids($userId)) {
-            return;
-        }
-
-        $db = db_connect();
-        foreach (["ptw_hsse_users", "ptw_hmo_users", "ptw_terminal_users"] as $tableName) {
-            $table = $db->prefixTable($tableName);
-            if ($db->query(
-                "SELECT id FROM {$table}
-                 WHERE user_id=? AND deleted=0 AND status='active' LIMIT 1",
-                [$userId]
-            )->getRow()) {
-                return;
-            }
-        }
-
         app_redirect("forbidden");
     }
 
     private function _get_allowed_ptw_applicant_companies(): array
     {
-        if ($this->login_user->is_admin) {
-            return $this->Gate_pass_companies_model->get_details()->getResult();
-        }
-
-        $companyIds = $this->Ptw_applicant_users_model
-            ->get_active_company_ids((int) $this->login_user->id);
-        if (!$companyIds) {
-            return [];
-        }
-
-        $companies = db_connect()->prefixTable("companies");
-        $placeholders = implode(",", array_fill(0, count($companyIds), "?"));
-        return db_connect()->query(
-            "SELECT * FROM {$companies}
-             WHERE deleted=0 AND id IN ({$placeholders})
-             ORDER BY name ASC",
-            $companyIds
-        )->getResult();
+        return $this->Gate_pass_companies_model->get_details()->getResult();
     }
 
     private function _can_access_application($app)
@@ -534,10 +499,7 @@ if ($submit_mode === "draft") {
         }
 
         if ((int) $app->applicant_user_id === (int) $this->login_user->id) {
-            return $this->Ptw_applicant_users_model->has_active_company_assignment(
-                (int) $this->login_user->id,
-                (int) ($app->company_id ?? 0)
-            );
+            return true;
         }
 
         // Reviewer access is company-scoped. Legacy rows that could not be
@@ -577,13 +539,6 @@ if ($submit_mode === "draft") {
         $status = strtolower(trim((string)($app->status ?? "")));
 
         if ((int)$app->applicant_user_id !== (int)$this->login_user->id && !$this->login_user->is_admin) {
-            return false;
-        }
-        if (!$this->login_user->is_admin
-            && !$this->Ptw_applicant_users_model->has_active_company_assignment(
-                (int) $this->login_user->id,
-                (int) ($app->company_id ?? 0)
-            )) {
             return false;
         }
 

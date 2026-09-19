@@ -1,5 +1,11 @@
 # Port of Duqm PHP 8.1.34 compatibility build
 
+> Historical record. Superseded locally on 2026-09-10 by the PHP 8.3 migration.
+> The current copy restores standard CodeIgniter 4.7.4, requires PHP 8.2+, and
+> no longer runs on PHP 8.1. See [PHP83_MIGRATION.md](PHP83_MIGRATION.md).
+> The owner later authorized deployment to the same site after its handler was
+> upgraded to PHP 8.3.33. See the PHP 8.3 guide for the deployment checks.
+
 Date: 2026-09-08. The production host is fixed at PHP **8.1.34**, per the owner.
 
 This project retains the **CodeIgniter 4.7.4 security baseline** with a small project-maintained compatibility patch. This is **not an upstream-supported PHP 8.1 release of CodeIgniter**. Upstream 4.7 requires PHP 8.2; replacing this patched `system/` directory with a stock 4.7 release will break this host. Do not restore the old 4.6.1 runtime or remove the security baseline guard.

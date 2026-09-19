@@ -22,7 +22,7 @@ $contains = static function (string $needle, string $haystack, string $message) 
 $contains('function has_active_vendor_portal_membership', $users, 'active CR access is distinct from vendor identity history');
 $contains('function has_active_gate_pass_portal_membership', $users, 'active Gate Pass access is explicitly resolved');
 $contains('function has_active_ptw_applicant_portal_membership', $users, 'active PTW access is explicitly resolved');
-$contains("assignments.status='active'", $users, 'PTW navigation requires an active assignment');
+$contains("assignments.status='active'", $users, 'legacy PTW-only login eligibility still checks active membership');
 $contains("status='active' LIMIT 1", $users, 'Gate Pass navigation requires an active assignment');
 $contains('has_active_gate_pass_portal_membership($user_id)', $signin, 'an active Gate Pass membership can satisfy an external login');
 $contains('has_active_ptw_applicant_portal_membership($user_id)', $signin, 'an active PTW membership can satisfy an external login');
@@ -42,7 +42,7 @@ $contains('app_redirect("forbidden")', $security, 'an external identity with no 
 
 $contains('$hasActiveVendorPortalAccess', $menu, 'the reduced menu uses current vendor access');
 $contains('$hasActiveGatePassPortalAccess', $menu, 'the reduced menu uses current Gate Pass access');
-$contains('$hasActivePtwPortalAccess', $menu, 'the reduced menu uses current PTW access');
+$contains('if ((int) ($this->ci->login_user->id ?? 0) > 0)', $menu, 'the reduced menu includes PTW applications for signed-in users');
 if (!preg_match('/return view\("includes\/left_menu",\s*\[\s*"sidebar_menu"\s*=>\s*\$this->_get_active_menu\(\$sidebar_menu\),\s*"login_user"\s*=>\s*\$this->ci->login_user,\s*\]\);/s', $menu)) {
     $fail('the reduced external menu must pass login_user to the shared left-menu view');
 }

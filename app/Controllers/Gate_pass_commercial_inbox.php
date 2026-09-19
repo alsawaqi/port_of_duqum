@@ -541,39 +541,54 @@ class Gate_pass_commercial_inbox extends Security_Controller
             return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved"), "id" => $request_id]);
         }
 
-        $dept_waiver_note = trim((string)($request->fee_waived_reason ?? ""));
+        $db = db_connect();
+        $db->transBegin();
+        try {
+            $dept_waiver_note = trim((string)($request->fee_waived_reason ?? ""));
 
-        // Reject waiver: keep request at commercial / department_approved so the requester pays (not returned for edits).
-        $this->Gate_pass_requests_model->ci_save(clean_data([
-            "fee_is_waived" => 0,
-            "fee_waiver_requested" => 0,
-            "fee_waiver_commercial_status" => "rejected",
-            "fee_waived_by" => null,
-            "fee_waived_at" => null,
-            "fee_waived_reason" => null,
-            "updated_at" => get_current_utc_time(),
-        ]), $request_id);
+            // Reject waiver: keep request at commercial / department_approved so the requester pays (not returned for edits).
+            $this->Gate_pass_requests_model->ci_save(clean_data([
+                "fee_is_waived" => 0,
+                "fee_waiver_requested" => 0,
+                "fee_waiver_commercial_status" => "rejected",
+                "fee_waived_by" => null,
+                "fee_waived_at" => null,
+                "fee_waived_reason" => null,
+                "updated_at" => get_current_utc_time(),
+            ]), $request_id);
 
-        $log_comment = app_lang("gate_pass_fee_waiver_rejected_log");
-        if ($dept_waiver_note !== "") {
-            $log_comment .= " " . app_lang("reason") . ": " . $dept_waiver_note;
+            $log_comment = app_lang("gate_pass_fee_waiver_rejected_log");
+            if ($dept_waiver_note !== "") {
+                $log_comment .= " " . app_lang("reason") . ": " . $dept_waiver_note;
+            }
+            if ($comment !== "") {
+                $log_comment .= " " . $comment;
+            }
+            $approval_data = [
+                "gate_pass_request_id" => $request_id,
+                "stage" => "commercial",
+                "decision" => "fee_waiver_rejected",
+                "reason_id" => null,
+                "comment" => $log_comment,
+                "decided_by" => $this->login_user->id,
+                "decided_at" => get_current_utc_time(),
+                "ip_address" => $this->request->getIPAddress(),
+                "user_agent" => substr($this->request->getUserAgent()->getAgentString(), 0, 500),
+            ];
+            $this->Gate_pass_request_approvals_model->ci_save(gate_pass_clean_approval_data_for_save($approval_data));
+
+            if ($db->transStatus() === false) {
+                throw new \RuntimeException('Fee waiver rejection could not be recorded.');
+            }
+            $db->transCommit();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'Gate pass fee waiver rejection rolled back: {message}', ['message' => $e->getMessage()]);
+            return $this->response->setStatusCode(500)->setJSON([
+                'success' => false,
+                'message' => app_lang('error_occurred'),
+            ]);
         }
-        if ($comment !== "") {
-            $log_comment .= " " . $comment;
-        }
-        $approval_data = [
-            "gate_pass_request_id" => $request_id,
-            "stage" => "commercial",
-            "decision" => "fee_waiver_rejected",
-            "reason_id" => null,
-            "comment" => $log_comment,
-            "decided_by" => $this->login_user->id,
-            "decided_at" => get_current_utc_time(),
-            "ip_address" => $this->request->getIPAddress(),
-            "user_agent" => substr($this->request->getUserAgent()->getAgentString(), 0, 500),
-        ];
-        $this->Gate_pass_request_approvals_model->ci_save(gate_pass_clean_approval_data_for_save($approval_data));
-
         return $this->response->setJSON(["success" => true, "message" => app_lang("record_saved"), "id" => $request_id]);
     }
 

@@ -348,6 +348,15 @@ $view_data["currency_dropdown"] = $currency_dropdown;
         }
     
         $data = clean_data($data);
+        // The sanitizer turns NULL into an empty string. Preserve database
+        // types for optional foreign keys and dates on strict MySQL servers.
+        $data['department_id'] = $department_id;
+        $data['submitted_at'] = $submitted_at_for_save;
+        if (!$id) {
+            // Some installations require a unique, non-null reference on insert.
+            // Replace this provisional value with the ID-based reference below.
+            $data['reference'] = 'GP-PENDING-' . bin2hex(random_bytes(8));
+        }
     
         $db = db_connect();
         $db->transBegin();
@@ -363,7 +372,9 @@ $view_data["currency_dropdown"] = $currency_dropdown;
             if ($save_id && !$id) {
                 $ref = "GP-" . date("Y") . "-" . str_pad($save_id, 6, "0", STR_PAD_LEFT);
                 $ref_data = ["reference" => $ref];
-                $this->Gate_pass_requests_model->ci_save($ref_data, $save_id);
+                if (!$this->Gate_pass_requests_model->ci_save($ref_data, $save_id)) {
+                    throw new \RuntimeException("Unable to assign the gate pass reference.");
+                }
             }
 
             // Visitors/vehicles (with required documents) are added only from the request details page.
@@ -374,6 +385,9 @@ $view_data["currency_dropdown"] = $currency_dropdown;
                 }
             }
     
+            // Prepare the response before committing so a failed list/read
+            // cannot report a failed save after the request was already saved.
+            $row_data = $this->_request_row_data($save_id);
             if ($db->transStatus() === false) {
                 throw new \RuntimeException("Transaction failed");
             }
@@ -389,7 +403,7 @@ $view_data["currency_dropdown"] = $currency_dropdown;
     
             echo json_encode([
                 "success" => true,
-                "data" => $this->_request_row_data($save_id),
+                "data" => $row_data,
                 "id" => $save_id,
                 "message" => app_lang("record_saved")
             ]);
@@ -543,6 +557,7 @@ $view_data["currency_dropdown"] = $currency_dropdown;
                 $dupVehicleType = "none";
             }
             $newRow = [
+                "reference" => 'GP-PENDING-' . bin2hex(random_bytes(8)),
                 "requester_id" => (int)$this->login_user->id,
                 "company_id" => (int)$src->company_id,
                 "department_id" => $src->department_id ? (int)$src->department_id : null,
@@ -573,7 +588,9 @@ $view_data["currency_dropdown"] = $currency_dropdown;
                 throw new \RuntimeException("save request");
             }
             $ref = "GP-" . date("Y") . "-" . str_pad((string)$new_id, 6, "0", STR_PAD_LEFT);
-            $this->Gate_pass_requests_model->ci_save(["reference" => $ref], $new_id);
+            if (!$this->Gate_pass_requests_model->ci_save(["reference" => $ref], $new_id)) {
+                throw new \RuntimeException("Unable to assign the duplicate gate pass reference.");
+            }
 
             $visitors = $this->Gate_pass_request_visitors_model->get_details(["gate_pass_request_id" => $id])->getResult();
             $i = 0;

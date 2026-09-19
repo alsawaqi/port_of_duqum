@@ -15,6 +15,7 @@ final class Eservice_payment_manager
     public const GATE_PASS_FEE = 'gate_pass_fee';
     public const VENDOR_REGISTRATION = 'vendor_registration';
     public const VENDOR_RENEWAL = 'vendor_renewal';
+    public const INTEGRATION_TEST = 'integration_test';
 
     private BaseConnection $db;
     private EservicesPayments $config;
@@ -39,11 +40,20 @@ final class Eservice_payment_manager
         string $cancelUrl,
         array $metadata = []
     ): array {
-        if (!in_array($subjectType, [self::TENDER_FEE, self::GATE_PASS_FEE, self::VENDOR_REGISTRATION, self::VENDOR_RENEWAL], true)
+        if (!in_array($subjectType, [self::TENDER_FEE, self::GATE_PASS_FEE, self::VENDOR_REGISTRATION, self::VENDOR_RENEWAL, self::INTEGRATION_TEST], true)
             || $subjectId < 1
             || $userId < 1
         ) {
             return $this->failure(422, 'The payment request is invalid.');
+        }
+        if ($subjectType === self::INTEGRATION_TEST) {
+            // A diagnostic checkout is an admin-only UAT order, never a business fee.
+            $admin = $this->db->table('users')->where(['id' => $userId, 'is_admin' => 1,
+                'status' => 'active', 'deleted' => 0, 'disable_login' => 0])->get()->getRow();
+            if (!$admin || $vendorId !== null || $amount !== '0.100'
+                || $this->config->provider !== 'bank_muscat' || $this->config->smartpayEnvironment !== 'uat') {
+                return $this->failure(403, 'Test payments require an administrator and the Bank Muscat UAT configuration.');
+            }
         }
         if (!$this->config->isReady() || !$this->db->tableExists('eservice_payments')) {
             return $this->failure(503, 'Online payment is not configured. No fee has been marked as paid.');

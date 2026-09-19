@@ -20,18 +20,15 @@ use CodeIgniter\Autoloader\FileLocatorInterface;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\ControllerFinderTest
  */
-final class ControllerFinder
+final readonly class ControllerFinder
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
-    private readonly FileLocatorInterface $locator;
+    private FileLocatorInterface $locator;
 
     /**
      * @param string $namespace namespace to search
      */
     public function __construct(
-        private readonly string $namespace,
+        private string $namespace,
     ) {
         $this->locator = service('locator');
     }

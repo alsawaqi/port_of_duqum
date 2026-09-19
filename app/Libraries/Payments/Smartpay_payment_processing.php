@@ -191,6 +191,10 @@ trait Smartpay_payment_processing
                 $this->db->transRollback();
                 return $this->failure(404, 'No bank transaction was initiated for this payment.');
             }
+            if ((string)$payment->subject_type === Eservice_payment_manager::INTEGRATION_TEST && $this->config->smartpayEnvironment !== 'uat') {
+                $this->db->transRollback();
+                return $this->failure(409, 'Restore the matching UAT configuration before rechecking this test payment.');
+            }
             if ((string)$payment->status === 'paid' && !empty($payment->verified_at)) {
                 $this->db->transCommit();
                 return $this->settleVerifiedSmartpayPayment($paymentId);
@@ -302,6 +306,19 @@ trait Smartpay_payment_processing
                 $this->db->transCommit();
                 return ['success' => false, 'status_code' => 202,
                     'message' => 'Multiple bank transaction references were returned for this order. Accounting must investigate both references with the bank. The original payment and its application remain saved.'];
+            }
+            if ((string)$payment->subject_type === Eservice_payment_manager::INTEGRATION_TEST) {
+                // Keep bank evidence, but never invoke vendor/gate/tender settlement.
+                if ((string)$payment->settlement_status !== 'not_applicable') {
+                    $this->db->table('eservice_payments')->where('id', $paymentId)->update([
+                        'settlement_status' => 'not_applicable', 'updated_at' => get_current_utc_time(),
+                    ]);
+                    $this->insertSmartpayEvent($paymentId, 'integration_test.completed', 'processed');
+                }
+                if (!$this->db->transStatus()) { throw new \RuntimeException('Unable to save test verification.'); }
+                $this->db->transCommit();
+                return ['success' => true, 'status_code' => 200,
+                    'message' => 'Bank Muscat verified this UAT test payment. No application fee was paid or approved.'];
             }
             if ((string)$payment->settlement_status !== 'applied') {
                 $this->applyPaidSubject($payment, (string)$payment->provider_payment_id);

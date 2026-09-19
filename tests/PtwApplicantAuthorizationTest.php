@@ -46,9 +46,9 @@ $contains('"deleted" => 0', $admin, 'suspension remains recoverable and cannot b
 $notContains('"deleted" => 1', $admin, 'assignment removal does not create duplicate soft-deleted relations');
 
 $portal = $read('app/Controllers/Ptw_portal.php');
-$contains('_get_allowed_ptw_applicant_companies()', $portal, 'the form receives only assigned companies');
-$contains('get_active_company_ids((int) $this->login_user->id)', $portal, 'allowed company choices are user scoped');
-$contains('has_active_company_assignment(', $portal, 'save, read, and edit paths recheck company assignment');
+$contains('_get_allowed_ptw_applicant_companies()', $portal, 'the form receives the configured company choices');
+$contains('return $this->Gate_pass_companies_model->get_details()->getResult();', $portal, 'registered applicants can select a non-deleted company');
+$notContains('Ptw_applicant_users_model', $portal, 'applicant operations no longer require a company assignment');
 $contains('$postedCompanyId !== (int) ($existing->company_id ?? 0)', $portal, 'company identity is immutable after creation');
 $contains('app_redirect("forbidden")', $portal, 'authorization failures are denied');
 $contains('AND $assignments.company_id=?', $portal, 'reviewers are constrained by persisted company ID');

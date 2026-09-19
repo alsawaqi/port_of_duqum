@@ -22,21 +22,18 @@ use ReflectionMethod;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\AutoRouterImproved\ControllerMethodReaderTest
  */
-final class ControllerMethodReader
+final readonly class ControllerMethodReader
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
-    private readonly bool $translateURIDashes;
-    private readonly bool $translateUriToCamelCase;
+    private bool $translateURIDashes;
+    private bool $translateUriToCamelCase;
 
     /**
      * @param string       $namespace   the default namespace
      * @param list<string> $httpMethods
      */
     public function __construct(
-        private readonly string $namespace,
-        private readonly array $httpMethods,
+        private string $namespace,
+        private array $httpMethods,
     ) {
         $config                        = config(Routing::class);
         $this->translateURIDashes      = $config->translateURIDashes;

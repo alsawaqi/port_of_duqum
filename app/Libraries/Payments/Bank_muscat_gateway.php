@@ -43,6 +43,9 @@ final class Bank_muscat_gateway implements Payment_gateway_interface
     /** The two POST fields required by SmartPay; never return the working key. */
     public function hostedForm(object $payment): array
     {
+        if (($payment->subject_type ?? '') === 'integration_test' && $this->config->smartpayEnvironment !== 'uat') {
+            throw new DomainException('Test payments can only be sent to Bank Muscat UAT.');
+        }
         $callback = $this->config->smartpayPublicBaseUrl . '/eservice_payment/return_from_bank';
         if (strlen($callback) > 200) {
             throw new DomainException('The registered payment callback URL is too long.');

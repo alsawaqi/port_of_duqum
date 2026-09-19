@@ -3,6 +3,9 @@
 <body style="font-family:system-ui,sans-serif;background:#f5f7fa;color:#172b45;margin:0;padding:32px">
 <main style="max-width:620px;margin:8vh auto;background:white;padding:32px;border-radius:12px">
 <h1>Bank Muscat payment</h1>
+<?php if (($payment->subject_type ?? '') === 'integration_test'): ?>
+<p><strong>UAT integration test</strong> — use a bank-provided test card. This order does not pay an application fee.</p>
+<?php endif; ?>
 <p>Amount: <strong><?= esc($payment->currency) ?> <?= esc(number_format((float)$payment->amount, 3)) ?></strong></p>
 <p>Order reference: <?= esc($payment->provider_checkout_id) ?></p>
 <?php if ($payment->status === 'processing' && empty($payment->handed_off_at) && strtotime($payment->expires_at . ' UTC') > time()): ?>

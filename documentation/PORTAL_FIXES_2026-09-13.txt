@@ -1,0 +1,179 @@
+PORT OF DUQM - PORTAL FIXES, 13 SEPTEMBER 2026
+
+Scope: the supplied log and screenshots from e-svc.portofduqm.om.
+Changes were prepared and tested locally. The destination server has NOT been
+changed by this repair. Keep its current .env, Database.php and .htaccess.
+
+1. GATE PASS LIST, SAVE AND CSV ERRORS
+
+The supplied log contains 22 instances of:
+  Incorrect TIMESTAMP value: '0000-00-00 00:00:00'
+All originate in Gate_pass_requests_model::get_details(), called by the list,
+save response and CSV export. The ordering query compared TIMESTAMP columns
+with an invalid date literal. It now compares their text representations while
+preserving date ordering, legacy zero-date fallback and request access filters.
+No SQL-mode relaxation or database data rewrite is required.
+
+The save now prepares its response before committing. It preserves SQL NULL for
+optional department/submission dates and supplies a provisional unique reference
+before replacing it with the final GP-year-ID reference inside the transaction.
+This also supports strict schemas requiring reference on the initial insert.
+
+Some earlier save attempts may ALREADY have committed before the list lookup
+failed. After deploying, inspect My Requests for duplicate drafts before creating
+another request. Nothing in this patch deletes existing requests.
+
+2. LANGUAGE SWITCHER (ENGLISH / ARABIC)
+
+The old topbar deliberately hid language selection from external portal users.
+The switch is now available for Vendor, Gate Pass and PTW portal identities
+unless the administrator explicitly hid the language menu in topbar settings.
+It uses a dedicated authenticated POST endpoint that only changes the signed-in
+user's language and accepts installed language names. Internal staff controllers
+remain inaccessible to portal-only users.
+
+The missing Arabic default_lang.php is included: it configures Arabic/RTL and
+the bundled ar-AR editor locale, with English fallback for untranslated keys.
+Arabic desktop, collapsed-sidebar and mobile shell offsets now match the current
+sidebar widths, preventing content overlap.
+This selects the application's translations; it is not a machine-translation
+service for user-entered company names or documents.
+
+3. PTW APPLICATIONS - AVAILABLE TO REGISTERED USERS
+
+Updated to the confirmed requirement: signed-in registered applicants can open
+PTW Portal / My PTW Applications and New PTW without an applicant-company
+assignment. This includes Vendor and Gate Pass users, and regular staff/client
+accounts. Existing disabled-account, revoked-login and accounting-only-role
+restrictions remain intact; this change does not reactivate blocked logins.
+
+Applicants select the receiving company from existing non-deleted companies.
+They can create drafts, submit and view their own applications, revise when
+returned by a reviewer, access their own attachments and download completed
+approved permits. Company selection grants no access to other users' records.
+The company on an existing application remains immutable.
+
+PTW Master, reviewer inboxes and approval permissions are unchanged. Reviewers
+still need an active assignment to the application's company. No applicant
+assignment or SQL/data migration is required for this access change.
+
+The draft-save path also preserves SQL NULL for optional coordinates and dates;
+the common text sanitizer previously converted these to invalid empty strings.
+
+Both files below are newly included in this revised patch:
+  app/Controllers/Ptw_portal.php
+  app/Libraries/Left_menu.php
+
+4. VENDOR REGISTRATION: AUTHENTICATION FAILED
+
+The screenshot alone cannot distinguish an incorrect password from an inactive
+or disabled existing account. The supplied log has no vendor exception.
+The registration uses the Account access/login email to identify an existing
+account. If that email already has Gate Pass, PTW or Vendor access, enter its
+CURRENT sign-in password. A new/different password is not allowed to overwrite
+an existing account during public registration.
+
+The form now explains this, shows a useful error beside the password field,
+and focuses that field. Password verification and disabled-account protection
+are retained. If the current password is unknown, an administrator must check
+the account and reset it through the existing account management process.
+SMTP password-reset delivery has not been tested and is not required for this
+repair. No user's password was changed.
+
+5. BROKEN SIDEBAR LOGO
+
+If the configured uploaded logo cannot load, the sidebar now falls back once to
+assets/images/port-duqum-signin-logo.png. This prevents a broken-image icon but
+does not repair permission/missing-file problems affecting other uploads.
+To restore a custom logo, check its file URL or upload it again in settings.
+
+DEPLOYMENT
+
+1. Back up the listed destination files. Preserve any server-only customizations.
+2. Extract the patch ZIP into a staging folder. It contains app/, assets/ and
+   documentation/ at the top level.
+3. Copy/merge those folders into /var/www/html, replacing ONLY the files included
+   in this patch. Do not delete the existing app/ or assets/ folders.
+4. If translation files were edited on the server since the last project upload,
+   merge the two new vendor_* help keys instead of losing those custom edits.
+5. Ask hosting to refresh PHP 8.3 OPcache/reload its PHP service if necessary.
+6. Hard-refresh the browser and run the checks below.
+
+RUNTIME FILES
+  app/Controllers/Gate_pass_portal.php
+  app/Controllers/Guest_vendor.php
+  app/Controllers/Portal_account.php
+  app/Controllers/Ptw_portal.php
+  app/Libraries/Left_menu.php
+  app/Models/Gate_pass_requests_model.php
+  app/Views/includes/topbar.php
+  app/Views/includes/left_menu.php
+  app/Views/guest_vendor/index.php
+  app/Language/english/custom_lang.php
+  app/Language/arabic/custom_lang.php
+  app/Language/arabic/default_lang.php
+  assets/images/port-duqum-signin-logo.png
+  assets/css/portal-shared.css
+
+DESTINATION ACCEPTANCE CHECKS
+  - My Gate Pass Requests loads, including any drafts from previous attempts.
+  - Create one draft: success, final GP reference, appears after refresh.
+  - Export My Requests CSV successfully.
+  - Switch English -> Arabic -> English and confirm the preference persists.
+  - A user with an active PTW company assignment can open PTW Portal; an
+    unassigned user does not gain PTW access.
+  - Vendor signup with an existing email uses its current account password.
+    Incorrect passwords produce guidance and do not create a vendor/account.
+  - Logo is visible. Check writable/logs for new errors at the time of testing.
+
+This patch does not change payment/SMS credentials, OTP policy or SMTP settings.
+No bank, SMS or email deliveries were performed during these local checks.
+
+LOCAL QA RESULTS
+
+Environment: PHP 8.3.33, local MariaDB with strict timestamp regression cases,
+isolated disposable database, headless Microsoft Edge; desktop 1440x1000 and
+mobile 390x844. Playwright was used because the Browser plugin was unavailable.
+The source application database and destination production server were not changed.
+
+PASS - 15 targeted PHP test scripts, including 23 language preference checks and
+       27 database query checks. All 10 modified/new PHP runtime files lint clean.
+PASS - Gate Pass list loads; new draft saves with a final reference and remains
+       visible after reload. Existing access filters remain covered by tests.
+PASS - English -> Arabic -> English, persisted after reload; Arabic desktop,
+       collapsed sidebar and mobile layout checked, screenshots inspected.
+PASS - PTW hidden for an unassigned identity; both Gate Pass and PTW available
+       with an active company assignment. PTW portal opens.
+PASS - Vendor existing-account wrong-password submission shows guidance beside
+       the password field; the real form and real server refusal were exercised.
+PASS - Configured broken logo falls back to the bundled Port logo.
+PASS - No JavaScript runtime errors in these browser checks. The deliberately
+       missing test-logo URL failed as expected and the fallback loaded.
+
+Test scripts: PortalLanguagePreferenceTest; GatePassVisitorIdentityFilterDatabaseTest;
+GuestVendorViewTest; VendorMultiCrRegistrationTest; VendorMultiCrAuthenticationTest;
+VendorContactAccessWorkflowTest; GatePassWorkflowHelpersTest;
+GatePassParentBindingAuthorizationTest; GatePassCsvSecurityTest;
+MixedExternalPortalAccessTest; ExternalPortalAccountSecurityTest;
+PortalIdentityBoundarySecurityTest; PtwApplicantAuthorizationTest;
+PtwCompanyScopeSecurityTest; VendorCsrfHardeningTest.
+
+Limits: this was targeted repair verification, not a full production acceptance
+run. The exact destination MySQL version, current user assignments and upload
+permissions remain to be checked there. Successful new vendor registration and
+external email/SMS/bank delivery were not exercised. CSV query/security is covered
+by local tests; confirm an actual CSV download on the destination as listed above.
+Some untranslated labels use the English fallback.
+
+PTW ACCESS UPDATE - LOCAL VERIFICATION
+PASS - 50 behavioral checks for registered applicant entry, ownership, edit
+       stages, personal list filtering, anonymous refusal and reviewer boundaries.
+PASS - PTW applicant/company contracts, mixed portal navigation, external account
+       security and portal identity tests (six targeted test scripts in total).
+PASS - Browser: unassigned Gate Pass account -> PTW -> New PTW -> Save Draft ->
+       details -> My Applications. A second user was refused access to the first
+       user's record, and could open their own PTW section. No JavaScript errors.
+PASS - PHP 8.3 lint for both modified runtime files; git diff --check.
+
+No live server upload was performed. Full submission/reviewer approval and SMS,
+email, payment delivery were not rerun as part of this applicant access update.

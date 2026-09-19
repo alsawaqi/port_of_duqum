@@ -29,6 +29,35 @@ class Portal_account extends Security_Controller
         return $this->template->rander("portal_account/change_password");
     }
 
+    public function save_language()
+    {
+        if (strtolower($this->request->getMethod()) !== 'post') {
+            return $this->response->setStatusCode(405)->setHeader('Allow', 'POST')
+                ->setJSON(['success' => false, 'message' => app_lang('invalid_request')]);
+        }
+        $isPortalUser = !empty($this->login_user->is_vendor_only_identity)
+            || !empty($this->login_user->is_gate_pass_only_identity)
+            || !empty($this->login_user->is_ptw_applicant_only_identity);
+        $userId = (int) ($this->login_user->id ?? 0);
+        if (!$isPortalUser || $userId < 1) {
+            return $this->response->setStatusCode(403)
+                ->setJSON(['success' => false, 'message' => app_lang('invalid_request')]);
+        }
+        $value = $this->request->getPost('language');
+        $language = is_string($value) ? strtolower(trim($value)) : '';
+        $allowed = array_map('strtolower', array_values(get_language_list()));
+        if (!in_array($language, $allowed, true)) {
+            return $this->response->setStatusCode(422)
+                ->setJSON(['success' => false, 'message' => app_lang('invalid_request')]);
+        }
+        // Only the signed-in person's preference changes, never permissions.
+        $saved = $this->Users_model->ci_save(['language' => $language], $userId);
+        return $this->response->setStatusCode($saved ? 200 : 500)->setJSON([
+            'success' => (bool) $saved,
+            'message' => app_lang($saved ? 'settings_updated' : 'error_occurred'),
+        ]);
+    }
+
     public function save_password()
     {
         if (strtolower($this->request->getMethod()) !== "post") {

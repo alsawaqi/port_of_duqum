@@ -1226,12 +1226,12 @@ class Left_menu
         $isPtwPortalIdentity = !empty($this->ci->login_user->is_ptw_applicant_only_identity);
         $hasActiveVendorPortalAccess = !empty($this->ci->login_user->has_active_vendor_portal_access);
         $hasActiveGatePassPortalAccess = !empty($this->ci->login_user->has_active_gate_pass_portal_access);
-        $hasActivePtwPortalAccess = !empty($this->ci->login_user->has_active_ptw_portal_access);
 
         if (!$is_preview && ($isVendorPortalIdentity || $isGatePassPortalIdentity || $isPtwPortalIdentity)) {
             // External portal memberships do not grant access to the internal
             // staff menu. A single identity may legitimately belong to more
-            // than one external portal, so expose only those linked surfaces.
+            // than one external portal. PTW applications are available to all
+            // signed-in applicants without granting internal staff access.
             $sidebar_menu = [];
             if ($hasActiveVendorPortalAccess) {
                 $sidebar_menu[] = [
@@ -1247,7 +1247,7 @@ class Left_menu
                     "class" => "key",
                 ];
             }
-            if ($hasActivePtwPortalAccess) {
+            if ((int) ($this->ci->login_user->id ?? 0) > 0) {
                 $sidebar_menu[] = [
                     "name" => "ptw_portal",
                     "url" => "ptw_portal",
@@ -1855,6 +1855,21 @@ $submenu_names = [];
                         "class" => "briefcase"
                     );
                 }
+            }
+        }
+
+        // Include applicant access for registered client accounts as well as
+        // staff, even when their saved menu predates the PTW section.
+        if (!$is_preview && (int) ($this->ci->login_user->id ?? 0) > 0) {
+            $hasPtwApplications = false;
+            foreach ($view_data['sidebar_menu'] as $item) {
+                if (get_array_value($item, 'name') === 'ptw_portal') {
+                    $hasPtwApplications = true;
+                    break;
+                }
+            }
+            if (!$hasPtwApplications) {
+                $view_data['sidebar_menu'][] = ['name' => 'ptw_portal', 'url' => 'ptw_portal', 'class' => 'shield'];
             }
         }
 

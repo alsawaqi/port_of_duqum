@@ -36,7 +36,7 @@ $external_portal_home = $has_active_vendor_portal_access
                         $dashboard_link = get_uri("dashboard/view/" . $user_dashboard);
                     }
                     ?>
-                    <a id="dashboard-link" class="brand-logo" href="<?php echo $dashboard_link; ?>"><img class="dashboard-image" src="<?php echo get_logo_url(); ?>" /></a>
+                    <a id="dashboard-link" class="brand-logo" href="<?php echo $dashboard_link; ?>"><img class="dashboard-image" src="<?php echo esc(get_logo_url(), 'attr'); ?>" data-fallback-src="<?php echo esc(get_file_uri('assets/images/port-duqum-signin-logo.png'), 'attr'); ?>" onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;" alt="Port of Duqm" /></a>
 
                 </li>
 
@@ -86,7 +86,7 @@ $external_portal_home = $has_active_vendor_portal_access
                         </button>
                     </li>
 
-                    <?php if (!$is_external_portal_only_identity && !in_array("language", $hidden_topbar_menus) && (($login_user->user_type == "staff" && !get_setting("disable_language_selector_for_team_members")) || ($login_user->user_type == "client" && !get_setting("disable_language_selector_for_clients")))) { ?>
+                    <?php if (!in_array("language", $hidden_topbar_menus) && ($is_external_portal_only_identity || ($login_user->user_type == "staff" && !get_setting("disable_language_selector_for_team_members")) || ($login_user->user_type == "client" && !get_setting("disable_language_selector_for_clients")))) { ?>
 
                         <li id="topbar-language-dropdown" class="nav-item dropdown pod-language-item">
                             <?php
@@ -123,7 +123,9 @@ $external_portal_home = $has_active_vendor_portal_access
                                             . "</span>"
                                             . "<i data-feather='check' class='icon pod-language-check'></i>";
 
-                                        if ($login_user->user_type == "staff") {
+                                        if ($is_external_portal_only_identity) {
+                                            echo ajax_anchor(get_uri("portal_account/save_language"), $language_text, array("class" => $language_option_class, "data-post-language" => $language_key, "data-reload-on-success" => "1"));
+                                        } else if ($login_user->user_type == "staff") {
                                             echo ajax_anchor(get_uri("team_members/save_personal_language/$language"), $language_text, array("class" => $language_option_class, "data-reload-on-success" => "1"));
                                         } else {
                                             echo ajax_anchor(get_uri("clients/save_personal_language/$language"), $language_text, array("class" => $language_option_class, "data-reload-on-success" => "1"));

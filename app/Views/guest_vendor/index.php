@@ -273,6 +273,7 @@
                         <h2>03. <span class="gv-section-icon"><i data-feather="user-check"></i></span><?php echo app_lang("login_user"); ?></h2>
                         <p class="gv-help"><?php echo app_lang("vendor_login_user_help"); ?></p>
                     </div>
+                    <div class="alert alert-info"><?php echo esc(app_lang('vendor_shared_account_hint')); ?></div>
 
                     <div class="row">
                         <div class="col-lg-3">
@@ -343,6 +344,7 @@
                                     </button>
                                 </div>
                                 <small class="text-muted"><?php echo app_lang("vendor_password_reuse_hint"); ?></small>
+                                <div id="password-error" class="alert alert-danger mt10 d-none" role="alert"></div>
                             </div>
                         </div>
 
@@ -587,6 +589,7 @@
         function clearErrors() {
             $("#vendor-email-error").addClass("d-none").text("");
             $("#user-email-error").addClass("d-none").text("");
+            $("#password-error").addClass("d-none").text("");
 
             $("#email, #user_email, #cr_number, #phone_country_code, #phone_local, #user_mobile, #password, #password_confirm").removeClass("is-invalid gv-shake");
         }
@@ -598,6 +601,13 @@
         }
 
         function showError(field, message) {
+            if (field === "password") {
+                $("#password").addClass("is-invalid");
+                $("#password-error").removeClass("d-none").text(message);
+                document.getElementById("gv-account").scrollIntoView({block: "start", behavior: "smooth"});
+                $("#password").trigger("focus");
+                return;
+            }
             if (field === "email") {
                 const $i = $("#email");
                 $i.addClass("is-invalid");

@@ -1,5 +1,5 @@
 PORT OF DUQM PORTAL - NEW SERVER MIGRATION README
-Prepared: 9 September 2026
+Updated: 10 September 2026 - PHP 8.3 migration
 For: Hosting / infrastructure team and application administrator
 
 PURPOSE
@@ -27,6 +27,10 @@ The scheduled-job instructions below are for Linux hosting. If the new
 server is Windows, IT must configure equivalent tasks in Task Scheduler.
 FileZilla transfers files; it does not install scheduled jobs.
 
+For the exact post-extraction checks at /var/www/html, start with
+AFTER_UNZIP_CHECKLIST.txt in this documentation folder. This README covers
+the full database, integration and scheduled-job handover.
+
 
 1. BACK UP AND COPY THE CORRECT SOURCE
 
@@ -35,7 +39,7 @@ FileZilla transfers files; it does not install scheduled jobs.
     A structure-only export is not sufficient.
 [ ] Back up the current application, its live .env, configuration, and all
     uploaded documents and images. Keep a matching set for rollback.
-[ ] Copy the current PHP 8.1.34 compatibility build, including the latest
+[ ] Copy the current PHP 8.3-ready build, including the latest
     fixes. Include app/, system/, vendor/, assets/, plugins/, index.php,
     spark, files/, persistent writable/ contents and all .htaccess files.
     Keep any other runtime folders shipped with this application.
@@ -55,9 +59,10 @@ cutover so new registrations and payments are not lost.
 
 2. PREPARE THE WEB SERVER AND RESTORE THE DATABASE
 
-[ ] Use the supplied PHP 8.1.34 compatibility build. Preserve its patched
-    system/ directory, index.php and spark. Replacing system/ with a stock
-    framework release or running composer update is not part of this move.
+[ ] Use PHP 8.3 and the supplied standard CodeIgniter 4.7.4 system/ directory,
+    index.php and spark. The old PHP 8.1 workaround has been retired; this
+    copy requires PHP 8.2 or newer. An unrelated framework replacement or
+    composer update is not part of this move.
 [ ] Enable the required PHP extensions for BOTH web PHP and command-line
     PHP: mysqli, curl, openssl, intl, mbstring, fileinfo, GD and ZIP.
 [ ] Install a valid HTTPS certificate and configure DNS and the website's
@@ -215,8 +220,12 @@ Run jobs under the hosting/application account with access to the project,
 .env, private cron configuration and protected log directory.
 
 Replace /PROJECT/PATH and /PHP/PATH/php below with the REAL absolute paths.
-The previous cPanel PHP path was /opt/cpanel/ea-php81/root/usr/bin/php;
-do not assume that path exists on the new server. Confirm curl's path too.
+Use the destination PHP 8.3 executable, commonly /usr/bin/php8.3 on
+Ubuntu/Debian. The old /opt/cpanel/ea-php81/root/usr/bin/php path must not be
+used for this build. A cPanel PHP 8.3 path may instead be
+/opt/cpanel/ea-php83/root/usr/bin/php; verify it on that host. Confirm curl's
+path too. The Settings > Cron Job screen may still show the legacy PHP 8.1
+example: replace its executable with the verified PHP 8.3 path.
 
 A. PREPARE THE GENERAL JOB'S PRIVATE CONFIGURATION
 

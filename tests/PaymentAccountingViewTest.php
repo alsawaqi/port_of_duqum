@@ -9,6 +9,7 @@ $translations = require __DIR__ . '/../app/Language/english/custom_lang.php';
 function app_lang($key) { global $translations; return $translations[$key] ?? $key; }
 function esc($value) { return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'); }
 function get_uri($uri) { return 'http://127.0.0.1:8095/' . $uri; }
+function get_file_uri($uri) { return 'http://127.0.0.1:8095/' . $uri; }
 function echo_uri($uri) { echo esc(get_uri($uri)); }
 function anchor($uri, $title, $attrs = []) { return '<a href="' . esc($uri) . '">' . $title . '</a>'; }
 function form_open($uri, $attrs = []) { return '<form action="' . esc($uri) . '" id="' . esc($attrs['id'] ?? '') . '" method="post"><input type="hidden" name="csrf_test" value="synthetic">'; }

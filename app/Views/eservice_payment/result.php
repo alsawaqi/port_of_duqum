@@ -16,6 +16,12 @@ if ($payment) {
         'expired' => 'This unused checkout expired. Return to your application to start a new attempt.',
     ];
     $message = $messages[$payment->status] ?? 'This transaction is awaiting bank confirmation. Do not pay again until its status is confirmed. Accounting can recheck the bank status.';
+    if (($payment->subject_type ?? '') === 'integration_test') {
+        $message = $payment->status === 'paid' && !empty($payment->verified_at)
+            ? 'Bank Muscat verified this UAT test payment. No application fee was paid or approved.'
+            : 'UAT test status: ' . (['failed' => 'Bank confirmed failure.', 'cancelled' => 'Bank confirmed cancellation.',
+                'expired' => 'Checkout expired.'][$payment->status] ?? 'Waiting for independent bank confirmation. Return to Integration Tests to check the result.');
+    }
 }
 ?>
 <!doctype html>

@@ -1,0 +1,20 @@
+{
+  "target_php": "8.3",
+  "source": "https://github.com/codeigniter4/CodeIgniter4/tree/v4.7.4",
+  "minimum_php": "8.2",
+  "files": {
+    "system/DataConverter/DataConverter.php": "ec09f437a65324a98ddd282220cd779e0bbe204849e5bbbd6bbe60be2c688305",
+    "system/HTTP/SiteURIFactory.php": "54c3a56ff1d6708ec6806fecbe97c423eb51ae4c179a4e87de9da714d6c8f3f5",
+    "system/Commands/Utilities/Routes/ControllerFinder.php": "5c0dd33f0000c91a1e6e4700abcbf87d077b0bf82543d42cfa2f41c34218a5d8",
+    "system/Commands/Utilities/Routes/FilterCollector.php": "902ab6a4e786870bfa0ce59dcb53f3459d4c68061502037af3ddd8f4b8bad0cd",
+    "system/Test/Mock/MockCache.php": "72fc19e19897b74cf7ce1bb67fb3ceb27a4780dd0bae31128f25884db6270ca0",
+    "system/Commands/Utilities/Routes/AutoRouteCollector.php": "312cf009f25b7b459e9ae957e6441b0b8c0a37b9b18d3e59041b35b720a44e1a",
+    "system/Commands/Utilities/Routes/ControllerMethodReader.php": "cc2ff6885fe909e904475677496795fe98b91025994d2f40c9bf7f8e41a43eca",
+    "system/Commands/Utilities/Routes/FilterFinder.php": "05fea5c307fa7fb1b320123713f52583803be885b258019efeff30245737102a",
+    "system/Commands/Utilities/Routes/AutoRouterImproved/AutoRouteCollector.php": "b622e802d0328a01df30428d792c05631fd99a566511c1eb303985d7d7c44a2d",
+    "system/Commands/Utilities/Routes/AutoRouterImproved/ControllerMethodReader.php": "85f303264a02aeecedeba8c4c8625dda88e0be311d010f4d40751cf4443da0b6",
+    "system/Cache/FactoriesCache.php": "8a32195d16baf0ca3c921a25dcb68ab03fd5d99533e4e601c054e04e8fe2866d",
+    "system/Router/DefinedRouteCollector.php": "4f462007fac1f748453f2e6cc39a14baa291d25c005bafd6cc918813e4f8a833"
+  },
+  "framework": "4.7.4"
+}

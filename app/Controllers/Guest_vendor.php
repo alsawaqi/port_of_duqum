@@ -209,9 +209,9 @@ class Guest_vendor extends App_Controller
                 if ((int)($existing_user->deleted ?? 0) === 1) {
                     echo json_encode([
                         "success" => false,
-                        "message" => app_lang("authentication_failed"),
+                        "message" => app_lang("vendor_registration_auth_help"),
                         "field"   => "password",
-                        "errors"  => ["password" => app_lang("authentication_failed")]
+                        "errors"  => ["password" => app_lang("vendor_registration_auth_help")]
                     ]);
                     return;
                 }
@@ -221,9 +221,9 @@ class Guest_vendor extends App_Controller
                 ) {
                     echo json_encode([
                         "success" => false,
-                        "message" => app_lang("authentication_failed"),
+                        "message" => app_lang("vendor_registration_auth_help"),
                         "field"   => "password",
-                        "errors"  => ["password" => app_lang("authentication_failed")]
+                        "errors"  => ["password" => app_lang("vendor_registration_auth_help")]
                     ]);
                     return;
                 }
@@ -244,9 +244,9 @@ class Guest_vendor extends App_Controller
                 if (!$this->Users_model->verify_user_password((int) $existing_user->id, $password)) {
                     echo json_encode([
                         "success" => false,
-                        "message" => app_lang("authentication_failed"),
+                        "message" => app_lang("vendor_registration_auth_help"),
                         "field"   => "password",
-                        "errors"  => ["password" => app_lang("authentication_failed")]
+                        "errors"  => ["password" => app_lang("vendor_registration_auth_help")]
                     ]);
                     return;
                 }

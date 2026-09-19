@@ -21,15 +21,12 @@ use ReflectionMethod;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\ControllerMethodReaderTest
  */
-final class ControllerMethodReader
+final readonly class ControllerMethodReader
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
     /**
      * @param string $namespace the default namespace
      */
-    public function __construct(private readonly string $namespace)
+    public function __construct(private string $namespace)
     {
     }
 

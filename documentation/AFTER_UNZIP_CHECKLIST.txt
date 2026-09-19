@@ -1,0 +1,301 @@
+PORT OF DUQM - CHECKS AFTER EXTRACTING INTO /var/www/html
+Updated: 10 September 2026
+Target: PHP 8.3, complete current project and complete current database
+
+The commands below are examples for Ubuntu/Debian with Apache 2.4 and
+PHP 8.3-FPM. Hosting must adapt service names/users on other systems.
+If using Nginx, do not run the Apache configuration commands: see Step 7.
+Replace YOUR-DOMAIN with the actual new hostname. Do not paste placeholders
+over working credentials. None of these commands has been run on your new
+/var/www/html server by the assistant.
+
+STEP 1 - CHECK THE EXTRACTION LOCATION
+
+Run:
+    cd /var/www/html
+    pwd
+    ls -la
+    ls -l index.php spark server-check.php app/Config/Database.php system/Boot.php
+
+Expected layout:
+    /var/www/html/index.php
+    /var/www/html/spark
+    /var/www/html/server-check.php
+    /var/www/html/.env
+    /var/www/html/.htaccess
+    /var/www/html/app/
+    /var/www/html/system/
+    /var/www/html/assets/
+    /var/www/html/files/
+    /var/www/html/writable/
+
+If you instead see /var/www/html/port_of_duqum/index.php, the ZIP has added
+one folder level. Point the website DocumentRoot at that actual folder or
+have hosting place the project CONTENTS in /var/www/html. Do not blindly
+move/delete an existing website. This customized project has its entry point
+in the project root; do not configure /var/www/html/public by assumption.
+
+The correct database configuration filename is app/Config/Database.php.
+Linux filenames are case-sensitive. Keep the original file/folder names.
+Keep the deployment ZIP, SQL dump and backups outside the document root.
+
+STEP 2 - CHECK PHP 8.3 AND ITS EXTENSIONS
+
+Run:
+    php8.3 -v
+    php8.3 --ini
+    php8.3 -m
+
+Expected: PHP 8.3.x. The site was tested on PHP 8.3.33.
+If php8.3 is not found, ask hosting for the actual PHP 8.3 executable path.
+Required portal extensions:
+    intl, mbstring, mysqli, mysqlnd, curl, openssl, fileinfo, gd, zip,
+    dom, simplexml, xml, xmlreader, xmlwriter, iconv, ctype, bcmath,
+    session, json
+
+These CLI results do NOT prove the website uses the same PHP configuration.
+Hosting must also confirm the website PHP-FPM pool/Apache handler uses PHP
+8.3 with these extensions. Do not copy Windows PHP DLLs/php.ini to Linux.
+Only install the packages actually missing for the selected PHP 8.3 runtime.
+
+STEP 3 - CHECK THE DATABASE IMPORT AND CONFIGURATION
+
+Confirm the full database was imported: structure AND data. A schema-only
+dump does not restore users, settings, applications or payment records.
+
+Edit /var/www/html/app/Config/Database.php and verify:
+    hostname, database, username, password and port
+    DBDriver remains MySQLi
+    DBPrefix matches the imported tables, normally pod_
+
+Use a dedicated database user with a password, not root. In production this
+application rejects root/empty credentials. If MySQL is on a separate
+server/IP, it also requires TLS in the connection's encrypt configuration.
+Hosting must supply the correct database TLS settings/certificates.
+Check for stale database.default.* overrides in .env or the hosting service.
+Changing Database.php alone does not override an active environment override.
+Do not rerun all old migrations or disable foreign keys to hide import errors.
+
+STEP 4 - CHECK THE HIDDEN .env FILE
+
+Run:
+    ls -l /var/www/html/.env
+
+Open it privately with your editor. Merge these settings into the existing
+deployment file; do not replace the complete file with this short example:
+
+    CI_ENVIRONMENT = production
+    PODC_BASE_URL = "https://YOUR-DOMAIN/"
+    PODC_RECAPTCHA_ENABLED = false
+    PODC_RECAPTCHA_REQUIRED = false
+
+Use the final HTTPS hostname with a trailing slash. Do not put /signin or
+/index.php in the base URL. Keep APP_BASE_URL/app.baseURL overrides, if any,
+consistent with the chosen address. Check the certificate is valid for it.
+
+Preserve the existing application encryption key from the installation whose
+database you imported. Preserve AUTH_SECURITY_MFA_HMAC_KEY and the existing
+tender signing/encryption keys. Moving the same database is not a reason to
+regenerate these keys: saved encrypted settings can stop working if changed.
+Do not leave localhost addresses or example keys in the destination file.
+Keep reCAPTCHA disabled as requested.
+
+STEP 5 - CHECK LINUX OWNERSHIP AND WRITE ACCESS
+
+Hosting must identify the actual PHP worker user. On Ubuntu it is often
+www-data, but a dedicated PHP-FPM pool may run under another account.
+
+Read-only checks (replace www-data if needed):
+    namei -l /var/www/html/index.php
+    ls -ld /var/www/html/writable /var/www/html/writable/logs /var/www/html/writable/cache /var/www/html/files /var/www/html/files/temp
+    sudo -u www-data test -r /var/www/html/.env && echo "PHP can read .env"
+    sudo -u www-data test -w /var/www/html/writable/logs && echo "PHP can write logs"
+    sudo -u www-data test -w /var/www/html/writable/cache && echo "PHP can write cache"
+    sudo -u www-data test -w /var/www/html/files/temp && echo "PHP can write temporary uploads"
+
+No success message means the test failed. Check all existing upload
+subdirectories, not just the parent. Directories need traversal permission.
+The PHP user needs read access to source files and write access to writable/
+and the relevant files/ upload folders. Match the job user's access too.
+Hosting should fix ownership/groups or ACLs for those exact locations.
+Do not use chmod -R 777 on the project. Keep .env readable only by the owner
+and necessary PHP/job account; keep writable/ blocked from public HTTP.
+
+STEP 6 - CHECK DNS AND THE HTTPS WEBSITE
+
+The domain must point to this server or to its configured reverse proxy.
+Install a certificate for the final hostname and configure the HTTPS virtual
+host before testing production login. An IP-only HTTP test is not equivalent
+to the configured production HTTPS site.
+If a proxy terminates HTTPS, hosting must configure trusted proxy handling
+correctly. Do not disable HTTPS/cookie protection to stop a redirect loop.
+
+STEP 7 - CHECK APACHE CONFIGURATION AND REWRITE ROUTING
+
+Apache on Ubuntu/Debian: run these read-only checks:
+    sudo apache2ctl -t
+    sudo apache2ctl -S
+    sudo apache2ctl -M
+
+Expected: Syntax OK; YOUR-DOMAIN is assigned to the correct HTTPS virtual
+host; PHP handling is configured; rewrite_module is loaded. This project's
+header rules also use headers_module when available.
+
+Hosting should adapt the existing virtual host, keeping its TLS settings:
+    DocumentRoot /var/www/html
+    DirectoryIndex index.php
+    <Directory /var/www/html>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+This permits the supplied .htaccess protections. Hosting can use an
+equivalent reviewed AllowOverrideList or virtual-host rules instead.
+If copying .htaccess FROM CPANEL to a non-cPanel server, remove only the
+cPanel-generated AddHandler application/x-httpd-ea-php83 block after hosting
+has set up the new PHP handler. Do not remove the source/private-file denials.
+
+The local project .htaccess contains access protections but may not contain
+the following final routing block. If no equivalent front-controller rewrite
+exists, add this at the END of /var/www/html/.htaccess, after the protections:
+
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule ^ index.php [L,QSA]
+    </IfModule>
+
+Do not duplicate it when it is already present. This is needed for routes
+such as /signin and the bank callback without /index.php.
+
+Nginx alternative: .htaccess is ignored. Hosting must configure PHP-FPM,
+front-controller routing AND equivalent denials for .env, app/, system/,
+writable/, documentation/, tests/, source, SQL dumps and backups. Also deny
+execution of uploaded scripts. A generic CodeIgniter public/ config is not
+drop-in compatible with this root-webroot project. Run nginx -t before reload.
+
+STEP 8 - CHECK CONFIGURATION, THEN RELOAD THE CORRECT SERVICES
+
+On Apache with PHP-FPM, after hosting's configuration edits:
+    sudo apache2ctl -t
+    sudo systemctl reload apache2
+    sudo systemctl reload php8.3-fpm
+
+Reload only services that are installed and actually serve this site.
+For mod_php, Apache reload replaces the PHP-FPM step. For Nginx, hosting uses
+nginx -t and reloads Nginx plus the correct PHP-FPM pool/service.
+Make sure OPcache no longer serves old deployment files.
+
+STEP 9 - RUN THE APPLICATION'S SERVER CHECKER
+
+From the real project directory, using the confirmed PHP user and binary:
+    cd /var/www/html
+    sudo -u www-data /usr/bin/php8.3 server-check.php
+    sudo -u www-data /usr/bin/php8.3 server-check.php --database
+
+Replace the user/binary if your host uses different values. Expected: [OK]
+for each requirement and "Server checks passed". Resolve [FAIL] entries.
+The first command does not connect to MySQL. The second uses read-only
+database checks. Neither sends SMS, email or bank requests.
+The checker is CLI-only: opening /server-check.php in a browser returns 404
+by design. Do not treat that 404 as an installation failure.
+
+STEP 10 - OPEN THE BASIC PAGES BEFORE TESTING TRANSACTIONS
+
+Open these on the NEW domain:
+    https://YOUR-DOMAIN/index.php/signin
+    https://YOUR-DOMAIN/index.php/guest_vendor
+    https://YOUR-DOMAIN/index.php/guest_gate_pass
+    https://YOUR-DOMAIN/signin
+
+Expected: the correct forms appear without HTTP 500. If only /signin fails,
+check rewrite routing. If all PHP routes fail, check the logs in Step 13.
+Then log in as admin and check the dashboard and Integration Tests page.
+Check vendor login by email, by CR, and multi-CR company selection.
+Check an existing document plus a newly uploaded image/PDF through the app.
+Check private resources such as /.env and /writable/ return a denial, never
+file contents. Direct private-document access remains restricted by design.
+
+STEP 11 - VERIFY PAYMENT, SMS AND SAVED EMAIL SETTINGS
+
+Bank: review SMARTPAY_MERCHANT_ID, SMARTPAY_ACCESS_CODE,
+SMARTPAY_WORKING_KEY and SMARTPAY_GATEWAY_URL in .env. Values must match
+the new domain and the bank-approved environment. Correct any existing
+eservices.payment.smartpayPublicBaseUrl override. The default follows the
+application base URL. Confirm the callback shown in Integration Tests.
+The bank's checkout AND server-side Status API must be reachable/approved.
+Use UAT test cards only with the UAT gateway. A connection check alone does
+not prove keys or payment verification work.
+
+SMS: Settings > SMS values move with the database and override .env defaults
+when saved settings exist. Confirm the approved sender and account, and have
+iSmartSMS whitelist the new server's outgoing IP if required. Use Integration
+Tests to send to an approved test number. Verify receipt before enabling
+mandatory OTP for all logins; the admin needs a valid own mobile number.
+Login OTP sends immediately. Workflow notifications use the SMS worker.
+
+Email: retain Settings > Email. The existing internal SMTP relay is
+10.157.25.12, TCP 25, no authentication/encryption, sender
+eservices@portofduqm.om. Hosting must provide network access to that relay.
+Do not send SMTP test messages or run SMTP connection tests in this handover,
+per the owner's instruction.
+
+STEP 12 - RESTORE THE TWO SCHEDULED JOBS AT CUTOVER
+
+Use one scheduler installation only. Do not run both old and new workers
+against the same migrated system. Check the PHP 8.3 path; do not copy the old
+/opt/cpanel/ea-php81/... example from Settings > Cron Job.
+
+General-job configuration: restore/rebuild writable/cron-http.conf with the
+NEW final HTTPS /index.php/cron URL, POST method and X-PODC-Cron-Key matching
+PODC_CRON_KEY in .env. Keep it owned/readable only by the scheduler account
+(normally mode 600). The key must be inserted privately, not on the command
+line. The full template and cutover instructions are in documentation/README.txt.
+
+Examples for a USER crontab, after confirming these executable paths:
+    * * * * * cd /var/www/html && /usr/bin/php8.3 spark sms:process >> /var/www/html/writable/logs/sms-cron.log 2>&1
+    */5 * * * * /usr/bin/curl --config /var/www/html/writable/cron-http.conf >> /var/www/html/writable/logs/general-cron.log 2>&1
+
+Install only when due work and queued notifications have been reviewed for
+cutover. The general job makes real workflow/tender changes; it is not a
+connectivity test. Verify Settings > Cron Job > Last run and worker logs.
+
+STEP 13 - IF HTTP 500 REMAINS, CAPTURE THE ACTUAL ERROR
+
+Refresh the failing page once. Immediately inspect the site's configured
+logs. Common Ubuntu/Debian locations (custom virtual hosts may differ):
+    sudo tail -n 60 /var/log/apache2/error.log
+    sudo tail -n 60 /var/log/php8.3-fpm.log
+    sudo journalctl -u php8.3-fpm -n 60 --no-pager
+    ls -lt /var/www/html/writable/logs
+
+For Nginx, also inspect the site's Nginx error log, often
+/var/log/nginx/error.log. Read the newest application log matching the failed
+request. Share the relevant error line and timestamp, not just "HTTP 500".
+
+Examples of useful clues:
+    "not allowed here"       -> Apache .htaccess/AllowOverride configuration
+    "Permission denied"      -> filesystem ownership, access or server policy
+    "Class ... not found"    -> missing extension/file or filename case
+    "Access denied for user" -> MySQL account/password/allowed source host
+    "Production requires..." -> HTTPS, keys, dedicated DB user or remote DB TLS
+    "POD startup failed..."  -> early exception type and source file/line
+
+Do not disable production protections or turn on public error display to
+guess at the fix. The browser's 500 code alone cannot identify the cause.
+
+DONE WHEN
+    - Requirements and read-only database checks pass under the website user.
+    - HTTPS sign-in and both guest forms load, including rewritten URLs.
+    - Admin/vendor login and authorized document viewing work.
+    - Private directories and .env are inaccessible over HTTP.
+    - Payment/SMS tests show actual verified results, or remain clearly pending.
+    - Exactly one set of background jobs runs after cutover.
+
+REFERENCES
+    Project-specific details: documentation/README.txt and PHP83_MIGRATION.md
+    https://codeigniter4.github.io/userguide/intro/requirements.html
+    https://codeigniter4.github.io/userguide/installation/running.html
+    https://httpd.apache.org/docs/2.4/mod/core.html#allowoverride

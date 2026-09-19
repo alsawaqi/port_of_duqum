@@ -24,18 +24,15 @@ use Config\Filters as FiltersConfig;
  *
  * @see \CodeIgniter\Commands\Utilities\Routes\FilterCollectorTest
  */
-final class FilterCollector
+final readonly class FilterCollector
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
     public function __construct(
         /**
          * Whether to reset Defined Routes.
          *
          * If set to true, route filters are not found.
          */
-        private readonly bool $resetRoutes = false,
+        private bool $resetRoutes = false,
     ) {
     }
 

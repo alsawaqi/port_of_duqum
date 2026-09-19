@@ -141,6 +141,8 @@ class Gate_pass_requests_model extends Crud_model
             $where .= " AND DATE($requests.visit_from)<=" . $this->db->escape($date_to);
         }
 
+        // Compare zero dates as text: strict MySQL rejects a zero-date literal
+        // compared directly with a TIMESTAMP, even when no rows contain one.
         $sql = "SELECT 
                     $requests.*,
                     $companies.name AS company_name,
@@ -164,8 +166,8 @@ class Gate_pass_requests_model extends Crud_model
                 LEFT JOIN $users ON $users.id = $requests.requester_id
                 $where
                 ORDER BY COALESCE(
-                    IF($requests.created_at IS NOT NULL AND $requests.created_at <> '0000-00-00 00:00:00', $requests.created_at, NULL),
-                    IF($requests.submitted_at IS NOT NULL AND $requests.submitted_at <> '0000-00-00 00:00:00', $requests.submitted_at, NULL),
+                    NULLIF(CAST($requests.created_at AS CHAR), '0000-00-00 00:00:00'),
+                    NULLIF(CAST($requests.submitted_at AS CHAR), '0000-00-00 00:00:00'),
                     '1970-01-01 00:00:00'
                 ) DESC, $requests.id DESC";
 

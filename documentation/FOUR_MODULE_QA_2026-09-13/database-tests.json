@@ -1,0 +1,22 @@
+[
+  {
+    "test": "VendorLocationDatabaseTest.php",
+    "exit": 0,
+    "output": "Vendor location integration: 114 checks passed; fixtures rolled back; no SMS sent.\n"
+  },
+  {
+    "test": "IntegrationToolsDatabaseTest.php",
+    "exit": 0,
+    "output": "Integration tools: 52 isolated database checks passed; no provider requests sent.\n"
+  },
+  {
+    "test": "GatePassVisitorIdentityFilterDatabaseTest.php",
+    "exit": 0,
+    "output": "OK: 27 visitor identity and strict timestamp query checks (local temporary tables only).\n"
+  },
+  {
+    "test": "StrictSqlSanitizationDatabaseTest.php",
+    "exit": 0,
+    "output": "StrictSqlSanitizationDatabaseTest: 21 checks passed\n"
+  }
+]

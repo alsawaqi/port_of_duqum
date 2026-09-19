@@ -24,12 +24,9 @@ use Config\App;
  *
  * @see \CodeIgniter\HTTP\SiteURIFactoryTest
  */
-final class SiteURIFactory
+final readonly class SiteURIFactory
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
-    public function __construct(private readonly App $appConfig, private readonly Superglobals $superglobals)
+    public function __construct(private App $appConfig, private Superglobals $superglobals)
     {
     }
 

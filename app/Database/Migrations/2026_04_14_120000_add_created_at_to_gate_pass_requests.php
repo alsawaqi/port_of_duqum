@@ -23,8 +23,8 @@ class Add_created_at_to_gate_pass_requests extends Migration
         if ($db->fieldExists('submitted_at', $table)) {
             $db->query(
                 "UPDATE `{$table}` SET `created_at` = `submitted_at` "
-                . "WHERE `deleted` = 0 AND `submitted_at` IS NOT NULL AND `submitted_at` <> '0000-00-00 00:00:00' "
-                . "AND (`created_at` IS NULL OR `created_at` = '0000-00-00 00:00:00')"
+                . "WHERE `deleted` = 0 AND `submitted_at` IS NOT NULL AND CAST(`submitted_at` AS CHAR) <> '0000-00-00 00:00:00' "
+                . "AND (`created_at` IS NULL OR CAST(`created_at` AS CHAR) = '0000-00-00 00:00:00')"
             );
         }
     }

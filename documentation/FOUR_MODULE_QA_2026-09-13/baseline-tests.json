@@ -1,0 +1,587 @@
+[
+  {
+    "test": "AnnouncementExternalIdentityIsolationTest.php",
+    "code": 0,
+    "output": "Announcement external-identity isolation contracts passed.\n"
+  },
+  {
+    "test": "AuthenticationHardeningTest.php",
+    "code": 0,
+    "output": "Authentication hardening contracts passed.\n"
+  },
+  {
+    "test": "AuthSessionVersionAtomicityTest.php",
+    "code": 0,
+    "output": "Auth session-version atomicity contracts passed.\n"
+  },
+  {
+    "test": "BankMuscatPaymentGatewayTest.php",
+    "code": 0,
+    "output": "Bank Muscat payment behavior: 66 checks passed.\n"
+  },
+  {
+    "test": "CliMigrationEntryPointTest.php",
+    "code": 0,
+    "output": "CLI migration entry point and PHP runtime baseline passed.\n"
+  },
+  {
+    "test": "CombinedManualSecuritySqlTest.php",
+    "code": 0,
+    "output": "Combined manual security SQL contracts passed.\n"
+  },
+  {
+    "test": "CredentialEmailHardeningTest.php",
+    "code": 0,
+    "output": "Credential email hardening contracts passed.\n"
+  },
+  {
+    "test": "CronEndpointHardeningTest.php",
+    "code": 0,
+    "output": "Cron endpoint hardening contracts passed.\n"
+  },
+  {
+    "test": "CronRoutingTest.php",
+    "code": 0,
+    "output": "Cron route and exact CSRF scope passed.\n"
+  },
+  {
+    "test": "DatabaseStrictModeSecurityTest.php",
+    "code": 0,
+    "output": "Database strict-mode contracts passed.\n"
+  },
+  {
+    "test": "EservicePaymentSecurityTest.php",
+    "code": 0,
+    "output": "E-service payment security contracts passed.\n"
+  },
+  {
+    "test": "ExternalControllerEscapeHardeningTest.php",
+    "code": 0,
+    "output": "External controller escape hardening contracts passed.\n"
+  },
+  {
+    "test": "ExternalPortalAccountSecurityTest.php",
+    "code": 0,
+    "output": "External portal account hardening contracts passed.\n"
+  },
+  {
+    "test": "FrameworkConfigCompatibilityTest.php",
+    "code": 0,
+    "output": "CodeIgniter 4.7 application-config compatibility passed.\n"
+  },
+  {
+    "test": "FrameworkRuntimeCompatibilityTest.php",
+    "code": 0,
+    "output": "PHP 8.3.33 compatibility: 73 checks passed.\n"
+  },
+  {
+    "test": "FrameworkRuntimeVersionTest.php",
+    "code": 0,
+    "output": "Bundled CodeIgniter security baseline passed (4.7.4).\n"
+  },
+  {
+    "test": "GatePassCsvSecurityTest.php",
+    "code": 0,
+    "output": "Gate-pass CSV security contracts passed.\n"
+  },
+  {
+    "test": "GatePassInternationalPlateTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "GatePassIssuanceConcurrencyTest.php",
+    "code": 0,
+    "output": "Gate-pass issuance concurrency checks passed.\n"
+  },
+  {
+    "test": "GatePassParentBindingAuthorizationTest.php",
+    "code": 0,
+    "output": "Gate-pass parent binding and stage authorization passed.\n"
+  },
+  {
+    "test": "GatePassPaymentClearanceTest.php",
+    "code": 0,
+    "output": "Gate-pass payment clearance: 10 passed, 0 failed. SQLite in-memory fixtures only.\n"
+  },
+  {
+    "test": "GatePassPlateDisplayTest.php",
+    "code": 0,
+    "output": "OK: 9 plate display cases\n"
+  },
+  {
+    "test": "GatePassQrReplayProtectionTest.php",
+    "code": 0,
+    "output": "Gate-pass QR replay protection contracts passed.\n"
+  },
+  {
+    "test": "GatePassRopFilterAndDateCountTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "GatePassRopRequestListMenuTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "GatePassSecurityScanDisplayTest.php",
+    "code": 0,
+    "output": "Gate security scan display: 24 checks passed.\n"
+  },
+  {
+    "test": "GatePassStageScopedDocumentAuthorizationTest.php",
+    "code": 0,
+    "output": "Gate pass stage-scoped document authorization contracts passed.\n"
+  },
+  {
+    "test": "GatePassWorkflowHelpersTest.php",
+    "code": 0,
+    "output": "Gate pass workflow helpers passed.\n"
+  },
+  {
+    "test": "GoogleDrivePrivateFileSecurityTest.php",
+    "code": 0,
+    "output": "Google Drive private-file security checks passed.\n"
+  },
+  {
+    "test": "GuestVendorViewTest.php",
+    "code": 0,
+    "output": "Guest vendor view contract passed.\n"
+  },
+  {
+    "test": "IsmartSmsIntegrationTest.php",
+    "code": 0,
+    "output": "iSmartSMS integration: 123 checks passed. No network requests made.\n"
+  },
+  {
+    "test": "LeftMenuSettingResolutionTest.php",
+    "code": 0,
+    "output": "Left menu setting resolution passed.\n"
+  },
+  {
+    "test": "LegacyInvoicePaymentHardeningTest.php",
+    "code": 0,
+    "output": "Legacy invoice payment hardening contracts passed.\n"
+  },
+  {
+    "test": "LegacyWebhookHardeningTest.php",
+    "code": 0,
+    "output": "Legacy webhook hardening checks passed.\n"
+  },
+  {
+    "test": "MfaIbulkProviderSecurityTest.php",
+    "code": 0,
+    "output": "iBulk/Oman MFA provider security contracts passed.\n"
+  },
+  {
+    "test": "MixedExternalPortalAccessTest.php",
+    "code": 0,
+    "output": "Mixed external portal access contracts passed.\n"
+  },
+  {
+    "test": "NotificationProcessorSecurityTest.php",
+    "code": 0,
+    "output": "Notification processor security contracts passed.\n"
+  },
+  {
+    "test": "OauthStateHardeningTest.php",
+    "code": 0,
+    "output": "OAuth state hardening checks passed.\n"
+  },
+  {
+    "test": "OperationalSelfPasswordChangeHardeningTest.php",
+    "code": 0,
+    "output": "Operational self-password hardening contracts passed.\n"
+  },
+  {
+    "test": "OptionalDateDisplayTest.php",
+    "code": 0,
+    "output": "Optional date display: 44 checks passed.\n"
+  },
+  {
+    "test": "OutboundIntegrationSecurityTest.php",
+    "code": 0,
+    "output": "Outbound integration SSRF and TLS hardening contracts passed.\n"
+  },
+  {
+    "test": "PaymentAccountingTest.php",
+    "code": 0,
+    "output": "Payment accounting authorization, SQL scope, filters and CSV tests passed.\n"
+  },
+  {
+    "test": "PaymentAccountingViewTest.php",
+    "code": 0,
+    "output": "Accounting views render safely; readable fields, masked cards, all outcome guidance, bilingual labels, evidence permissions and POST recheck controls passed.\n"
+  },
+  {
+    "test": "Phase2AuthenticationHardeningTest.php",
+    "code": 0,
+    "output": "Phase 2 authentication hardening contracts passed.\n"
+  },
+  {
+    "test": "PortalIdentityBoundarySecurityTest.php",
+    "code": 0,
+    "output": "Portal identity and vendor-document boundary contracts passed.\n"
+  },
+  {
+    "test": "PortalLanguagePreferenceTest.php",
+    "code": 0,
+    "output": "OK: 23 portal language preference checks.\n"
+  },
+  {
+    "test": "PrivateControllerActionSecurityTest.php",
+    "code": 0,
+    "output": "Private controller action security contracts passed.\n"
+  },
+  {
+    "test": "ProductionTransportHardeningTest.php",
+    "code": 0,
+    "output": "Production transport and error-display hardening passed.\n"
+  },
+  {
+    "test": "PtwApplicantAuthorizationTest.php",
+    "code": 0,
+    "output": "PTW applicant-company authorization contracts passed.\n"
+  },
+  {
+    "test": "PtwCompanyScopeSecurityTest.php",
+    "code": 0,
+    "output": "PTW company-scope security contracts passed.\n"
+  },
+  {
+    "test": "PtwOtherItemsViewTest.php",
+    "code": 0,
+    "output": "PTW Other view contract passed.\n"
+  },
+  {
+    "test": "PtwPendingUploadViewTest.php",
+    "code": 0,
+    "output": "PTW pending upload view contract passed.\n"
+  },
+  {
+    "test": "PtwReadableHistoryTest.php",
+    "code": 0,
+    "output": "PTW readable history helpers passed.\n"
+  },
+  {
+    "test": "PtwRegisteredApplicantAccessTest.php",
+    "code": 0,
+    "output": "OK: 50 registered PTW applicant access checks.\n"
+  },
+  {
+    "test": "PtwSavedMenuFilterTest.php",
+    "code": 0,
+    "output": "PTW saved menu filter: 14 checks passed.\n"
+  },
+  {
+    "test": "PtwTerminalApprovalWorkflowTest.php",
+    "code": 0,
+    "output": "PTW terminal approval workflow passed.\n"
+  },
+  {
+    "test": "PublicAbuseProtectionTest.php",
+    "code": 0,
+    "output": "Public abuse protection contracts passed.\n"
+  },
+  {
+    "test": "RoleMenuPermissionCoverageTest.php",
+    "code": 0,
+    "output": "Role menu permission coverage passed.\n"
+  },
+  {
+    "test": "RuntimeDdlHardeningTest.php",
+    "code": 0,
+    "output": "Runtime DDL hardening contracts passed.\n"
+  },
+  {
+    "test": "SafeHttpMutationCoverageTest.php",
+    "code": 0,
+    "output": "Safe HTTP mutation route coverage passed.\n"
+  },
+  {
+    "test": "SafeUnserializeTest.php",
+    "code": 0,
+    "output": "Safe unserialize tests passed.\n"
+  },
+  {
+    "test": "ServerComplianceHardeningTest.php",
+    "code": 0,
+    "output": "Server compliance hardening contracts passed.\n"
+  },
+  {
+    "test": "ServerExposureHardeningTest.php",
+    "code": 0,
+    "output": "Server exposure hardening contracts passed.\n"
+  },
+  {
+    "test": "ServerStartupDiagnosticsTest.php",
+    "code": 0,
+    "output": "Server startup diagnostics: 11 checks passed.\n"
+  },
+  {
+    "test": "SigninRedirectSecurityTest.php",
+    "code": 0,
+    "output": "Sign-in redirect origin hardening contracts passed.\n"
+  },
+  {
+    "test": "SmartpayCallbackInputTest.php",
+    "code": 0,
+    "output": "SmartPay callback input: 29 checks passed.\n"
+  },
+  {
+    "test": "SmartpayEnvironmentConfigTest.php",
+    "code": 0,
+    "output": "SmartPay environment configuration: 38 checks passed.\n"
+  },
+  {
+    "test": "TenderBidItemPricingTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderBidOpeningLabelTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderClarificationRateLimitTest.php",
+    "code": 0,
+    "output": "Tender clarification rate-limit contracts passed.\n"
+  },
+  {
+    "test": "TenderClarificationScopeAttachmentTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderCombinedVendorTargetingTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderCommercialEvaluationInternalClarificationTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderCommitteeSelectionRulesTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderCompanyAuthorizationHardeningTest.php",
+    "code": 0,
+    "output": "Tender company authorization and parent binding hardening passed.\n"
+  },
+  {
+    "test": "TenderDocumentPreviewAccessTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderFeePaymentBypassTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderFeeSpecificationTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderLateEvaluationAuditTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderLatestOrderingTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderOpeningSecretHardeningTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderPartNumberAndTotalsTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderProcurementEvaluationWeightsTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderProcurementManagerChangeApprovalTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderProcurementManagerWorkflowTest.php",
+    "code": 0,
+    "output": "Tender procurement manager workflow coverage passed.\n"
+  },
+  {
+    "test": "TenderProcurementProposalReviewGateTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderProtectedStorageSecurityTest.php",
+    "code": 0,
+    "output": "Tender protected-storage contracts passed.\n"
+  },
+  {
+    "test": "TenderReportGroupUpdateAttachmentTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderRfqLabelWordingTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderScheduleCascadeApprovalTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderSingleThreeKeyOpeningTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderTechnicalEvaluationFindingsWorkflowTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderTestingStageOverrideTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderVendorTargetingTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderWeightedEvaluationScoreTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderWorkdayGuardTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "TenderWorkflowSchedulerSecurityTest.php",
+    "code": 0,
+    "output": "Tender scheduler-only workflow contracts passed.\n"
+  },
+  {
+    "test": "UploadSecurityHardeningTest.php",
+    "code": 0,
+    "output": "Upload security hardening checks passed.\n"
+  },
+  {
+    "test": "VendorActiveTenderEligibilityTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "VendorBillingBehaviorTest.php",
+    "code": 0,
+    "output": "Vendor billing behavior: 23 passed, 0 failed. SQLite in-memory fixtures only.\n"
+  },
+  {
+    "test": "VendorContactAccessWorkflowTest.php",
+    "code": 0,
+    "output": "Vendor contact access workflow passed.\n"
+  },
+  {
+    "test": "VendorContactOwnerAuthorizationTest.php",
+    "code": 0,
+    "output": "Vendor contact owner authorization contracts passed.\n"
+  },
+  {
+    "test": "VendorContactSecuritySchemaTest.php",
+    "code": 0,
+    "output": "Vendor contact security schema contracts passed.\n"
+  },
+  {
+    "test": "VendorCsrfHardeningTest.php",
+    "code": 0,
+    "output": "Vendor CSRF hardening contracts passed.\n"
+  },
+  {
+    "test": "VendorDocumentExpiryDisplayTest.php",
+    "code": 0,
+    "output": "Vendor document expiry display: 9 checks passed.\n"
+  },
+  {
+    "test": "VendorGradeViewsTest.php",
+    "code": 0,
+    "output": "Vendor grade view contracts passed.\n"
+  },
+  {
+    "test": "VendorIdentityFoundationTest.php",
+    "code": 0,
+    "output": "Vendor identity foundation contracts passed.\n"
+  },
+  {
+    "test": "VendorMultiCrAuthenticationTest.php",
+    "code": 0,
+    "output": "Vendor multi-CR authentication contracts passed.\n"
+  },
+  {
+    "test": "VendorMultiCrRegistrationTest.php",
+    "code": 0,
+    "output": "Vendor multi-CR registration contracts passed.\n"
+  },
+  {
+    "test": "VendorPasswordChangeTest.php",
+    "code": 0,
+    "output": "Vendor password change contracts passed.\n"
+  },
+  {
+    "test": "VendorPortalConfinementTest.php",
+    "code": 0,
+    "output": "Vendor portal confinement contracts passed.\n"
+  },
+  {
+    "test": "VendorPortalRoleAuthorizationTest.php",
+    "code": 0,
+    "output": "Vendor portal role authorization passed.\n"
+  },
+  {
+    "test": "VendorTenderPortalPageTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "VendorTenderProcurementApprovalTest.php",
+    "code": 0,
+    "output": "OK\n"
+  },
+  {
+    "test": "VendorUnblockPaymentBoundaryTest.php",
+    "code": 0,
+    "output": "Vendor unblock payment boundary: 6 checks passed.\n"
+  },
+  {
+    "test": "VendorUpdateRequestDecisionLockTest.php",
+    "code": 0,
+    "output": "Vendor update request decision locking contracts passed.\n"
+  },
+  {
+    "test": "VendorWorkflowHelpersTest.php",
+    "code": 0,
+    "output": "Vendor workflow helpers passed.\n"
+  }
+]

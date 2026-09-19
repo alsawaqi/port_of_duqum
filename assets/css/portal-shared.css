@@ -9162,3 +9162,64 @@ body:is(.color-1d2632, .color-404040, .color-2e4053, .color-555a61):not(.pod-aut
         width: 100%;
     }
 }
+
+/* Mirror the current portal shell using its actual sidebar widths in Arabic. */
+html[dir="rtl"] body:not(.pod-auth-page) .sidebar {
+    left: auto !important;
+    right: 0;
+    border-right: 0 !important;
+    border-left: 1px solid var(--pod-ta-gray-200);
+}
+
+@media (min-width: 991px) {
+    html[dir="rtl"] body:not(.pod-auth-page) .navbar-custom {
+        left: 0 !important;
+        right: var(--pod-ta-sidebar-width) !important;
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page) .page-container {
+        margin-left: 0 !important;
+        margin-right: var(--pod-ta-sidebar-width) !important;
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page).sidebar-toggled .navbar-custom {
+        right: var(--pod-ta-sidebar-collapsed) !important;
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page).sidebar-toggled .page-container {
+        margin-right: var(--pod-ta-sidebar-collapsed) !important;
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page).sidebar-toggled .sidebar-menu li ul,
+    html[dir="rtl"] body:not(.pod-auth-page).sidebar-toggled .sidebar-menu > li > a::after {
+        left: auto;
+        right: 62px;
+    }
+}
+
+@media (max-width: 990px) {
+    html[dir="rtl"] body:not(.pod-auth-page) .sidebar-off {
+        right: 0;
+        transform: translateX(104%);
+        border-radius: 12px 0 0 12px;
+    }
+
+    /* The portal topbar stays fixed even on small screens. */
+    body:not(.pod-auth-page) .page-container {
+        margin-top: var(--pod-topbar-height) !important;
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page).sidebar-toggled .sidebar-off {
+        transform: translateX(0);
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page) .page-container {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    html[dir="rtl"] body:not(.pod-auth-page) .navbar-custom {
+        left: 0 !important;
+        right: 0 !important;
+    }
+}

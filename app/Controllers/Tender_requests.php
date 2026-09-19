@@ -421,6 +421,13 @@ class Tender_requests extends Security_Controller
 
         $budget = (float) $this->request->getPost('budget_omr');
         $fee = $this->_calc_tender_fee($budget);
+        $estimated_previous_amount = trim((string) $this->request->getPost('estimated_previous_amount'));
+        if ($estimated_previous_amount !== '' && (!is_numeric($estimated_previous_amount) || (float) $estimated_previous_amount < 0)) {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Previous estimated amount must be a non-negative number.',
+            ]);
+        }
 
         $requester_assignment = !$this->login_user->is_admin
             ? $this->_get_requester_assignment((int) $this->login_user->id)
@@ -511,7 +518,7 @@ class Tender_requests extends Security_Controller
             'request_date' => $this->request->getPost('request_date') ?: date('Y-m-d'),
             'budget_omr' => $budget,
             'tender_fee' => $fee,
-            'estimated_previous_amount' => $this->request->getPost('estimated_previous_amount') ?: null,
+            'estimated_previous_amount' => $estimated_previous_amount === '' ? null : $estimated_previous_amount,
             'estimated_previous_notes' => trim((string) $this->request->getPost('estimated_previous_notes')),
             'subject' => trim((string) $this->request->getPost('subject')),
             'brief_description' => trim((string) $this->request->getPost('brief_description')),

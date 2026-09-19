@@ -6,7 +6,7 @@
  *---------------------------------------------------------------
  */
 
-$minPhpVersion = '8.1.34'; // Project compatibility build; see documentation/PHP81_COMPATIBILITY.md.
+$minPhpVersion = '8.2'; // Standard CodeIgniter 4.7.4; validated for the PHP 8.3 server.
 if (version_compare(PHP_VERSION, $minPhpVersion, '<')) {
     $message = sprintf(
         'Your PHP version must be %s or higher to run CodeIgniter. Current version: %s',
@@ -62,14 +62,27 @@ if (getcwd() . DIRECTORY_SEPARATOR !== FCPATH) {
  * and fires up an environment-specific bootstrapping.
  */
 
-// LOAD OUR PATHS CONFIG FILE
-// This is the line that might need to be changed, depending on your folder structure.
-require FCPATH . 'app/Config/Paths.php';
-// ^^^ Change this line if you move your application folder
+// A migration can fail before CodeIgniter installs its exception logger
+// (missing files, extensions or invalid production configuration). Keep that
+// failure visible in the hosting PHP log without exposing secrets to visitors.
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ini_set('zend.exception_ignore_args', '1');
 
-$paths = new Config\Paths();
-
-// LOAD THE FRAMEWORK BOOTSTRAP FILE
-require $paths->systemDirectory . '/Boot.php';
-
-exit(CodeIgniter\Boot::bootWeb($paths));
+try {
+    require FCPATH . 'app/Config/Paths.php';
+    $paths = new Config\Paths();
+    require $paths->systemDirectory . '/Boot.php';
+    exit(CodeIgniter\Boot::bootWeb($paths));
+} catch (\Throwable $error) {
+    // Exception messages and arguments may contain database queries/credentials.
+    // The class, source file and line identify the failure without logging them.
+    error_log(sprintf('POD startup failed: %s at %s:%d', get_class($error), $error->getFile(), $error->getLine()));
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=UTF-8');
+        header('Cache-Control: no-store');
+    }
+    echo 'The application could not start. Ask hosting support to check the PHP error log and run php server-check.php in the project directory.';
+    exit(1);
+}

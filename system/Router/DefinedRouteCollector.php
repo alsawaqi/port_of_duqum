@@ -21,12 +21,9 @@ use Generator;
  *
  * @see \CodeIgniter\Router\DefinedRouteCollectorTest
  */
-final class DefinedRouteCollector
+final readonly class DefinedRouteCollector
 {
-    // Port of Duqm PHP 8.1 compatibility; retain readonly properties and no dynamic properties.
-    use \CodeIgniter\Compatibility\NoDynamicProperties;
-
-    public function __construct(private readonly RouteCollectionInterface $routeCollection)
+    public function __construct(private RouteCollectionInterface $routeCollection)
     {
     }
 

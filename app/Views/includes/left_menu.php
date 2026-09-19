@@ -31,7 +31,7 @@
     <div id="left-menu-topbar-button-container" class="d-block d-sm-none float-end"></div>
     <a class="sidebar-brand brand-logo hidden-xs pod-sidebar-brand" href="<?php echo $dashboard_link; ?>" aria-label="<?php echo esc($app_title); ?> dashboard">
         <span class="pod-sidebar-logo-frame">
-            <img class="dashboard-image" src="<?php echo get_logo_url(); ?>" alt="<?php echo esc($app_title); ?>" />
+            <img class="dashboard-image" src="<?php echo esc(get_logo_url() ?: get_file_uri('assets/images/port-duqum-signin-logo.png'), 'attr'); ?>" data-fallback-src="<?php echo esc(get_file_uri('assets/images/port-duqum-signin-logo.png'), 'attr'); ?>" onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;" alt="<?php echo esc($app_title); ?>" />
         </span>
         <span class="pod-sidebar-brand-copy">
             <strong><?php echo esc($app_title); ?></strong>
@@ -40,7 +40,7 @@
     </a>
     <a class="sidebar-brand brand-logo-mini pod-sidebar-brand-mini" href="<?php echo $dashboard_link; ?>" aria-label="<?php echo esc($app_title); ?> dashboard">
         <span class="pod-sidebar-logo-frame">
-            <img class="dashboard-image" src="<?php echo get_favicon_url(); ?>" alt="<?php echo esc($app_title); ?>" />
+            <img class="dashboard-image" src="<?php echo esc(get_favicon_url(), 'attr'); ?>" data-fallback-src="<?php echo esc(get_file_uri('assets/images/port-duqum-signin-logo.png'), 'attr'); ?>" onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;" alt="<?php echo esc($app_title); ?>" />
         </span>
     </a>
 

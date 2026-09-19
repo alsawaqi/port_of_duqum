@@ -1,12 +1,12 @@
 <?php
 
-// No database or external services: exercise the actual framework on PHP 8.1+.
+// No database or external services: exercise the standard framework on PHP 8.2+.
 define('FCPATH', dirname(__DIR__) . DIRECTORY_SEPARATOR);
 define('ENVIRONMENT', 'testing');
 require FCPATH . 'app/Config/Paths.php';
 require FCPATH . 'system/Boot.php';
 
-class Php81CompatibilityBootstrap extends \CodeIgniter\Boot
+class RuntimeCompatibilityBootstrap extends \CodeIgniter\Boot
 {
     public static function init(): void
     {
@@ -16,7 +16,7 @@ class Php81CompatibilityBootstrap extends \CodeIgniter\Boot
         static::loadAutoloader();
     }
 }
-Php81CompatibilityBootstrap::init();
+RuntimeCompatibilityBootstrap::init();
 
 $checks = 0;
 $check = static function (bool $ok, string $label) use (&$checks): void {
@@ -42,6 +42,7 @@ $classes = [
 foreach ($classes as $class) {
     $reflection = new ReflectionClass($class);
     $check($reflection->isFinal(), $class . ' remains final');
+    $check($reflection->isReadOnly(), $class . ' uses native readonly class semantics');
     foreach ($reflection->getProperties() as $property) {
         $check($property->isReadOnly(), $class . '::$' . $property->name . ' remains readonly');
     }
@@ -88,7 +89,7 @@ $check($cache->clean() === true && $cache->get('compatibility') === null, 'Cache
 $factoryCache = new \CodeIgniter\Cache\FactoriesCache($cache);
 $check($factoryCache->load('missing-compatibility-component') === false, 'Factory cache misses safely');
 
-// PHP 8.1 ignores SensitiveParameter attributes; production omits all arguments.
+// Production continues to omit all exception arguments on the newer runtime.
 ini_set('zend.exception_ignore_args', '0');
 require FCPATH . 'app/Config/Boot/production.php';
 $throwWithSecret = static function (string $secret): void { throw new RuntimeException('test'); };
