@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "checks": [
+    "waiver counts and filtering",
+    "desktop and mobile",
+    "Arabic labels",
+    "commercial fee action opens",
+    "mandatory visitor identity",
+    "international vehicle toggle",
+    "blocked QR/PDF hidden and refused"
+  ],
+  "errors": [],
+  "failedResources": []
+}

@@ -60,6 +60,8 @@ namespace {
         ['issued', 'rop_approved', 11, 0, true, false],
         ['issued', 'issued', 11, 0, true, false],
         ['security', 'commercial_approved', 11, 0, true, true],
+        ['security', 'rejected', 11, 0, true, false],
+        ['security', 'cancelled', 11, 0, true, false],
         ['issued', 'rop_approved', 14, 0, false, false],
         ['security', 'commercial_approved', 14, 0, false, false],
         ['issued', 'cancelled', 11, 0, false, false],

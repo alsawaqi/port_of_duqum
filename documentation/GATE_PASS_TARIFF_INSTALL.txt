@@ -1,0 +1,61 @@
+GATE PASS PER-PERSON TARIFF UPDATE — 19 September 2026
+
+INSTALL ON THE DESTINATION SERVER
+1. Back up the current application files and database. Use a maintenance window.
+2. Upload the app/ files from GATE_PASS_TARIFF_FIX_2026-09-19.zip, preserving paths.
+3. In MySQL Workbench, select the application database and run:
+   documentation/GATE_PASS_PER_PERSON_TARIFF.sql
+   This script assumes the existing pod_ table prefix. No migration command is needed.
+4. Restart PHP-FPM or clear OPcache if the server retains old PHP files.
+5. Refresh Gate Pass Fee Rules and confirm the six active OMR bands below.
+6. Create a NEW Person Only gate pass for 9 inclusive days and add two visitors:
+   the total must be OMR 10.000. Change the end date to make 15 inclusive days:
+   tariff OMR 40.000 + induction OMR 10.000 = OMR 50.000.
+7. Submit/review the request normally. Check the breakdown before starting payment.
+
+APPROVED TARIFFS (PER PERSON)
+Inclusive days   Gate pass   Safety induction   Total OMR
+1                2.000      0.000              2.000
+2–7              3.000      0.000              3.000
+8–14             5.000      0.000              5.000
+15–90           20.000      5.000             25.000
+91–180          35.000      5.000             40.000
+181–365         50.000      5.000             55.000
+
+One month is 30 days. Every long-term visitor pays the induction fee.
+The start and end dates both count. Exactly 7 days uses the 2–7 day band.
+All saved, non-deleted people count: visitors, drivers and passengers.
+Vehicles do not add an extra person charge.
+
+HOW TO USE
+Save the request, then add each visitor and their required document.
+The system derives the number of people from the saved visitor list.
+An empty draft shows zero as an estimate, but cannot be submitted or paid.
+Adding/removing/restoring people or changing dates recalculates a draft's fee.
+The breakdown shows visitor count, price per person, induction, and total.
+Commercial staff can still use the existing authorized waiver process; the
+calculated tariff cannot be manually replaced by a different fee.
+Active tariff bands cannot overlap. Missing/ambiguous tariffs stop a new quote.
+Only fixed tariffs per person are available in the rule editor.
+
+PAYMENT AND HISTORY
+Checkout uses the saved server-calculated total, never a browser-entered count.
+The exact breakdown is saved with the payment and displayed in Accounting.
+Date/count changes are blocked during review or pending/verified payment.
+Before payment, return the request to the applicant at Department/Commercial
+to change dates/counts. For additional visitors/dates on a paid request,
+create a new request. Existing authorized contact/document corrections and
+resubmission after Security/ROP return retain the original approved fee.
+The SQL does not reprice or rewrite existing requests or payment records.
+Existing requests already under review/payment retain their recorded fee.
+An old draft adopts the tariff when edited, its visitor count changes, or submitted.
+Old records without a breakdown are labelled as previously recorded fees.
+Old OMR rules remain inactive for reference. Rerunning the SQL restores the
+six tariff bands, so do not rerun it to preserve later custom tariff edits.
+
+DATABASE CHANGES
+pod_gate_pass_requests.fee_breakdown — stored fee breakdown (LONGTEXT, nullable).
+pod_gate_pass_fee_rules.induction_amount — extra amount per person (DECIMAL).
+Six active OMR tariff rules are installed; previous OMR rules are deactivated.
+No new credentials, SMS changes, bank URL changes, or scheduled jobs are required.
+This package contains only the new tariff changes, not the earlier four-module fixes.

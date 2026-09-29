@@ -49,8 +49,10 @@ $blocked = $slice($portal, 'function check_blocked_visitor', 'function visitor_m
 $contains('getMethod()) !== "post"', $blocked, 'blocked lookup must be POST-only');
 $contains('gate_pass_request_id', $blocked, 'blocked lookup must be scoped to an editable request');
 $contains('$throttler->check(', $blocked, 'blocked lookup must be throttled');
-$contains('type: "POST"', $view, 'blocked lookup browser request must use POST');
-$contains('allowSubmit = false', $view, 'blocked lookup errors must fail closed');
+$saveVisitor = $slice($portal, 'function save_visitor', 'function delete_visitor');
+$contains('if ($blocked_record)', $saveVisitor, 'blocked visitor save must refuse unconditionally on the server');
+if (str_contains($view, 'blocked_visitor_acknowledged')) { $fail('The form must not offer a blocked-visitor bypass'); }
+$contains('gate_pass_blocked_cannot_process', $saveVisitor, 'blocked save explains the refusal');
 
 $contains('private function _can_review_request', $security, 'security review stage guard must exist');
 $contains('(string) ($request->stage ?? "") === "security"', $security, 'review mutations require the security stage');

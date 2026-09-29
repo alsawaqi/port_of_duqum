@@ -1,0 +1,43 @@
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_commercial_users"),
+        "subtitle" => "Manage commercial reviewers responsible for fees, waivers, and commercial decisions.",
+        "icon" => "credit-card",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_commercial_users")]
+        ]
+    ]); ?>
+    <div class="card gp-pro-card">
+        <div class="page-title clearfix">
+            <h1><?php echo app_lang("gate_pass_commercial_users"); ?></h1>
+            <div class="title-button-group">
+                <?php echo modal_anchor(
+                    get_uri("gate_pass_commercial_users/modal_form"),
+                    "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang("add_commercial_user"),
+                    ["class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang("add_commercial_user")]
+                ); ?>
+            </div>
+        </div>
+        <div class="table-responsive gp-pro-table-shell">
+            <table id="gate-pass-commercial-users-table" class="display" cellspacing="0" width="100%"></table>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function () {
+    $("#gate-pass-commercial-users-table").appTable({
+        source: '<?php echo_uri("gate_pass_commercial_users/list_data"); ?>',
+        columns: [
+            { title: "<?php echo app_lang('company'); ?>" },
+            { title: "<?php echo app_lang('name'); ?>" },
+            { title: "<?php echo app_lang('email'); ?>" },
+            { title: "<?php echo app_lang('phone'); ?>" },
+            { title: "<?php echo app_lang('status'); ?>" },
+            { title: "<?php echo app_lang('actions'); ?>", class: "text-center option w100" }
+        ],
+        order: [[0, "asc"]]
+    });
+});
+</script>

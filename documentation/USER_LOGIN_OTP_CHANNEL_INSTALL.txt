@@ -1,0 +1,61 @@
+USER LOGIN OTP DELIVERY - 20 September 2026
+
+What changes
+An administrator can choose the login OTP delivery method per account:
+- Use system default: retain the existing global provider (currently iSmartSMS).
+- SMS to registered mobile: use pod_users.phone via iSmartSMS.
+- Email to registered address: use pod_users.email via Settings > Email.
+The password and sign-in identifier flow remains in place. After the password,
+the code goes to the selected destination. This does not add phone-number
+sign-in or passwordless sign-in. It changes delivery of the second-factor code.
+
+Where to choose
+Gate Pass: Department, Commercial, Security and ROP user forms.
+PTW: Applicant, HSSE, HMO and Terminal user forms.
+Tender: Department, Department Manager, Procurement, Procurement Manager,
+Finance, Technical, Commercial and Committee user forms.
+Team: Add member, or open a user > Account settings > Login OTP delivery.
+All 16 operational forms use the same field and server-side save handler.
+Authorized user creators can choose the method for new accounts. Only an
+administrator can change the selection for an existing account. A linked user
+has one selection across every module and every vendor CR.
+
+Installation
+1. Back up the current application files and database.
+2. Select the correct application database in MySQL Workbench.
+3. Run documentation/USER_LOGIN_OTP_CHANNEL.sql.
+   It adds one column to pod_users: otp_delivery_channel VARCHAR(16), default ''.
+   Existing users keep their existing system OTP behaviour. The SQL is rerunnable.
+   If your table prefix differs from pod_, adjust it before running the SQL.
+4. Upload the ZIP's app folder into the application root, preserving paths.
+   This package contains 14 runtime files. It contains no .env or credentials.
+   Install older Gate Pass tariff/shared-account packages FIRST and this package
+   LAST, since the language files are shared.
+5. Reload PHP only if the server's OPcache does not detect changed files.
+6. Open a user form, select Email or SMS, save, then reopen to verify the choice.
+7. Settings > SMS > Require OTP for all logins (SMS or email) controls whether
+   OTP is required. Individual choices do not enable or disable the global switch.
+8. Test a fresh sign-in from a private browser window. Existing sessions remain
+   active. Check both the email-selected user and the SMS-selected user.
+
+Email uses the existing Settings > Email SMTP configuration; no new .env key is
+needed. The internal SMTP server must be reachable from the deployed server.
+SMS uses the existing iSmartSMS configuration and provider access requirements.
+AUTH_SECURITY_MFA_HMAC_KEY is still required. Do not remove it.
+Workflow notification settings remain separate and unchanged.
+
+Validation
+All 117 existing standalone test scripts passed.
+72 checks cover real local database persistence, the shared operational user
+resolver, provider/destination selection, code verification and replay refusal,
+admin-only changes, required contact information, preservation of roles/passwords,
+SQL rerun safety, saved form selection, and coverage of all 16 operational forms.
+Email transport was captured in the test instead of contacting the SMTP server.
+The application mail helper's success/failure result was verified.
+Existing SMS settings: 27 checks passed. Shared vendor/Gate Pass registration:
+47 checks passed. Related authentication and password-security tests passed.
+All 15 PHP files (14 runtime plus the new test) passed PHP syntax checks.
+No live SMTP, SMS or bank requests were made.
+
+Local database SQL has been applied after a users-table backup. Existing users
+were left on system default. Nothing has been uploaded to production/FileZilla.

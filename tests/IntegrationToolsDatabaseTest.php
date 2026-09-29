@@ -114,18 +114,20 @@ $form = $manager->prepareSmartpayHandoff($payment->public_id);
 $check($form['success'] && !str_contains(json_encode($form['form']), $bank->smartpayWorkingKey), 'Handoff exposes no working key.');
 $check(!$manager->prepareSmartpayHandoff($payment->public_id)['success'], 'Handoff cannot repeat.');
 
-$GLOBALS['testBankReply'] = static function ($options) use ($bank, &$payment) {
+// An order's timestamp is stable; it is not the time of each status lookup.
+$bankOrderTime = (new \DateTimeImmutable('now', new \DateTimeZone('Asia/Muscat')))->format('Y-m-d H:i:s');
+$GLOBALS['testBankReply'] = static function ($options) use ($bank, &$payment, $bankOrderTime) {
     parse_str($options[CURLOPT_POSTFIELDS], $fields);
     $request = json_decode(\App\Libraries\Payments\Bank_muscat_gateway::decrypt($fields['enc_request'], $bank->smartpayWorkingKey), true);
     if ($request['order_no'] !== $payment->provider_checkout_id) { throw new \RuntimeException('Wrong status order.'); }
     $response = ['order_no' => $payment->provider_checkout_id, 'reference_no' => '123456', 'order_bank_ref_no' => 'REF-123',
         'order_status' => 'Shipped', 'order_currency' => 'OMR', 'order_amt' => '0.100',
-        'order_date_time' => (new \DateTimeImmutable('now', new \DateTimeZone('Asia/Muscat')))->format('Y-m-d H:i:s')];
+        'order_date_time' => $bankOrderTime];
     return 'status=0&enc_response=' . \App\Libraries\Payments\Bank_muscat_gateway::encrypt(json_encode($response), $bank->smartpayWorkingKey);
 };
 $response = ['order_id' => $payment->provider_checkout_id, 'tracking_id' => '123456', 'bank_ref_no' => 'REF-123',
     'order_status' => 'Success', 'currency' => 'OMR', 'amount' => '0.100',
-    'order_date_time' => (new \DateTimeImmutable('now', new \DateTimeZone('Asia/Muscat')))->format('Y-m-d H:i:s')];
+    'order_date_time' => $bankOrderTime];
 $cipher = \App\Libraries\Payments\Bank_muscat_gateway::encrypt(http_build_query($response), $bank->smartpayWorkingKey);
 $result = $manager->processSmartpayReturn($cipher, $payment->provider_checkout_id);
 $check($result['success'], 'Encrypted callback plus independent status response verifies test.');
@@ -144,17 +146,18 @@ foreach (['Failure' => 'failed', 'Aborted' => 'cancelled', 'Success' => 'verific
     $attempt = $service->startPayment($admin, bin2hex(random_bytes(16)), $bank);
     $payment = $manager->smartpayPaymentByPublicId($attempt['payment_id']);
     $manager->prepareSmartpayHandoff($payment->public_id);
-    $GLOBALS['testBankReply'] = static function ($options) use ($bank, &$payment, $bankStatus, $expected) {
+    $bankOrderTime = (new \DateTimeImmutable('now', new \DateTimeZone('Asia/Muscat')))->format('Y-m-d H:i:s');
+    $GLOBALS['testBankReply'] = static function ($options) use ($bank, &$payment, $bankStatus, $expected, $bankOrderTime) {
         // A wrong independently reported amount must never be accepted.
         $api = ['order_no' => $payment->provider_checkout_id, 'reference_no' => '123456', 'order_bank_ref_no' => 'REF-123',
             'order_status' => $bankStatus, 'order_currency' => 'OMR', 'order_amt' => $expected === 'verification_required' ? '0.200' : '0.100',
-            'order_date_time' => (new \DateTimeImmutable('now', new \DateTimeZone('Asia/Muscat')))->format('Y-m-d H:i:s')];
+            'order_date_time' => $bankOrderTime];
         return 'status=0&enc_response=' . \App\Libraries\Payments\Bank_muscat_gateway::encrypt(json_encode($api), $bank->smartpayWorkingKey);
     };
-    $callback = array_replace($response, ['order_id' => $payment->provider_checkout_id, 'order_status' => $bankStatus]);
+    $callback = array_replace($response, ['order_id' => $payment->provider_checkout_id, 'order_status' => $bankStatus, 'order_date_time' => $bankOrderTime]);
     $manager->processSmartpayReturn(\App\Libraries\Payments\Bank_muscat_gateway::encrypt(http_build_query($callback), $bank->smartpayWorkingKey), $payment->provider_checkout_id);
     $saved = $manager->smartpayPaymentByPublicId($payment->public_id);
-    $check($saved->status === $expected, 'Failure, cancellation and mismatched independent verification retain their correct states.');
+    $check($saved->status === $expected, 'Bank ' . $bankStatus . ' expected ' . $expected . ', got ' . $saved->status);
     $check(empty($saved->paid_at) && $saved->settlement_status !== 'applied', 'Unsuccessful test never settles a fee.');
     $check($saved->response_json && $saved->status_response_json, 'Return and independent response remain auditable.');
 }

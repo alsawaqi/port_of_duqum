@@ -1,0 +1,43 @@
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-ptw-page">
+    <?php echo view("includes/ptw_page_header", [
+        "title" => app_lang("ptw_hmo_inbox"),
+        "subtitle" => "Review HMO-stage PTW applications, decisions, and pending safety confirmations.",
+        "icon" => "activity",
+        "breadcrumbs" => [
+            ["label" => "PTW"],
+            ["label" => app_lang("ptw_hmo_inbox")]
+        ]
+    ]); ?>
+
+    <div class="card gp-pro-card">
+        <div class="page-title clearfix">
+            <h1><?php echo app_lang("ptw_hmo_inbox"); ?></h1>
+        </div>
+
+        <div class="table-responsive gp-pro-table-shell">
+            <table id="ptw-hmo-inbox-table" class="display" cellspacing="0" width="100%"></table>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function () {
+    $("#ptw-hmo-inbox-table").appTable({
+        source: "<?php echo_uri('ptw_hmo_inbox/list_data'); ?>",
+        columns: [
+            { title: "<?php echo app_lang('reference'); ?>" },
+            { title: "<?php echo app_lang('company'); ?>" },
+            { title: "<?php echo app_lang('applicant_name'); ?>" },
+            { title: "<?php echo app_lang('work_location'); ?>" },
+            { title: "<?php echo app_lang('starting_date_time'); ?>" },
+            { title: "<?php echo app_lang('completion_date_time'); ?>" },
+            { title: "<?php echo app_lang('status'); ?>" },
+            { title: "<i data-feather='menu' class='icon-16'></i>", class: "text-center option w150" }
+        ],
+        order: [[0, "desc"]],
+        onDrawCallback: function () {
+            if (window.feather) feather.replace();
+        }
+    });
+});
+</script>

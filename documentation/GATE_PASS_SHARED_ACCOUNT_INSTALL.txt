@@ -1,0 +1,45 @@
+GATE PASS SHARED ACCOUNT UPDATE - 20 September 2026
+
+Purpose
+Existing active vendor owners and vendor contacts can register for Gate Pass
+using the same login email and current password. One global user is retained.
+Existing phone numbers used for OTP, profile details, privileges and vendor
+memberships are preserved. An old MD5 password hash may be securely upgraded
+by the existing password verifier; the actual password stays the same.
+
+Installation
+1. Back up the four matching server files.
+2. Upload the ZIP's app folder, preserving its paths, into the application root.
+3. No SQL, migration, .env, SMS, or payment setting change is required for this fix.
+4. If installing the separate Gate Pass tariff ZIP too, install that first and
+   this shared-account ZIP last because both contain language files.
+5. If PHP OPcache does not detect file changes, ask the host to reload PHP.
+
+Check after upload
+Register with an existing active vendor/contact email and its CURRENT password.
+Complete the form's required fields. Existing account details are kept; use the
+account profile to change those details. Password confirmation is needed only
+for a new account (if supplied for an existing account, it must match).
+Sign in normally, completing SMS OTP if enabled, and open Gate Pass Portal.
+Verify the original vendor CRs are still accessible.
+Repeat registration: the active Gate Pass membership stays unchanged.
+Wrong passwords and inactive/deleted/login-disabled users must fail.
+Pending, suspended, or deleted Gate Pass access requires administrator action;
+public registration cannot reactivate it.
+New emails still require a new password meeting policy plus confirmation.
+
+Existing Gate Pass-to-vendor registration and vendor contact linking are unchanged.
+This patch does not change approval requirements for vendor access or bypass OTP.
+
+Validation
+117 standalone test scripts passed, plus PHP syntax checks on all six PHP files.
+47 checks against an isolated local database using the real registration
+controller, password verifier and MySQL schema. No SMS or bank calls made.
+Checks include owners/contacts with two CRs, wrong passwords before/after linking,
+unchanged original user and vendor rows, repeated registration, blocked identities,
+restricted memberships, ambiguous emails, legacy passwords, and new registration.
+The previous source-test expectation that all existing emails must be refused
+was replaced with assertions requiring a locked identity, password verification,
+and safe failure guidance. Account revival/overwrite prohibitions remain.
+
+The files have NOT been uploaded to FileZilla or production by this task.

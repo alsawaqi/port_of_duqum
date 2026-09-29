@@ -1,0 +1,17 @@
+[
+  {
+    "fixture": "requested",
+    "action": "approve",
+    "success": true
+  },
+  {
+    "fixture": "none",
+    "action": "reject",
+    "success": true
+  },
+  {
+    "fixture": "rejected",
+    "action": "approve",
+    "success": false
+  }
+]

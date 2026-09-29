@@ -1,0 +1,24 @@
+Runtime files changed/new since FOUR_MODULE_STABILITY_FIX_2026-09-27.zip.
+
+app/Controllers/Gate_pass_commercial_inbox.php
+app/Controllers/Gate_pass_department_requests.php
+app/Controllers/Gate_pass_request_list.php
+app/Controllers/Gate_pass_rop_inbox.php
+app/Controllers/Gate_pass_security_inbox.php
+app/Controllers/Ptw_portal.php
+app/Controllers/Tender_commercial_inbox.php
+app/Controllers/Tender_committee_opening_inbox.php
+app/Controllers/Tender_reports.php
+app/Controllers/Tender_requests.php
+app/Controllers/Tender_technical_inbox.php
+app/Controllers/Vendor_portal.php
+app/Libraries/Sms/WorkflowSmsOutbox.php
+app/Views/tender_commercial_inbox/details.php
+app/Views/tender_procurement_manager_inbox/details.php
+app/Views/tender_reports/bid_opening_form.php
+app/Views/tender_reports/details.php
+app/Views/tender_reports/evaluation_table.php
+app/Views/tender_technical_inbox/details.php
+app/Views/tender_technical_inbox/modal_form.php
+app/Views/vendor_portal/tenders/details.php
+app/Views/vendor_portal/tenders/view_modal.php

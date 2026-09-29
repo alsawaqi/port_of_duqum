@@ -33,9 +33,9 @@ $method = static function (string $source, string $start, string $end) use ($fai
 };
 
 $guest = $read('app/Controllers/Guest_gate_pass.php');
-$contains('SELECT id, user_type, deleted FROM $users_table WHERE email=? LIMIT 1', $guest, 'public registration checks every existing identity');
-$contains('if ($existing_user)', $guest, 'an existing email is rejected');
-$contains('An account already exists for this email.', $guest, 'duplicate response is generic');
+$contains('WHERE LOWER(TRIM(email))=? FOR UPDATE', $guest, 'shared identity is locked before linking');
+$contains('$this->Users_model->verify_user_password($user_id, $password)', $guest, 'existing account ownership must be verified');
+$contains('gate_pass_registration_auth_help', $guest, 'refusals give safe account recovery guidance');
 $notContains('SET deleted=0', $guest, 'public registration cannot revive an account');
 $notContains('UPDATE $users_table', $guest, 'public registration cannot modify an existing identity');
 

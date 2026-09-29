@@ -1,0 +1,46 @@
+<div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-gate-pass-page">
+    <?php echo view("includes/gate_pass_page_header", [
+        "title" => app_lang("gate_pass_department_users"),
+        "subtitle" => "Assign department reviewers and keep department approval ownership current.",
+        "icon" => "user-check",
+        "breadcrumbs" => [
+            ["label" => "Gate Pass"],
+            ["label" => app_lang("gate_pass_department_users")]
+        ]
+    ]); ?>
+    <div class="card gp-pro-card">
+        <div class="page-title clearfix">
+            <h1><?php echo app_lang("gate_pass_department_users"); ?></h1>
+
+            <div class="title-button-group">
+                <?php echo modal_anchor(
+                    get_uri("gate_pass_department_users/modal_form"),
+                    "<i data-feather='plus-circle' class='icon-16'></i> " . app_lang('add_department_user'),
+                    ["class" => "btn btn-primary gp-pro-btn gp-pro-btn-icon", "title" => app_lang('add_department_user')]
+                ); ?>
+            </div>
+        </div>
+
+        <div class="table-responsive gp-pro-table-shell">
+            <table id="gate-pass-department-users-table" class="display" cellspacing="0" width="100%"></table>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $("#gate-pass-department-users-table").appTable({
+            source: '<?php echo_uri("gate_pass_department_users/list_data"); ?>',
+            columns: [
+                {title: "<?php echo app_lang('company'); ?>"},
+                {title: "<?php echo app_lang('department'); ?>"},
+                {title: "<?php echo app_lang('name'); ?>"},
+                {title: "<?php echo app_lang('email'); ?>"},
+                {title: "<?php echo app_lang('phone'); ?>"},
+                {title: "<?php echo app_lang('status'); ?>"},
+                {title: "<?php echo app_lang('actions'); ?>", class: "text-center option w100"}
+            ],
+            order: [[0, "asc"]]
+        });
+    });
+</script>
