@@ -46,7 +46,7 @@ foreach (['users', 'settings', 'sms_outbox', 'eservice_payments', 'eservice_paym
 }
 $adminRow = $source->table('users')->where('is_admin', 1)->get(1)->getRowArray();
 if (!$adminRow) { throw new \RuntimeException('A local admin template is required.'); }
-unset($adminRow['id']);
+unset($adminRow['id'], $adminRow['_live_row']);
 $db->table('users')->insert(array_replace($adminRow, ['first_name' => 'Integration', 'last_name' => 'Test',
     'email' => 'integration-test@example.invalid', 'status' => 'active', 'deleted' => 0, 'disable_login' => 0, 'is_admin' => 1]));
 $admin = (object)['id' => (int)$db->insertID(), 'is_admin' => 1];

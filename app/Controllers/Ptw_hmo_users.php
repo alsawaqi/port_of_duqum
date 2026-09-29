@@ -83,13 +83,8 @@ class Ptw_hmo_users extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => app_lang("record_not_found")]);
         }
 
-        $this->db->transStart();
-
-        $this->Ptw_hmo_users_model->delete($id);
-
-        $this->db->transComplete();
-
-        return $this->response->setJSON(["success" => true, "message" => app_lang("record_deleted")]);
+        $saved = $this->Ptw_hmo_users_model->delete($id);
+        return $this->response->setJSON(["success" => (bool) $saved, "message" => app_lang($saved ? "record_deleted" : ($this->Ptw_hmo_users_model->delete_error ?: "error_occurred"))]);
     }
 
     public function list_data()

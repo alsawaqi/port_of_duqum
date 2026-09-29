@@ -82,7 +82,7 @@ $check($db->transStatus(),'Readiness refusal does not poison subsequent database
 $install();
 $check((bool)$requests->ci_save(['status'=>'submitted'],1),'Retry succeeds after installation in same connection');
 
-// Master codes: global uniqueness includes archived rows and case-insensitive codes.
+// Master codes: active uniqueness is case-insensitive; archived codes are reusable.
 foreach (['Country'=>'country','Regions'=>'regions','Cities'=>'cities'] as $class=>$table) {
     $class='App\\Models\\'.$class.'_model'; $model=new $class();
     $parent=match($table) {'regions'=>['country_id'=>1],'cities'=>['regions_id'=>1],default=>[]};
@@ -92,9 +92,12 @@ foreach (['Country'=>'country','Regions'=>'regions','Cities'=>'cities'] as $clas
     $check(!$model->ci_save(['name'=>'Duplicate','code'=>' QA ']+$parent) && $model->save_error==='master_code_duplicate',"$table duplicate gives readable refusal");
     $check($before===$rows($table),"$table duplicate preserves rows");
     $check((bool)$model->ci_save(['name'=>'Renamed','code'=>'qa'],1),"$table same-record edit allowed");
-    $model->delete(1);
-    $check(!$model->ci_save(['name'=>'Archived collision','code'=>'QA']+$parent) && $model->save_error==='master_code_archived',"$table archived code reserved");
-    $model->delete(1,true);
+    $check((bool)$model->delete(1), "$table archive");
+    $replacement=$model->ci_save(['name'=>'Replacement','code'=>'QA']+$parent);
+    $check((bool)$replacement,"$table archived code reusable");
+    $check(!$model->delete(1,true),"$table restore refuses active duplicate");
+    $check((bool)$model->delete($replacement),"$table archive replacement");
+    $check((bool)$model->delete(1,true),"$table restore when value is free");
     $other=$model->ci_save(['name'=>'Other','code'=>'QB']+$parent);
     $before=$rows($table);
     $check(!$model->ci_save(['code'=>'QA'],$other) && $before===$rows($table),"$table duplicate edit is atomic");

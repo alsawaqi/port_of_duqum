@@ -909,13 +909,13 @@ class Vendors extends Security_Controller
             if ($this->Vendors_model->delete($id, true)) {
                 echo json_encode(array("success" => true, "data" => $this->_row_data($id), "message" => app_lang("record_undone")));
             } else {
-                echo json_encode(array("success" => false, "message" => app_lang("error_occurred")));
+                echo json_encode(array("success" => false, "message" => app_lang($this->Vendors_model->delete_error ?: "error_occurred")));
             }
         } else {
             if ($this->Vendors_model->delete($id)) {
                 echo json_encode(array("success" => true, "message" => app_lang("record_deleted")));
             } else {
-                echo json_encode(array("success" => false, "message" => app_lang("record_cannot_be_deleted")));
+                echo json_encode(array("success" => false, "message" => app_lang($this->Vendors_model->delete_error ?: "record_cannot_be_deleted")));
             }
         }
     }

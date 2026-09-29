@@ -190,7 +190,7 @@ class Ptw_requirement_definitions extends Security_Controller
 
         return $this->response->setJSON([
             "success" => false,
-            "message" => app_lang("record_cannot_be_deleted"),
+            "message" => app_lang($this->Ptw_requirement_definitions_model->delete_error ?: "record_cannot_be_deleted"),
         ]);
     }
 

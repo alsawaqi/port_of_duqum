@@ -2,7 +2,7 @@
 
 namespace App\Libraries;
 
-/** The database's global code uniqueness also includes archived master records. */
+/** Only live records reserve business codes; SQL enforces the same rule. */
 final class Unique_master_code
 {
     public static function error($db, string $table, string $code, int $id = 0): ?string
@@ -12,10 +12,10 @@ final class Unique_master_code
             return 'master_code_required';
         }
         $row = $db->table($table)->select('id,deleted')->where('code', $code)
-            ->where('id !=', $id)->get()->getRow();
+            ->where('id !=', $id)->where('deleted', 0)->get()->getRow();
         if (!$row) {
             return null;
         }
-        return !empty($row->deleted) ? 'master_code_archived' : 'master_code_duplicate';
+        return 'master_code_duplicate';
     }
 }

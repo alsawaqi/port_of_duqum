@@ -25,7 +25,7 @@ register_shutdown_function(static function () use ($mysqli, $name): void {
     if (preg_match('/^codex_gp_tariff_[a-f0-9]{12}$/D', $name)) { $mysqli->query("DROP DATABASE `{$name}`"); }
 });
 $mysqli->select_db($name);
-foreach (['gate_pass_requests','gate_pass_request_visitors','gate_pass_fee_rules','activity_logs','gate_pass_blocked_visitors','users','gate_pass_department_users'] as $table) {
+foreach (['gate_pass_requests','gate_pass_request_visitors','gate_pass_fee_rules','activity_logs','gate_pass_blocked_visitors','users','gate_pass_department_users','soft_delete_items'] as $table) {
     $mysqli->query("CREATE TABLE `pod_{$table}` LIKE `bedotscpanel_poderp`.`pod_{$table}`");
 }
 $mysqli->query("CREATE TABLE pod_eservice_payments (id INT AUTO_INCREMENT PRIMARY KEY,subject_type VARCHAR(50),subject_id BIGINT,status VARCHAR(40),deleted INT DEFAULT 0)");

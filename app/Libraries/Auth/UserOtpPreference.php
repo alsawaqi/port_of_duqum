@@ -26,7 +26,8 @@ final class UserOtpPreference
     /** Call only after the controller's user-management permission check. */
     public function fields($submitted, object $actor, ?object $target, array $contact): array
     {
-        if ($submitted === null) { return []; } // Older forms preserve the choice.
+        $preserve = $submitted === null; // Older forms retain the stored choice.
+        if ($preserve) { $submitted = $this->get((int) ($target->id ?? 0)); }
         if (!is_string($submitted) || !in_array($submitted, ['', 'email', 'sms'], true)) {
             throw new \DomainException(app_lang('login_otp_invalid_method'));
         }
@@ -38,12 +39,25 @@ final class UserOtpPreference
             if ($submitted === '') { return []; }
             throw new \DomainException(app_lang('login_otp_install_sql'));
         }
-        if ($submitted === 'email' && !filter_var($contact['email'] ?? '', FILTER_VALIDATE_EMAIL)) {
+        $contact = array_merge($target ? (array) $target : [], $contact);
+        $effective = $submitted;
+        if ($effective === '') {
+            $config = clone config('AuthSecurity');
+            (new SmsLoginSettings($this->db))->apply($config);
+            $type = strtolower((string) ($contact['user_type'] ?? 'staff'));
+            $required = $config->mfaEnabled && (in_array('*', $config->mfaRequiredUserTypes, true)
+                || in_array($type, $config->mfaRequiredUserTypes, true));
+            if ($required && ($contact['status'] ?? 'active') === 'active' && empty($contact['disable_login'])) {
+                $provider = $config->mfaProviderForUserType($type);
+                $effective = in_array($provider, ['ismartsms', 'ibulk'], true) ? 'sms' : ($provider === 'email' ? 'email' : '');
+            }
+        }
+        if ($effective === 'email' && !filter_var($contact['email'] ?? '', FILTER_VALIDATE_EMAIL)) {
             throw new \DomainException(app_lang('login_otp_email_required'));
         }
-        if ($submitted === 'sms' && !OmanMobileNumber::normalize((string) ($contact['phone'] ?? ''))) {
+        if ($effective === 'sms' && !OmanMobileNumber::normalize((string) ($contact['phone'] ?? ''))) {
             throw new \DomainException(app_lang('login_otp_mobile_required'));
         }
-        return ['otp_delivery_channel' => $submitted];
+        return $preserve ? [] : ['otp_delivery_channel' => $submitted];
     }
 }

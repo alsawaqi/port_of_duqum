@@ -114,6 +114,10 @@ $before=$db->table('users')->orderBy('id')->get()->getResultArray();
 $check(!$save('email@example.test','sms',$emailUser,$manager)['success'],'Non-admin cannot change existing choice');
 $check($before===$db->table('users')->orderBy('id')->get()->getResultArray(),'Unauthorized change writes no rows');
 $check(!$save('invalid@example.test','sms',null,null,'')['success'],'SMS choice requires mobile');
+$check(!$save('invalid@example.test','',null,null,'')['success'],'System-default SMS choice also requires mobile');
+$defaultUser=$db->table('users')->where('email','default@example.test')->get()->getRow();
+$check(!$save('default@example.test','',$defaultUser,null,'')['success'],'Existing default SMS user cannot lose mobile');
+$check(!$save('sms@example.test','sms',$smsUser,null,'')['success'],'Changing to SMS with no mobile is refused');
 $check(!$save('invalid@example.test','disabled')['success'],'No disable-MFA option or arbitrary provider');
 $check($before===$db->table('users')->orderBy('id')->get()->getResultArray(),'Invalid selections write no users');
 $check($save('manager-created@example.test','email',null,$manager,'')['success'],'Authorized creator can choose email for a new user');
@@ -141,6 +145,30 @@ foreach ($modules as $module) {
 }
 $english=file_get_contents(APPPATH.'Language/english/custom_lang.php');$arabic=file_get_contents(APPPATH.'Language/arabic/custom_lang.php');
 $check(str_contains($english,'login_otp_delivery')&&str_contains($arabic,'login_otp_delivery'),'Both languages provide field labels');
+// Real account editors: absent checkbox/password fields must be safe in strict SQL.
+$clientId=$users->ci_save(['first_name'=>'Client','last_name'=>'QA','email'=>'client-edit@example.test',
+    'user_type'=>'client','password'=>password_hash($password,PASSWORD_DEFAULT),'phone'=>'+96890000000']);
+foreach ([App\Controllers\Team_members::class=>(int)$defaultUser->id,App\Controllers\Clients::class=>(int)$clientId] as $class=>$targetId) {
+    $original=(array)$users->get_one($targetId);
+    foreach ([1,0] as $disabled) {
+        $post=['email'=>$original['email'],'role'=>'0'];
+        if ($disabled) { $post['disable_login']='1'; }
+        $app=config('App');
+        $request=new CodeIgniter\HTTP\IncomingRequest($app,new CodeIgniter\HTTP\SiteURI($app),null,new CodeIgniter\HTTP\UserAgent());
+        $request->setMethod('POST');$request->setGlobal('post',$post);$request->setGlobal('request',$post);$request->setLocale('english');
+        Config\Services::injectMock('request',$request);
+        $controller=(new ReflectionClass($class))->newInstanceWithoutConstructor();
+        $controller->initController($request,new CodeIgniter\HTTP\Response($app),service('logger'));
+        $controller->login_user=(object)['id'=>999,'is_admin'=>1,'user_type'=>'staff','permissions'=>[]];
+        $controller->Users_model=$users;
+        $access=new ReflectionProperty(App\Controllers\Security_Controller::class,'access_type');$access->setAccessible(true);$access->setValue($controller,'all');
+        ob_start();$controller->save_account_settings($targetId);$reply=json_decode(ob_get_clean(),true,512,JSON_THROW_ON_ERROR);
+        $after=(array)$users->get_one($targetId);
+        $check(!empty($reply['success']),$class.' saves with omitted password');
+        $check((int)$after['disable_login']===$disabled,$class.' writes checkbox as integer');
+        $check($original['password']===$after['password'] && $original['auth_session_version']===$after['auth_session_version'],$class.' preserves password and sessions');
+    }
+}
 echo "Login OTP delivery: $checks database checks passed; no email or SMS sent.\n";
 
 }

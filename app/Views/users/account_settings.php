@@ -196,6 +196,21 @@
         });
         $("#account-info-form .select2").select2();
 
+        var $passwordFields = $('#account-info-form').find('[name="password"], [name="retype_password"], [name="current_password"]');
+        if ($passwordFields.length) {
+            var $choice = $('<label class="form-check mb15"><input type="checkbox" class="form-check-input me-2"> <span></span></label>');
+            $choice.find('span').text(<?php echo json_encode(app_lang('change_password')); ?>);
+            $passwordFields.first().closest('.form-group').before($choice);
+            $choice.find('input').on('change', function () {
+                var enabled = this.checked;
+                $passwordFields.prop('disabled', !enabled).closest('.form-group').toggle(enabled);
+                if (!enabled) {
+                    $passwordFields.val('').each(function () { $(this).rules('remove', 'required'); });
+                    $('#resend_login_details_section').addClass('hide');
+                }
+            }).trigger('change');
+        }
+
 
         //show/hide asmin permission help message
         $("#user-role").change(function() {

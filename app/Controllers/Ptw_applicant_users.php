@@ -82,13 +82,13 @@ class Ptw_applicant_users extends Security_Controller
 
         $saved = $this->Ptw_applicant_users_model->ci_save([
             "status" => "inactive",
-            "deleted" => 0,
+            "deleted" => 1,
             "updated_at" => get_current_utc_time(),
         ], $id);
 
         return $this->response->setJSON([
             "success" => (bool) $saved,
-            "message" => $saved ? app_lang("record_saved") : app_lang("error_occurred"),
+            "message" => app_lang($saved ? "record_deleted" : ($this->Ptw_applicant_users_model->delete_error ?: "error_occurred")),
         ]);
     }
 

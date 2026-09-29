@@ -134,7 +134,7 @@ class Vendor_sub_categories extends Security_Controller
             } else {
                 echo json_encode([
                     "success" => false,
-                    "message" => app_lang("error_occurred")
+                    "message" => app_lang($this->Vendor_sub_categories_model->delete_error ?: "error_occurred")
                 ]);
             }
         } else {
@@ -146,7 +146,7 @@ class Vendor_sub_categories extends Security_Controller
             } else {
                 echo json_encode([
                     "success" => false,
-                    "message" => app_lang("record_cannot_be_deleted")
+                    "message" => app_lang($this->Vendor_sub_categories_model->delete_error ?: "record_cannot_be_deleted")
                 ]);
             }
         }

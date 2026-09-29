@@ -1056,4 +1056,9 @@ $lang["gate_pass_id_attachment"] = "ID attachment";
 $lang["gate_pass_visa_attachment"] = "Visa attachment";
 $lang["gate_pass_photo_attachment"] = "Photo attachment";
 
+$lang['login_otp_account_mobile_missing'] = 'Your account needs a valid registered Oman mobile number for sign-in verification. Ask your administrator to update your mobile number or select email verification.';
+$lang['login_otp_account_email_missing'] = 'Your account needs a valid registered email address for sign-in verification. Ask your administrator to update your email address.';
+$lang['soft_delete_in_use'] = 'This record is still linked to active records. Update those links before deleting it.';
+$lang['soft_delete_restore_conflict'] = 'This record cannot be restored because an active record uses the same unique value, or its parent is deleted.';
+$lang['soft_delete_setup_required'] = 'The database soft-delete update must be installed before this action can be completed.';
 return $lang;

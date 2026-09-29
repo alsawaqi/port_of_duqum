@@ -101,10 +101,6 @@ $signin_logo_url = base_url("assets/images/port-duqum-signin-logo.png");
             <strong><i data-feather="shield" class="icon-16" aria-hidden="true"></i> <?php echo esc(app_lang('gate_pass_account_application')); ?></strong>
             <span><?php echo esc(app_lang('signin_guest_gate_pass_hint')); ?></span>
         </a>
-        <a class="pod-signin-guest-link" href="<?php echo esc(get_uri('guest_vendor')); ?>">
-            <strong><i data-feather="briefcase" class="icon-16" aria-hidden="true"></i> <?php echo esc(app_lang('guest_vendor_application')); ?></strong>
-            <span><?php echo esc(app_lang('signin_guest_vendor_hint')); ?></span>
-        </a>
     </div>
 
     <?php

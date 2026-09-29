@@ -664,6 +664,12 @@ class Team_members extends Security_Controller {
         $user_info = $this->Users_model->get_one($user_id);
         $this->_ensure_staff_user($user_info);
 
+        try {
+            (new \App\Libraries\Auth\UserOtpPreference())->fields(null, $this->login_user, $user_info, $user_data);
+        } catch (\DomainException $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            return;
+        }
         $user_info_updated = $this->Users_model->ci_save($user_data, $user_id);
 
         save_custom_fields("team_members", $user_id, $this->login_user->is_admin, $this->login_user->user_type);
@@ -878,7 +884,7 @@ class Team_members extends Security_Controller {
         }
 
         if ($this->_can_activate_deactivate_team_member($user_info)) {
-            $account_data['disable_login'] = $this->request->getPost('disable_login');
+            $account_data['disable_login'] = $this->request->getPost('disable_login') === '1' ? 1 : 0;
             $account_data['status'] = $this->request->getPost('status') === "inactive" ? "inactive" : "active";
         }
 

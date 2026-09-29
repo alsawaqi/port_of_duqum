@@ -4,6 +4,7 @@ namespace App\Models;
 
 class Legal_types_model extends Crud_model
 {
+    use \App\Libraries\Saves_unique_master_code;
 
     protected $table = null;
 

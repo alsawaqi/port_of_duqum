@@ -940,8 +940,8 @@ foreach ($step_has_error as $s => $has) { if ($has) { $first_error_step = $s; br
         }
 
         // Scroll to top of wizard
-        var wrap = document.querySelector('.ptw-wizard-wrap');
-        if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (window.podScrollToFormStep) { window.podScrollToFormStep(panel, hasErrors); }
+        else if (panel) { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 
         if (typeof feather !== 'undefined') feather.replace();
     }

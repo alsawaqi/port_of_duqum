@@ -12,13 +12,9 @@ if (substr(base_url(), 0, 5) == "https") {
     $https = 1;
 }
 
-$csrf_token_name = "";
-$csrf_hash = "";
-
-if (get_setting("csrf_protection")) {
-    $csrf_token_name = csrf_token();
-    $csrf_hash = csrf_hash();
-}
+// Config\Filters always protects forms, irrespective of the legacy setting.
+$csrf_token_name = csrf_token();
+$csrf_hash = csrf_hash();
 
 $timepicker_minutes_interval = 5;
 $timepicker_interval = get_escaped_value(get_setting("timepicker_minutes_interval"));

@@ -92,7 +92,9 @@ final class Gate_pass_notifications
             if ($this->db->affectedRows() !== 1) { continue; }
             $status = 'failed';
             try {
-                if (strtotime($row->created_at . ' UTC') < time() - 86400) { $status = 'expired'; }
+                $liveRequest = $this->db->table('gate_pass_requests')->where('id', (int) $row->request_id)->where('deleted', 0)->countAllResults();
+                if (!$liveRequest) { $status = 'recipient_changed'; }
+                elseif (strtotime($row->created_at . ' UTC') < time() - 86400) { $status = 'expired'; }
                 elseif ($row->recipient_user_id) {
                     $user = $this->db->table('users')->where('id',(int)$row->recipient_user_id)->where('deleted',0)->where('status','active')->where('disable_login',0)->get()->getRow();
                     if (!$user || strtolower(trim((string)$user->email)) !== $row->destination) {

@@ -121,13 +121,13 @@ class Vendor_grades extends Security_Controller
             if ($this->Vendor_grades_model->delete($id, true)) {
                 echo json_encode(["success" => true, "data" => $this->_row_data($id), "message" => app_lang("record_undone")]);
             } else {
-                echo json_encode(["success" => false, "message" => app_lang("error_occurred")]);
+                echo json_encode(["success" => false, "message" => app_lang($this->Vendor_grades_model->delete_error ?: "error_occurred")]);
             }
         } else {
             if ($this->Vendor_grades_model->delete($id)) {
                 echo json_encode(["success" => true, "message" => app_lang("record_deleted")]);
             } else {
-                echo json_encode(["success" => false, "message" => app_lang("record_cannot_be_deleted")]);
+                echo json_encode(["success" => false, "message" => app_lang($this->Vendor_grades_model->delete_error ?: "record_cannot_be_deleted")]);
             }
         }
     }

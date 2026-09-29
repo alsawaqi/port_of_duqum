@@ -280,7 +280,8 @@ class Signin extends App_Controller {
     ) {
         $configurationError = $this->Auth_security_model->mfa_configuration_error($user_info);
         if ($configurationError) {
-            log_message("error", "MFA sign-in is misconfigured: {message}", [
+            log_message("error", "MFA sign-in is misconfigured for user ID {user_id}: {message}", [
+                "user_id" => (int) $user_info->id,
                 "message" => $configurationError,
             ]);
             $this->Auth_security_model->audit(
@@ -289,9 +290,12 @@ class Signin extends App_Controller {
                 (int) $user_info->id,
                 $identity_hash
             );
-            return $this->signin_error_response(
-                "Sign-in verification is temporarily unavailable. Please contact support."
-            );
+            $message = 'Sign-in verification is temporarily unavailable. Please contact support.';
+            if ($configurationError === 'The account does not have a valid destination for the configured MFA provider.') {
+                $provider = $this->Auth_security_model->mfa_provider($user_info);
+                $message = app_lang($provider->name() === 'email' ? 'login_otp_account_email_missing' : 'login_otp_account_mobile_missing');
+            }
+            return $this->signin_error_response($message);
         }
 
         $config = $this->Auth_security_model->config();

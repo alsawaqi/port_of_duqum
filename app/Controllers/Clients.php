@@ -965,7 +965,7 @@ class Clients extends Security_Controller {
         $email = $this->request->getPost('email');
         $password = (string) $this->request->getPost("password");
         $currentPassword = (string) $this->request->getPost("current_password");
-        $disable_login = $this->request->getPost('disable_login');
+        $disable_login = $this->request->getPost('disable_login') === '1' ? 1 : 0;
 
         $this->validate_submitted_data(array(
             "email" => "required|valid_email|max_length[100]"

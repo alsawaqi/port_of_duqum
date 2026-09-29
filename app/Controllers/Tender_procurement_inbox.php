@@ -2409,17 +2409,6 @@ class Tender_procurement_inbox extends Security_Controller
     private function _clear_invites(int $tender_id): void
     {
         $tiv = $this->db->prefixTable("tender_invited_vendors");
-        $this->db->query(
-            "DELETE stale
-             FROM $tiv stale
-             INNER JOIN $tiv active
-                ON active.tender_id=stale.tender_id
-               AND active.vendor_id=stale.vendor_id
-               AND active.deleted=0
-             WHERE stale.tender_id=?
-               AND stale.deleted=1",
-            [$tender_id]
-        );
         $this->db->query("UPDATE $tiv SET deleted=1 WHERE tender_id=? AND deleted=0", [$tender_id]);
     }
 
@@ -2435,18 +2424,6 @@ class Tender_procurement_inbox extends Security_Controller
         $placeholders = implode(",", array_fill(0, count($vendor_ids), "?"));
         $params = array_merge([$tender_id], $vendor_ids);
 
-        $this->db->query(
-            "DELETE stale
-             FROM $tiv stale
-             INNER JOIN $tiv active
-                ON active.tender_id=stale.tender_id
-               AND active.vendor_id=stale.vendor_id
-               AND active.deleted=0
-             WHERE stale.tender_id=?
-               AND stale.deleted=1
-               AND active.vendor_id NOT IN ($placeholders)",
-            $params
-        );
 
         $this->db->query(
             "UPDATE $tiv

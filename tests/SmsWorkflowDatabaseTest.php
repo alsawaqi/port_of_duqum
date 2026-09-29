@@ -19,7 +19,7 @@ if($db->table('sms_outbox')->where('status','queued')->countAllResults())throw n
 $db->transBegin();
 try{
 $now=gmdate('Y-m-d H:i:s');
-$testUser=$db->table('users')->where('id',96)->get()->getRowArray();unset($testUser['id']);$db->table('users')->insert(array_replace($testUser,['first_name'=>'LOCAL SMS TEST','last_name'=>'Recipient','email'=>'sms-preview-'.bin2hex(random_bytes(4)).'@example.invalid','phone'=>'90000000','user_type'=>'staff','password'=>password_hash(bin2hex(random_bytes(24)),PASSWORD_DEFAULT),'status'=>'active','disable_login'=>0,'is_admin'=>0,'role_id'=>0,'created_at'=>$now,'deleted'=>0]));
+$testUser=$db->table('users')->where('id',96)->get()->getRowArray();unset($testUser['id'],$testUser['_live_row']);$db->table('users')->insert(array_replace($testUser,['first_name'=>'LOCAL SMS TEST','last_name'=>'Recipient','email'=>'sms-preview-'.bin2hex(random_bytes(4)).'@example.invalid','phone'=>'90000000','user_type'=>'staff','password'=>password_hash(bin2hex(random_bytes(24)),PASSWORD_DEFAULT),'status'=>'active','disable_login'=>0,'is_admin'=>0,'role_id'=>0,'created_at'=>$now,'deleted'=>0]));
 $uid=(int)$db->insertID();
 $clone=function($table,$source,$changes)use($db){$row=$db->table($table)->where('id',$source)->get()->getRowArray();if(!$row)throw new RuntimeException('Missing local fixture '.$table);unset($row['id'],$row['cr_number_identity']);$row=array_replace($row,$changes);$db->table($table)->insert($row);return (int)$db->insertID();};
 $vendorId=$clone('vendors',34,['vendor_name'=>'LOCAL SMS TEST Vendor','cr_number'=>'SMS'.bin2hex(random_bytes(6)),'status'=>'submitted','registration_valid_from'=>null,'registration_valid_to'=>null]);

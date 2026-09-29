@@ -131,7 +131,13 @@ $isSelfEdit = $is_edit
             </div>
         </div>
 
+        <?php if ($is_edit): ?>
         <div class="form-group">
+            <label><input type="checkbox" class="form-check-input js-change-password" /> <?php echo app_lang('change_password'); ?></label>
+            <small class="text-muted d-block"><?php echo app_lang('leave_blank_to_keep'); ?></small>
+        </div>
+        <?php endif; ?>
+        <div class="form-group js-password-section">
             <div class="row">
                 <label class="col-md-3" for="<?php echo $field_id; ?>-password"><?php echo app_lang("password"); ?></label>
                 <div class="col-md-9">
@@ -157,7 +163,7 @@ $isSelfEdit = $is_edit
             </div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group js-password-section">
             <div class="row">
                 <label class="col-md-3" for="<?php echo $field_id; ?>-password-confirm"><?php echo app_lang("password_confirm"); ?></label>
                 <div class="col-md-9">
@@ -197,15 +203,28 @@ $(document).ready(function () {
     var otpAdmin = <?php echo !empty($login_user->is_admin) ? 'true' : 'false'; ?>;
     var $otpChoice = $block.find('.js-login-otp-channel');
 
+    function togglePasswordEdit() {
+        if (!isEdit) { return; }
+        var enabled = $block.find('.js-change-password').is(':checked');
+        var $passwords = $block.find('.js-operational-password, .js-operational-password-confirm');
+        $block.find('.js-password-section').toggle(enabled);
+        $passwords.prop('disabled', !enabled).each(function () { setRequired($(this), false); });
+        if (!enabled) { $passwords.val(''); }
+        $currentPassword.prop('disabled', !enabled).closest('.form-group').toggle(enabled);
+        if (!enabled) { $currentPassword.val(''); setRequired($currentPassword, false); }
+    }
+    $block.find('.js-change-password').on('change', togglePasswordEdit);
+    togglePasswordEdit();
+
     function setRequired($field, required) {
         if (required) {
             $field.attr("data-rule-required", "true");
-            if ($field.rules) {
+            if ($field.rules && $field.closest('form').data('validator')) {
                 $field.rules("add", {required: true});
             }
         } else {
             $field.removeAttr("data-rule-required");
-            if ($field.rules) {
+            if ($field.rules && $field.closest('form').data('validator')) {
                 $field.rules("remove", "required");
             }
         }

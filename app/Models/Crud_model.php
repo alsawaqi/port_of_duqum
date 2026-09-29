@@ -21,6 +21,7 @@ class Crud_model extends Model {
     private $log_for_key2 = "";
     protected $allowedFields = array();
     private $Activity_logs_model;
+    public ?string $delete_error = null;
 
     function __construct($table = null, $db = null) {
         $this->Activity_logs_model = model("App\Models\Activity_logs_model");
@@ -109,6 +110,23 @@ class Crud_model extends Model {
     }
 
     function ci_save($data = array(), $id = 0) {
+        // Database-generated archive discriminator is never writable form data.
+        unset($data['_live_row']);
+        if ((int) $id > 0 && array_key_exists('deleted', $data)
+            && \App\Libraries\Soft_delete::supports($this->table_without_prefix)) {
+            $this->delete_error = null;
+            try {
+                return (new \App\Libraries\Soft_delete($this->db))->change($this->table_without_prefix, (int) $id, !(int) $data['deleted'], fn() => $this->save_record($data, $id));
+            } catch (\DomainException $error) {
+                $this->delete_error = $error->getMessage();
+                log_message('notice', 'Soft delete refused for ' . $this->table_without_prefix . ': ' . $this->delete_error);
+                return false;
+            }
+        }
+        return $this->save_record($data, $id);
+    }
+
+    protected function save_record($data = array(), $id = 0) {
         //allowed fields should be assigned
         $db_fields = $this->db->getFieldNames($this->table);
         foreach ($db_fields as $field) {
@@ -300,8 +318,12 @@ class Crud_model extends Model {
         if ($undo === true) {
             $data = array('deleted' => 0);
         }
-        $this->db_builder->where("id", $id);
-        $success = $this->db_builder->update($data);
+        if (\App\Libraries\Soft_delete::supports($this->table_without_prefix)) {
+            $success = $this->ci_save($data, $id);
+        } else {
+            $this->db_builder->where("id", $id);
+            $success = $this->db_builder->update($data);
+        }
         if ($success) {
             if ($this->log_activity) {
                 if ($undo) {

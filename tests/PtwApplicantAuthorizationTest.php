@@ -42,8 +42,8 @@ $admin = $read('app/Controllers/Ptw_applicant_users.php');
 $contains('access_only_ptw("applicant_users"', $admin, 'assignment management is permission protected');
 $contains('save_operational_user_assignment', $admin, 'assignment creation uses the secured identity workflow');
 $contains('"status" => "inactive"', $admin, 'removal suspends the assignment');
-$contains('"deleted" => 0', $admin, 'suspension remains recoverable and cannot bypass the unique relation');
-$notContains('"deleted" => 1', $admin, 'assignment removal does not create duplicate soft-deleted relations');
+$contains('"deleted" => 1', $admin, 'removal archives the assignment and excludes it from active lists');
+$contains('delete_error', $admin, 'failed archive returns a readable refusal');
 
 $portal = $read('app/Controllers/Ptw_portal.php');
 $contains('_get_allowed_ptw_applicant_companies()', $portal, 'the form receives the configured company choices');

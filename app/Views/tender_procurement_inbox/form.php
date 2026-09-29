@@ -1051,7 +1051,7 @@ $(document).ready(function () {
         return ((currentStep + 1) / (maxStep + 1)) * 100;
     }
 
-    function showStep(step) {
+    function showStep(step, scroll) {
         currentStep = Math.max(0, Math.min(maxStep, step));
         if (currentStep === maxStep) {
             renderPreview();
@@ -1078,6 +1078,9 @@ $(document).ready(function () {
 
         if (typeof feather !== "undefined") {
             feather.replace();
+        }
+        if (scroll !== false && window.podScrollToFormStep) {
+            window.podScrollToFormStep(document.querySelector('.tender-wizard-step-panel.is-active'), true);
         }
     }
 
@@ -1428,6 +1431,7 @@ $(document).ready(function () {
 
         if (!isValid && !silent) {
             appAlert.error("Please complete the required fields in this step.", {duration: 3000});
+            if (window.podScrollToFormStep) { window.podScrollToFormStep($panel[0], true); }
         }
 
         return isValid;
@@ -1747,7 +1751,7 @@ $(document).ready(function () {
         });
     });
 
-    showStep(0);
+    showStep(0, false);
 });
 </script>
 

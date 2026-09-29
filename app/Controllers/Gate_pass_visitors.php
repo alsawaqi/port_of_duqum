@@ -271,16 +271,14 @@ class Gate_pass_visitors extends Security_Controller
 
         $this->db->transBegin();
 
-        // Soft delete pivot
-        $this->db->table("gate_pass_users")
-            ->where("id", (int)$id)
-            ->update(["deleted" => 1]);
-
-        // Soft delete user (optional but recommended since it's a visitor-only account)
-        $this->db->table("users")
-            ->where("id", (int)$row->user_id)
-            ->update(["deleted" => 1, "disable_login" => 1]);
-
+        // Remove this registration only. Its login identity may also own vendor
+        // contacts or PTW applications; account deletion belongs to user admin.
+        $saved = $this->Gate_pass_users_model->delete((int) $id);
+        if (!$saved || !$this->db->transStatus()) {
+            $this->db->transRollback();
+            echo json_encode(['success'=>false, 'message'=>app_lang($this->Gate_pass_users_model->delete_error ?: 'error_occurred')]);
+            return;
+        }
         $this->db->transCommit();
 
         echo json_encode(["success" => true, "message" => app_lang("record_deleted")]);
