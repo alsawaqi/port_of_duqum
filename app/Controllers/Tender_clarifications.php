@@ -8,6 +8,7 @@ use App\Libraries\UploadSecurityException;
 
 class Tender_clarifications extends Security_Controller
 {
+    protected $db;
     protected $Tender_communications_model;
 
     public function __construct()
@@ -352,6 +353,7 @@ class Tender_clarifications extends Security_Controller
         }
         $internal_audience = in_array($clarification_scope, ["technical", "commercial"], true) ? $clarification_scope : null;
 
+        $this->db->transBegin();
         $saved = $this->Tender_communications_model->ci_save(clean_data([
             "tender_id" => (int) $clarification->tender_id,
             "vendor_id" => $reply_vendor_id,
@@ -372,6 +374,7 @@ class Tender_clarifications extends Security_Controller
         ]));
 
         if (!$saved) {
+            $this->db->transRollback();
             return $this->response->setJSON([
                 "success" => false,
                 "message" => app_lang("error_occurred")
@@ -381,11 +384,16 @@ class Tender_clarifications extends Security_Controller
         try {
             $this->_save_clarification_files((int) $saved, (int) $clarification->tender_id, $reply_vendor_id);
         } catch (UploadSecurityException $e) {
+            $this->db->transRollback();
             log_message('notice', 'Internal clarification attachment rejected.');
             return $this->response->setStatusCode(422)->setJSON([
                 'success' => false,
                 'message' => app_lang('invalid_file_type'),
             ]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'Clarification attachment could not be stored.');
+            return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
         }
 
         $tbl = $this->db->prefixTable("tender_communications");
@@ -432,6 +440,11 @@ class Tender_clarifications extends Security_Controller
             $response_message = "Clarification message published successfully.";
         }
 
+        if (!$this->db->transStatus()) {
+            $this->db->transRollback();
+            return $this->response->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
+        }
+        $this->db->transCommit();
         return $this->response->setJSON([
             "success" => true,
             "message" => $response_message,
@@ -511,6 +524,7 @@ class Tender_clarifications extends Security_Controller
     {
         $tiv = $this->db->prefixTable("tender_invited_vendors");
         $tb = $this->db->prefixTable("tender_bids");
+        $tc = $this->db->prefixTable("tender_communications");
         $v = $this->db->prefixTable("vendors");
 
         return $this->db->query(
@@ -527,10 +541,17 @@ class Tender_clarifications extends Security_Controller
                 WHERE deleted=0
                   AND tender_id=?
                   AND status<>'draft'
+                UNION
+                SELECT vendor_id
+                FROM $tc
+                WHERE deleted=0
+                  AND tender_id=?
+                  AND type='clarification' AND is_vendor_visible=1
+                  AND (parent_id IS NULL OR parent_id=0)
              ) src
              INNER JOIN $v ON $v.id=src.vendor_id AND $v.deleted=0
              ORDER BY $v.vendor_name ASC",
-            [$tender_id, $tender_id]
+            [$tender_id, $tender_id, $tender_id]
         )->getResult();
     }
 
@@ -542,6 +563,9 @@ class Tender_clarifications extends Security_Controller
 
         $tiv = $this->db->prefixTable("tender_invited_vendors");
         $tb = $this->db->prefixTable("tender_bids");
+        $tc = $this->db->prefixTable("tender_communications");
+        // An eligible vendor may ask about an open tender before deciding to bid.
+        // Only an existing vendor-initiated thread grants this correspondence access.
         $row = $this->db->query(
             "SELECT (
                 EXISTS (
@@ -560,8 +584,15 @@ class Tender_clarifications extends Security_Controller
                       AND bid_scope.vendor_id=?
                       AND bid_scope.status<>'draft'
                 )
+                OR EXISTS (
+                    SELECT 1 FROM $tc question_scope
+                    WHERE question_scope.deleted=0
+                      AND question_scope.tender_id=? AND question_scope.vendor_id=?
+                      AND question_scope.type='clarification' AND question_scope.is_vendor_visible=1
+                      AND (question_scope.parent_id IS NULL OR question_scope.parent_id=0)
+                )
              ) AS participates",
-            [$tender_id, $vendor_id, $tender_id, $vendor_id]
+            [$tender_id, $vendor_id, $tender_id, $vendor_id, $tender_id, $vendor_id]
         )->getRow();
 
         return (int) ($row->participates ?? 0) === 1;
@@ -729,44 +760,6 @@ class Tender_clarifications extends Security_Controller
 
     private function _save_clarification_files(int $communication_id, int $tender_id, ?int $vendor_id): void
     {
-        $files = method_exists($this->request, "getFileMultiple")
-            ? ($this->request->getFileMultiple("clarification_files") ?: [])
-            : (($this->request->getFiles()["clarification_files"] ?? []) ?: []);
-
-        if (!$files) {
-            return;
-        }
-
-        if (!is_array($files)) {
-            $files = [$files];
-        }
-
-        $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-
-        $saved_files = [];
-        $security = new Upload_security();
-        foreach ($files as $file) {
-            if (!$file || !$file->isValid() || $file->hasMoved()) {
-                continue;
-            }
-
-            $stored = $security->storeUploadedFile(
-                $file,
-                $upload_dir,
-                Upload_security::CONTEXT_SECURITY_DOCUMENT,
-                'tc_'
-            );
-            $new_name = $stored['stored_name'];
-
-            $saved_files[] = [
-                "disk" => "local",
-                "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $stored['original_name'],
-                "mime_type" => $stored['detected_mime'],
-                "size_bytes" => $stored['size_bytes'],
-            ];
-        }
-
-        $this->Tender_communications_model->save_attachments($communication_id, $tender_id, $vendor_id, $saved_files, (int) $this->login_user->id);
+        \App\Libraries\Tender_clarification_files::save($this->request, $communication_id, $tender_id, $vendor_id, (int) $this->login_user->id);
     }
 }

@@ -14,7 +14,7 @@ use App\Models\Gate_pass_fee_rules_model;
 use App\Models\Gate_passes_model;
 use App\Models\Gate_pass_scan_log_model;
 use App\Models\Gate_pass_blocked_visitors_model;
-use App\Libraries\Pdf;
+use App\Libraries\Gate_pass_pdf;
 use App\Libraries\Payments\Eservice_payment_manager;
 use App\Libraries\Upload_security;
 use App\Libraries\UploadSecurityException;
@@ -1155,15 +1155,9 @@ $view_data["currency_dropdown"] = $currency_dropdown;
         $pdf_visitors = $assigned_visitor ? [$assigned_visitor] : $visitors;
 
         try {
-            $html = $this->_gate_pass_pdf_html($request, $gate_pass, $pdf_visitors, $vehicles, $assigned_visitor);
-
-            $pdf = new Pdf("");
-            $pdf->setPrintHeader(false);
-            $pdf->setPrintFooter(false);
-            $pdf->SetMargins(12, 12, 12);
-            $pdf->SetAutoPageBreak(true, 14);
-            $pdf->AddPage();
-            $pdf->writeHTML($html, true, false, true, false, "");
+            $payment = (new \App\Libraries\Payments\Eservice_payment_state($this->db))
+                ->latestPaid(Eservice_payment_manager::GATE_PASS_FEE, (int) $request_id, null);
+            $pdf = (new Gate_pass_pdf())->build($request, $gate_pass, $pdf_visitors, $vehicles, $payment);
 
             $safeRef = preg_replace("/[^A-Za-z0-9_-]+/", "_", (string)($request->reference ?? "request")) ?: "gate-pass";
             $fileName = "gate-pass-" . $safeRef . "-" . (int)$gate_pass->id . ".pdf";
@@ -1199,134 +1193,6 @@ $view_data["currency_dropdown"] = $currency_dropdown;
             log_message("error", "Gate pass QR generation failed: " . $e->getMessage());
             return "";
         }
-    }
-
-    private function _gate_pass_pdf_html($request, $gate_pass, array $visitors, array $vehicles, $assigned_visitor = null): string
-    {
-        $h = static function ($v): string {
-            return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8");
-        };
-
-        $visitFrom = !empty($request->visit_from) ? format_to_date($request->visit_from, false) : "—";
-        $visitTo = !empty($request->visit_to) ? format_to_date($request->visit_to, false) : "—";
-        $duration = gate_pass_visit_duration_label($request->visit_from ?? null, $request->visit_to ?? null);
-        $reqType = strtolower(trim((string)($request->request_type ?? "both")));
-        $reqTypeLabel = $reqType === "person"
-            ? $h(app_lang("gate_pass_request_type_display_person"))
-            : $h(app_lang("gate_pass_request_type_display_both"));
-        $feeDisp = "—";
-        if (property_exists($request, "fee_amount") && $request->fee_amount !== null && $request->fee_amount !== "" && is_numeric($request->fee_amount)) {
-            $cur = trim((string)($request->currency ?? ""));
-            $feeDisp = ($cur !== "" ? $h($cur) . " " : "") . $h(number_format((float)$request->fee_amount, 2));
-        }
-        if (!empty($request->fee_is_waived)) {
-            $feeDisp = $h(app_lang("waived"));
-        }
-
-        $qrImg = $this->_gate_pass_qr_png((string) $gate_pass->qr_token, 5);
-        if ($qrImg === '') {
-            throw new \RuntimeException('Gate Pass QR generation failed.');
-        }
-        $qrTag = "";
-        if ($qrImg !== "") {
-            $qrTag = '<img src="data:image/png;base64,' . base64_encode($qrImg) . '" width="120" height="120" alt="QR" />';
-        }
-
-        $visitorRows = "";
-        foreach ($visitors as $v) {
-            $visitorRows .= "<tr>"
-                . "<td>" . $h($v->full_name ?? "") . "</td>"
-                . "<td>" . $h($v->id_number ?? "") . "</td>"
-                . "<td>" . $h($v->nationality ?? "") . "</td>"
-                . "<td>" . $h($v->phone ?? "") . "</td>"
-                . "</tr>";
-        }
-        if ($visitorRows === "") {
-            $visitorRows = "<tr><td colspan=\"4\">—</td></tr>";
-        }
-
-        $vehicleRows = "";
-        if ($reqType !== "person") {
-            foreach ($vehicles as $veh) {
-                $vehicleRows .= "<tr><td>" . $h(gate_pass_vehicle_plate_display($veh)) . "</td></tr>";
-            }
-            if ($vehicleRows === "") {
-                $vehicleRows = "<tr><td>—</td></tr>";
-            }
-        } else {
-            $vehicleRows = "<tr><td>" . $h(app_lang("gate_pass_pdf_vehicles_na_person")) . "</td></tr>";
-        }
-
-        $title = $h(app_lang("gate_pass_pdf_document_title"));
-        $lblRef = $h(app_lang("gate_pass_request_details"));
-        $lblGpNo = $h(app_lang("gate_pass_pdf_gate_pass_no"));
-        $lblCompany = $h(app_lang("company"));
-        $lblDept = $h(app_lang("department"));
-        $lblPurpose = $h(app_lang("purpose"));
-        $lblVisit = $h(app_lang("visit"));
-        $lblFrom = $h(app_lang("visit_from"));
-        $lblTo = $h(app_lang("visit_to"));
-        $lblDuration = $h(app_lang("gate_pass_visit_duration_days"));
-        $lblPassHolder = $h(app_lang("gate_pass_pass_holder"));
-        $lblReqType = $h(app_lang("gate_pass_request_type_label"));
-        $lblFee = $h(app_lang("fee_amount"));
-        $lblVisitors = $h(app_lang("visitors"));
-        $lblVehicles = $h(app_lang("vehicles"));
-        $lblName = $h(app_lang("full_name"));
-        $lblId = $h(app_lang("id_number"));
-        $lblNat = $h(app_lang("nationality"));
-        $lblPhone = $h(app_lang("phone"));
-        $lblPlate = $h(app_lang("plate_no"));
-        $lblQr = $h(app_lang("gate_pass_qr_code"));
-
-        $ref = $h($request->reference ?? "");
-        $gpNo = $h($gate_pass->gate_pass_no ?? "");
-        $passHolder = $h($assigned_visitor ? ($assigned_visitor->full_name ?? "") : app_lang("gate_pass_request_level_pass"));
-        $durationDisp = $h($duration);
-        $co = $h($request->company_name ?? "");
-        $dept = $h($request->department_name ?? "");
-        $purpose = $h($request->purpose_name ?? "");
-        $footerNote = $h(app_lang("gate_pass_pdf_footer_note"));
-
-        return <<<HTML
-<style>
-  h1 { font-size: 18px; margin: 0 0 8px 0; }
-  .meta { font-size: 10px; margin-bottom: 12px; }
-  table.info { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; }
-  table.info td { border: 1px solid #ccc; padding: 5px; }
-  table.info td.k { width: 28%; background: #f5f5f5; font-weight: bold; }
-  table.grid { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9px; }
-  table.grid th, table.grid td { border: 1px solid #ccc; padding: 4px; text-align: left; }
-  table.grid th { background: #eee; }
-  .qr { text-align: center; margin-top: 12px; }
-  .muted { font-size: 8px; color: #666; margin-top: 10px; }
-</style>
-<h1>{$title}</h1>
-<div class="meta">{$lblRef}: <strong>{$ref}</strong> &nbsp;|&nbsp; {$lblGpNo}: <strong>{$gpNo}</strong></div>
-<table class="info" cellspacing="0">
-  <tr><td class="k">{$lblCompany}</td><td>{$co}</td></tr>
-  <tr><td class="k">{$lblDept}</td><td>{$dept}</td></tr>
-  <tr><td class="k">{$lblPurpose}</td><td>{$purpose}</td></tr>
-  <tr><td class="k">{$lblPassHolder}</td><td>{$passHolder}</td></tr>
-  <tr><td class="k">{$lblFrom}</td><td>{$visitFrom}</td></tr>
-  <tr><td class="k">{$lblTo}</td><td>{$visitTo}</td></tr>
-  <tr><td class="k">{$lblDuration}</td><td>{$durationDisp}</td></tr>
-  <tr><td class="k">{$lblReqType}</td><td>{$reqTypeLabel}</td></tr>
-  <tr><td class="k">{$lblFee}</td><td>{$feeDisp}</td></tr>
-</table>
-<p style="font-size:11px;font-weight:bold;margin:10px 0 4px 0;">{$lblVisitors}</p>
-<table class="grid" cellspacing="0">
-  <thead><tr><th>{$lblName}</th><th>{$lblId}</th><th>{$lblNat}</th><th>{$lblPhone}</th></tr></thead>
-  <tbody>{$visitorRows}</tbody>
-</table>
-<p style="font-size:11px;font-weight:bold;margin:10px 0 4px 0;">{$lblVehicles}</p>
-<table class="grid" cellspacing="0">
-  <thead><tr><th>{$lblPlate}</th></tr></thead>
-  <tbody>{$vehicleRows}</tbody>
-</table>
-<div class="qr"><div style="font-size:10px;font-weight:bold;margin-bottom:4px;">{$lblQr}</div>{$qrTag}</div>
-<p class="muted">{$footerNote}</p>
-HTML;
     }
 
     private function _gate_pass_request_is_issued($request): bool

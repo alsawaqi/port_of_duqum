@@ -223,7 +223,8 @@ $section_labels = [
     <h5 class="mb10">Your Bid Status</h5>
 
     <?php if (($tender->status ?? "") === "awarded" && !empty($bid)) { ?>
-        <?php if (!empty($is_awarded_to_vendor)) { ?>
+        <?php if (!empty($has_result_letter)) { ?><a class="btn btn-default mb10" href="<?php echo get_uri('vendor_portal/result_letter/' . (int) $tender->id); ?>" target="_blank" rel="noopener">View / print result letter</a><?php } ?>
+                        <?php if (!empty($is_awarded_to_vendor)) { ?>
             <div class="alert alert-success mb15">
                 <strong>Congratulations.</strong> Your bid has been awarded for this tender.
                 <?php if (isset($latest_commercial_evaluation->total_score)) { ?>

@@ -51,12 +51,24 @@
 
         <div class="form-group">
             <div class="row">
-                <label class="col-md-3">Requires Riyada</label>
+                <label class="col-md-3">Registration fee (<?php echo esc($registration_currency); ?>)</label>
+                <div class="col-md-9">
+                    <input type="number" name="registration_amount" class="form-control" min="0" step="0.001"
+                        value="<?php echo esc($registration_fee->amount ?? ''); ?>"
+                        <?php echo $can_set_registration_fee ? 'required' : 'disabled'; ?>>
+                    <small class="text-muted">Enter 0 for a waiver. Applicants must upload Riyadha and await approval. A positive fee is paid during registration. Current fees are shared with Vendor Group Fees; existing applications keep their quoted amount.</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="row">
+                <label class="col-md-3">Requires Riyadha</label>
                 <div class="col-md-9">
                     <div class="form-check form-switch mt-2">
                         <input type="checkbox" class="form-check-input" id="requires_riyada" name="requires_riyada" value="1"
                             <?php echo ($model_info->requires_riyada ? "checked" : ""); ?>>
-                        <label class="form-check-label" for="requires_riyada">Yes</label>
+                        <label class="form-check-label" for="requires_riyada">Yes (always required for a waived registration)</label>
                     </div>
                 </div>
             </div>

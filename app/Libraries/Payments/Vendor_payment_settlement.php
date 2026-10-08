@@ -40,6 +40,10 @@ final class Vendor_payment_settlement
         }
         $db->table($table)->where('id', $requestId)->update(['status' => 'paid',
             'payment_id' => (int) $payment->id, 'review_status' => 'submitted', 'updated_at' => get_current_utc_time()]);
+        if ($request->fee_type === 'registration'
+            && (new Vendor_registration_service($db))->completePaid($vendor, $request, $payment)) {
+            return;
+        }
         (new Vendor_billing_service($db))->setVendorStatus($vendor, 'submitted', (int) $payment->user_id,
             ucfirst($request->fee_type) . ' paid through Bank Muscat; reference ' . mb_substr($providerReference, 0, 100));
     }

@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Libraries\Vendor_contact_access;
 use App\Libraries\Payments\Vendor_billing_service;
+use App\Libraries\Payments\Vendor_registration_service;
 use App\Models\Vendors_model;
 use App\Models\Vendor_groups_model;
 use App\Models\Vendor_grades_model;
@@ -69,6 +70,9 @@ class Vendors extends Security_Controller
             $this->access_only_vendors_create();
         }
         $view_data["model_info"] = $this->Vendors_model->get_one($id);
+        $view_data['vendor_code_ready'] = $this->db->fieldExists('vendor_code', 'vendors');
+        $view_data['can_edit_vendor_code'] = $view_data['vendor_code_ready']
+            && $this->_can_edit_vendor_code($view_data['model_info']);
 
         // vendor groups dropdown
         $groups_dropdown = array("" => "- " . app_lang("select_vendor_group") . " -");
@@ -171,6 +175,15 @@ class Vendors extends Security_Controller
         return $dropdown;
     }
 
+    private function _can_edit_vendor_code(?object $vendor): bool
+    {
+        if (!$vendor || empty($vendor->id) || !empty($vendor->deleted) || ($vendor->status ?? '') !== 'approved') {
+            return false;
+        }
+        $application = (new Vendor_registration_service($this->db))->application((int) $vendor->id);
+        return !$application || $application->status === 'approved';
+    }
+
     public function save()
     {
         $db = $this->db; // use the same connection everywhere
@@ -184,6 +197,16 @@ class Vendors extends Security_Controller
                 $this->access_only_vendors_create();
             } else {
                 $this->access_only_vendors_update();
+            }
+
+            $vendor_code = $this->request->getPost('vendor_code');
+            if ($vendor_code !== null) {
+                if (!is_string($vendor_code) || mb_strlen(trim($vendor_code)) > 64
+                    || preg_match('/[\x00-\x1F\x7F]/', $vendor_code)) {
+                    return $this->response->setJSON(['success' => false, 'field' => 'vendor_code',
+                        'message' => app_lang('vendor_code_invalid')]);
+                }
+                $vendor_code = trim($vendor_code);
             }
 
             $rules = [
@@ -395,6 +418,27 @@ class Vendors extends Security_Controller
             // ---------- TRANSACTION ----------
             $db->transBegin();
             $transaction_started = true;
+
+            // Omitted/disabled fields preserve the code. Lock the company before changing it;
+            // a stale form cannot assign a code after registration approval is withdrawn.
+            if ($vendor_code !== null) {
+                $locked_vendor = $is_create ? null : $db->query(
+                    "SELECT * FROM {$vendors_table} WHERE id=? AND deleted=0 FOR UPDATE", [(int) $id]
+                )->getRow();
+                $current_code = (string) ($locked_vendor->vendor_code ?? '');
+                if ($vendor_code !== $current_code) {
+                    $code_error = !$db->fieldExists('vendor_code', 'vendors')
+                        ? 'vendor_code_setup_required'
+                        : (!$this->_can_edit_vendor_code($locked_vendor) ? 'vendor_code_after_approval' : null);
+                    if ($code_error) {
+                        $db->transRollback();
+                        $transaction_started = false;
+                        return $this->response->setJSON(['success' => false, 'field' => 'vendor_code',
+                            'message' => app_lang($code_error)]);
+                    }
+                    $vendor_data['vendor_code'] = $vendor_code === '' ? null : $vendor_code;
+                }
+            }
 
             // 1) Save vendor
             $save_vendor_id = $this->Vendors_model->ci_save($vendor_data, $id);
@@ -864,6 +908,28 @@ class Vendors extends Security_Controller
         }
     }
 
+    public function review_registration()
+    {
+        $this->_access_only_vendor_status_update();
+        if (strtoupper($this->request->getMethod()) !== 'POST') {
+            return $this->response->setStatusCode(405);
+        }
+        $this->validate_submitted_data(['vendor_id' => 'required|numeric', 'decision' => 'required']);
+        try {
+            (new Vendor_registration_service($this->db))->review(
+                (int) $this->request->getPost('vendor_id'), (string) $this->request->getPost('decision'),
+                (string) $this->request->getPost('amount'), (string) $this->request->getPost('note'),
+                (int) $this->login_user->id
+            );
+            return $this->response->setJSON(['success' => true, 'message' => 'Registration review saved.']);
+        } catch (\DomainException $e) {
+            return $this->response->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Vendor registration review failed: {error}', ['error' => $e->getMessage()]);
+            return $this->response->setJSON(['success' => false, 'message' => 'Unable to save the review. Please try again.']);
+        }
+    }
+
     private function _access_only_vendor_specialties_review_view(): void
     {
         if ($this->_is_procurement_vendor_reviewer()) {
@@ -969,7 +1035,9 @@ class Vendors extends Security_Controller
         }
 
         $view_data = [
-            "vendor" => $vendor
+            "vendor" => $vendor,
+            'registration_application' => (new Vendor_registration_service($this->db))->application($vendor_id),
+            'can_review_registration' => $this->_can_update_vendor_review_status(),
         ];
 
         return $this->template->rander("vendors/details", $view_data);
@@ -1571,7 +1639,8 @@ class Vendors extends Security_Controller
         return [
             $groupLabel,
             $gradeSelect,
-            esc($data->vendor_name ?? "-"),
+            esc($data->vendor_name ?? "-") . (isset($data->vendor_code) && $data->vendor_code !== ''
+                ? "<div class='small text-muted'>" . esc(app_lang('vendor_code')) . ': ' . esc($data->vendor_code) . '</div>' : ''),
             esc($data->email ?? "-"),
             $locationCell,
             $statusSelect,

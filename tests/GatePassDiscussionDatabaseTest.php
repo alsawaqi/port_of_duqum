@@ -65,6 +65,7 @@ foreach ([[2,1,1],[2,1,1],[3,2,1],[4,1,2],[5,1,1],[6,1,1],[7,1,1]] as [$u,$c,$d]
 }
 $id=(int)$requests->ci_save(array_merge($requestData(15),['department_id'=>1]));
 $check($id>0,'Create request');
+$check(count($rows('gate_pass_notification_outbox'))===0,'Saving a draft never sends a department email.');
 $data=$visitorData($id);$data['id_number']='QA-123';$data['phone']='96891234567';
 foreach (['id_type','id_number'] as $field) {
     $bad=$data;$bad[$field]='';
@@ -83,12 +84,15 @@ $check($before===$rows('gate_pass_requests') && count($rows('gate_pass_notificat
 $check((bool)$requests->ci_save(['status'=>'submitted'],$id),'Actual submission');
 $queued=$rows('gate_pass_notification_outbox');
 $check(array_column($queued,'destination')===['gp-qa-1@example.invalid','gp-qa-2@example.invalid'],'Both groups; wrong company/department, inactive/deleted/disabled excluded');
+$check(!App\Libraries\Gate_pass_email::isDepartmentReview($queued[0]['message']) && App\Libraries\Gate_pass_email::isDepartmentReview($queued[1]['message']), 'Requester keeps confirmation; reviewer receives the professional template.');
+$check(str_contains($queued[1]['message'], 'QA') && str_contains($queued[1]['message'], $requests->get_one($id)->reference), 'The queued email snapshots the requester and saved reference.');
 $check((bool)$requests->ci_save(['status'=>'submitted'],$id),'Same status replay accepted');
 $check(count($rows('gate_pass_notification_outbox'))===2,'Status replay never duplicates email');
-$sent=[];$mail=static function($to,$subject,$body) use (&$sent): bool {$sent[]=$to;return true;};
+$sent=[];$mailBodies=[];$mail=static function($to,$subject,$body) use (&$sent,&$mailBodies): bool {$sent[]=$to;$mailBodies[$to]=$body;return true;};
 $notices->process(20,0,$mail,static fn()=>throw new RuntimeException('Unexpected SMS'));
 $notices->process(20,0,$mail);
 $check(count($sent)===2 && array_column($rows('gate_pass_notification_outbox'),'status')===['sent','sent'],'Exactly one send per recipient despite repeated worker');
+$check(str_contains($mailBodies['gp-qa-2@example.invalid'], '<!DOCTYPE html>') && !str_contains($mailBodies['gp-qa-2@example.invalid'], '&lt;!DOCTYPE'), 'Delivery sends rendered HTML, not visible HTML source.');
 $approval=['gate_pass_request_id'=>$id,'stage'=>'department','decision'=>'approved','decided_by'=>2,'decided_at'=>gmdate('Y-m-d H:i:s')];
 $block=(int)$blocks->block_visitor(['id_number'=>'qa 123','id_type'=>'Passport','visitor_name'=>'QA'],2);
 $check($block>0 && $eligibility->isBlocked($visitors->get_one($v)),'Normalized ID block covers existing visitor');
@@ -226,6 +230,13 @@ $notices->submitted($requests->get_one($id));
 $db->table('gate_pass_notification_outbox')->where('status','queued')->update(['created_at'=>gmdate('Y-m-d H:i:s',time()-90000)]);
 $notices->process(20,0,static fn()=>throw new RuntimeException('Expired email must not send'));
 $check(in_array('expired',array_column($rows('gate_pass_notification_outbox'),'status'),true),'Stale notifications expire');
+$notices->submitted($requests->get_one($id));
+$reviewNotice = $db->table('gate_pass_notification_outbox')->where('status','queued')->where('recipient_user_id',2)->get()->getRow();
+$db->table('gate_pass_department_users')->where('user_id',2)->update(['status'=>'inactive']);
+$revokedSends = [];
+$notices->process(20,0,static function ($to) use (&$revokedSends) { $revokedSends[]=$to; return true; });
+$check($reviewNotice && $db->table('gate_pass_notification_outbox')->where('id',$reviewNotice->id)->get()->getRow()->status==='recipient_changed'
+    && !in_array('gp-qa-2@example.invalid',$revokedSends,true), 'Removed department reviewers cannot receive queued request details.');
 $beforeOutbox=$rows('gate_pass_notification_outbox');
 $db->query(file_get_contents(FCPATH . 'documentation/GATE_PASS_DISCUSSION_FIX.sql'));
 $check($beforeOutbox===$rows('gate_pass_notification_outbox'),'SQL rerun preserves all delivery history');

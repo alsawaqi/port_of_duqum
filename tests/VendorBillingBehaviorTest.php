@@ -15,6 +15,7 @@ namespace {
     require_once __DIR__ . '/../app/Libraries/Payments/Payment_amount.php';
     require_once __DIR__ . '/../app/Libraries/Payments/Vendor_billing_service.php';
     require_once __DIR__ . '/../app/Libraries/Payments/Vendor_payment_settlement.php';
+    require_once __DIR__ . '/../app/Libraries/Payments/Vendor_registration_service.php';
 
     function config(string $name): object
     {
@@ -25,6 +26,7 @@ namespace {
     }
 
     function get_current_utc_time(): string { return gmdate('Y-m-d H:i:s'); }
+    function get_setting(string $name): bool { return false; }
 
     final class VendorBillingResult
     {
@@ -33,6 +35,7 @@ namespace {
         {
             return $this->statement->fetch(\PDO::FETCH_OBJ) ?: null;
         }
+        public function getResult(): array { return $this->statement->fetchAll(\PDO::FETCH_OBJ); }
     }
 
     final class VendorBillingMemoryDb extends \CodeIgniter\Database\BaseConnection
@@ -347,6 +350,192 @@ namespace {
                 });
             }
         }
+    };
+
+
+    function registrationFixture(string $amount = '0.000'): array
+    {
+        [$db, $billing, $vendor] = fixture([], $amount);
+        $db->pdo->exec('ALTER TABLE pod_vendor_groups ADD requires_riyada INTEGER DEFAULT 0');
+        $db->pdo->exec('CREATE TABLE pod_vendor_registration_applications (id INTEGER PRIMARY KEY AUTOINCREMENT, vendor_id INTEGER UNIQUE, fee_request_id INTEGER UNIQUE, owner_contact_id INTEGER, riyada_document_id INTEGER, status TEXT, initial_amount TEXT, review_note TEXT, reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT, updated_at TEXT)');
+        $db->pdo->exec('CREATE TABLE pod_vendor_document_types (id INTEGER PRIMARY KEY, code TEXT, vendor_group_id INTEGER, deleted INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1)');
+        $db->pdo->exec('CREATE TABLE pod_vendor_documents (id INTEGER PRIMARY KEY, vendor_id INTEGER, vendor_document_type_id INTEGER, status TEXT, path TEXT, updated_at TEXT, deleted INTEGER DEFAULT 0)');
+        $db->pdo->exec('CREATE TABLE pod_vendor_contacts (id INTEGER PRIMARY KEY, vendor_id INTEGER, status TEXT, updated_at TEXT, deleted INTEGER DEFAULT 0)');
+        $db->pdo->exec('CREATE TABLE pod_vendor_update_requests (id INTEGER PRIMARY KEY, vendor_id INTEGER, changes TEXT, status TEXT, updated_at TEXT, deleted INTEGER DEFAULT 0)');
+        $db->table('vendor_document_types')->insert(['id'=>9,'code'=>'RIYADHA']);
+        $db->table('vendor_documents')->insert(['id'=>7,'vendor_id'=>17,'vendor_document_type_id'=>9,'status'=>'pending','path'=>'fixture.pdf']);
+        foreach ([5,6] as $id) {
+            $db->table('vendor_contacts')->insert(['id'=>$id,'vendor_id'=>17,'status'=>'pending']);
+            $db->table('vendor_update_requests')->insert(['id'=>$id,'vendor_id'=>17,'status'=>'pending',
+                'changes'=>json_encode(['module'=>'contacts','action'=>'create','record_id'=>$id])]);
+        }
+        $db->table('vendor_update_requests')->insert(['id'=>7,'vendor_id'=>17,'status'=>'pending',
+            'changes'=>json_encode(['module'=>'documents','action'=>'create','record_id'=>7])]);
+        return [$db, new \App\Libraries\Payments\Vendor_registration_service($db), $billing, $vendor];
+    }
+    function databaseSnapshot(VendorBillingMemoryDb $db): string
+    {
+        $state = [];
+        foreach ($db->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")->getResult() as $table) {
+            $state[$table->name] = $db->pdo->query('SELECT * FROM ' . $table->name . ' ORDER BY rowid')->fetchAll(\PDO::FETCH_ASSOC);
+        }
+        return json_encode($state);
+    }
+    $tests['missing registration schema refuses new onboarding while legacy application lookup remains empty'] = static function (): void {
+        [$db] = fixture();
+        $registration = new \App\Libraries\Payments\Vendor_registration_service($db);
+        same(null, $registration->application(17));
+        rejects(static fn () => $registration->quote(3));
+    };
+    $tests['invalid inactive or missing group price is a recoverable registration error'] = static function (): void {
+        foreach (['-10','1.0001','1e3'] as $amount) {
+            [$db,$registration] = registrationFixture($amount);
+            rejects(static fn () => $registration->quote(3));
+        }
+        [$db,$registration] = registrationFixture();
+        $db->table('vendor_groups')->where('id',3)->update(['is_active'=>0]);
+        rejects(static fn () => $registration->quote(3));
+        rejects(static fn () => $registration->quote(999));
+    };
+    $tests['waiver selects Riyadha for its own group and falls back to all groups'] = static function (): void {
+        [$db,$registration] = registrationFixture();
+        $db->table('vendor_document_types')->insert(['id'=>10,'code'=>'RIYADA','vendor_group_id'=>3]);
+        $db->table('vendor_document_types')->insert(['id'=>11,'code'=>'RIYADHA','vendor_group_id'=>4]);
+        same(10,$registration->quote(3)['riyada_type_id']);
+        $db->table('vendor_document_types')->where('id',10)->update(['is_active'=>0]);
+        same(9,$registration->quote(3)['riyada_type_id']);
+        $db->table('vendor_document_types')->where('id',9)->update(['deleted'=>1]);
+        $before=databaseSnapshot($db);
+        rejects(static fn () => $registration->quote(3));
+        same($before,databaseSnapshot($db),'Another group cannot provide the waiver document type');
+    };
+    $tests['waiver needs Riyadha before creating any application or fee'] = static function (): void {
+        foreach (['missing','other_vendor','wrong_type','deleted','rejected'] as $condition) {
+            [$db,$registration,,$vendor] = registrationFixture();
+            if ($condition === 'other_vendor') { $db->table('vendor_documents')->where('id',7)->update(['vendor_id'=>99]); }
+            if ($condition === 'wrong_type') { $db->table('vendor_documents')->where('id',7)->update(['vendor_document_type_id'=>8]); }
+            if ($condition === 'deleted') { $db->table('vendor_documents')->where('id',7)->update(['deleted'=>1]); }
+            if ($condition === 'rejected') { $db->table('vendor_documents')->where('id',7)->update(['status'=>'rejected']); }
+            $before = databaseSnapshot($db);
+            rejects(static fn () => $registration->create($vendor,101,5,$condition === 'missing' ? null : 7));
+            same($before,databaseSnapshot($db),$condition);
+        }
+    };
+    $tests['waiver approval activates only initial owner and reviewed Riyadha'] = static function (): void {
+        [$db,$registration,,$vendor] = registrationFixture();
+        $app = $registration->create($vendor,101,5,7);
+        same('pending_review',$app->status);
+        same('not_required',$app->payment_status);
+        same('submitted',row($db,'vendors',17)->status);
+        same(null,row($db,'vendors',17)->registration_valid_to);
+        $registration->review(17,'approve_waiver','','Eligible Riyadha',500);
+        same('approved',$registration->application(17)->status);
+        same('approved',row($db,'vendors',17)->status);
+        same(gmdate('Y-m-d',strtotime('+365 days')),row($db,'vendors',17)->registration_valid_to);
+        foreach (['vendor_contacts','vendor_update_requests'] as $table) {
+            same('approved',row($db,$table,5)->status);
+            same('pending',row($db,$table,6)->status);
+        }
+        same('approved',row($db,'vendor_documents',7)->status);
+        same('approved',row($db,'vendor_update_requests',7)->status);
+        same(500,$registration->application(17)->reviewed_by);
+        $before=databaseSnapshot($db);
+        rejects(static fn () => $registration->review(17,'require_payment','25','Changed mind',500));
+        same($before,databaseSnapshot($db),'Already approved refuses modification');
+    };
+    $tests['waiver refusal requires positive exact amount and explanation without writes'] = static function (): void {
+        [$db,$registration,,$vendor] = registrationFixture();
+        $registration->create($vendor,101,5,7);
+        foreach ([['0','Reason'],['-5','Reason'],['1.0001','Reason'],['1e3','Reason'],['25',''],['25',str_repeat('a',2001)]] as [$amount,$note]) {
+            $before=databaseSnapshot($db);
+            rejects(static fn () => $registration->review(17,'require_payment',$amount,$note,500));
+            same($before,databaseSnapshot($db));
+        }
+    };
+    $tests['paid registration activates immediately and callback replay is unchanged'] = static function (): void {
+        foreach (['paid_group','waiver_declined'] as $scenario) {
+            [$db,$registration,$billing,$vendor] = registrationFixture($scenario === 'paid_group' ? '22.125' : '0.000');
+            $app=$registration->create($vendor,101,5,$scenario === 'paid_group' ? null : 7);
+            if ($scenario === 'waiver_declined') {
+                $registration->review(17,'require_payment','35.125','Certificate is not eligible',500);
+                $app=$registration->application(17);
+                same('35.125',$app->amount);
+                same('Certificate is not eligible',$app->review_note);
+            }
+            same('pending_payment',$app->status);
+            same('pending_payment',row($db,'vendors',17)->status);
+            $request=row($db,'vendor_fee_requests',(int)$app->fee_request_id);
+            $paid=payment($db,$billing,$request);
+            $db->transBegin(); Vendor_payment_settlement::apply($db,$paid,'BANK-81'); $db->transCommit();
+            same('approved',$registration->application(17)->status);
+            same('approved',row($db,'vendors',17)->status);
+            same('paid',row($db,'vendor_fee_requests',(int)$request->id)->status);
+            same('approve', $db->query('SELECT action FROM pod_vendor_status_histories ORDER BY id DESC LIMIT 1')->getRow()->action);
+            same('approved',row($db,'vendor_contacts',5)->status);
+            same('pending',row($db,'vendor_contacts',6)->status);
+            $before=databaseSnapshot($db);
+            $db->transBegin(); Vendor_payment_settlement::apply($db,$paid,'BANK-81'); $db->transCommit();
+            same($before,databaseSnapshot($db),'Callback replay does not renew dates or duplicate history');
+        }
+    };
+    $tests['payment mismatch and blocked vendor preserve pending registration'] = static function (): void {
+        foreach (['amount','group','deleted','suspended','rejected','period'] as $condition) {
+            [$db,$registration,$billing,$vendor] = registrationFixture('10.125');
+            $app=$registration->create($vendor,101,5,null);
+            $request=row($db,'vendor_fee_requests',(int)$app->fee_request_id);
+            $paid=payment($db,$billing,$request);
+            if ($condition==='amount') { $paid->amount='0.001'; }
+            if ($condition==='group') { $db->table('vendors')->where('id',17)->update(['vendor_group_id'=>4]); }
+            if ($condition==='deleted') { $db->table('vendors')->where('id',17)->update(['deleted'=>1]); }
+            if (in_array($condition,['suspended','rejected'])) { $db->table('vendors')->where('id',17)->update(['status'=>$condition]); }
+            if ($condition==='period') { $db->table('vendors')->where('id',17)->update(['registration_valid_to'=>'2028-01-01']); }
+            $before=databaseSnapshot($db);
+            $db->transBegin(); rejects(static fn () => Vendor_payment_settlement::apply($db,$paid,'BANK-81')); $db->transRollback();
+            same($before,databaseSnapshot($db),$condition);
+        }
+    };
+    $tests['generic status review cannot approve unpaid or unreviewed application'] = static function (): void {
+        foreach (['0.000','10.125'] as $amount) {
+            [$db,$registration,$billing,$vendor] = registrationFixture($amount);
+            $registration->create($vendor,101,5,7);
+            $before=databaseSnapshot($db);
+            rejects(static fn () => $billing->review(row($db,'vendors',17),'approved',500));
+            same($before,databaseSnapshot($db));
+        }
+    };
+    $tests['waiver review refuses deleted Riyadha and changed group atomically'] = static function (): void {
+        foreach (['document','group'] as $condition) {
+            [$db,$registration,,$vendor] = registrationFixture();
+            $registration->create($vendor,101,5,7);
+            if ($condition==='document') { $db->table('vendor_documents')->where('id',7)->update(['deleted'=>1]); }
+            else { $db->table('vendors')->where('id',17)->update(['vendor_group_id'=>4]); }
+            $before=databaseSnapshot($db);
+            rejects(static fn () => $registration->review(17,'approve_waiver','','Approved',500));
+            same($before,databaseSnapshot($db));
+        }
+    };
+    $tests['deleted or rejected registration owner is not reactivated by a payment'] = static function (): void {
+        foreach (['deleted','rejected'] as $condition) {
+            [$db,$registration,$billing,$vendor] = registrationFixture('10.125');
+            $app=$registration->create($vendor,101,5,null);
+            $paid=payment($db,$billing,row($db,'vendor_fee_requests',(int)$app->fee_request_id));
+            $db->table('vendor_contacts')->where('id',5)->update($condition==='deleted' ? ['deleted'=>1] : ['status'=>'rejected']);
+            $before=databaseSnapshot($db);
+            $db->transBegin(); rejects(static fn () => Vendor_payment_settlement::apply($db,$paid,'BANK-81')); $db->transRollback();
+            same($before,databaseSnapshot($db));
+        }
+    };
+    $tests['new registration does not change renewal settlement workflow'] = static function (): void {
+        [$db,$registration,$billing,$vendor] = registrationFixture('10.125');
+        $app=$registration->create($vendor,101,5,null);
+        $paid=payment($db,$billing,row($db,'vendor_fee_requests',(int)$app->fee_request_id));
+        Vendor_payment_settlement::apply($db,$paid,'BANK-81');
+        $prior=row($db,'vendors',17)->registration_valid_to;
+        $renewal=$billing->prepare(17,101,'renewal');
+        $renewalPayment=payment($db,$billing,$renewal,['id'=>82]);
+        Vendor_payment_settlement::apply($db,$renewalPayment,'BANK-82');
+        same('submitted',row($db,'vendors',17)->status);
+        same($prior,row($db,'vendors',17)->registration_valid_to);
     };
 
     $failures = [];

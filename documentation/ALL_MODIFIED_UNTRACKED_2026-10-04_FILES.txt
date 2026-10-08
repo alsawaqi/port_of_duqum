@@ -1,0 +1,272 @@
+PORT OF DUQM - FILES GROUPED BY ORIGINAL PROJECT FOLDER
+Snapshot: 2026-10-04T21:19:43+04:00
+92 files: 43 modified and 49 untracked/new.
+All paths below are relative to the existing project root.
+ZIP prefix: port_of_duqum/
+Deleted/missing paths are listed separately in DELETED_PATHS.txt.
+
+app/Controllers/
+----------------
+  [MODIFIED] Gate_pass_portal.php
+    93344 bytes | SHA256 f4cf7436ee301a6cf4ad5afe23f50b830d304c7f964017a64187e2b51c19fe20
+  [MODIFIED] Guest_vendor.php
+    32709 bytes | SHA256 d1b25a4375971e96ac4a003a790ba7820ce37a0dd2243730cff4905d9b4df4be
+  [MODIFIED] Tender_clarifications.php
+    30949 bytes | SHA256 215159be315bfb7afedc813be76fb5e2fb4684617b1730e09e2bb76b6af8b0d3
+  [MODIFIED] Tender_commercial_inbox.php
+    35569 bytes | SHA256 bab26414eeb03af246b46c4b42ace059e4e1a2ce6509b57e207d8cb778eab4da
+  [MODIFIED] Tender_committee_opening_inbox.php
+    29651 bytes | SHA256 ca76e55f13b6b7ae1aa7ffa926118d377413aabbe09466b8363d64c3264b1431
+  [MODIFIED] Tender_procurement_inbox.php
+    130143 bytes | SHA256 dd0bd6f3ab52c7e148b2910df640a9492f46bb81b010aae41faa770e979a270c
+  [MODIFIED] Tender_procurement_manager_inbox.php
+    66692 bytes | SHA256 7c7a1ee481ba1f7fdb469e5df17c864fdd481e6c419915bb832d6d3cacd81fff
+  [MODIFIED] Tender_reports.php
+    97216 bytes | SHA256 68d3f917e64cbdde5681debd1ba6a35d6eaf3e190a8730981f0058d8eb088841
+  [NEW / UNTRACKED] Tender_team_clarifications.php
+    7339 bytes | SHA256 8cc6fd8cee5faf3c796d8af9b882de097e7f9ddd78b898cbb6387f69309d98bd
+  [MODIFIED] Tender_technical_inbox.php
+    39924 bytes | SHA256 d63d6c9cc1d8296c16e39ff526d28c578d0337e171e8342c2e0f1b71bfb65737
+  [MODIFIED] Vendor_document_types.php
+    7140 bytes | SHA256 3f77f401944f335c5221a2a197f62fced3c15993ad0eedf70f0a2870c281f318
+  [MODIFIED] Vendor_group_fees.php
+    8248 bytes | SHA256 fb26a90854fc2a7099c3d63782463ac93955c380b69394dae1ac8c71e371750f
+  [MODIFIED] Vendor_groups.php
+    8917 bytes | SHA256 347476923371c89155c15c04cdd69b5b4ef30ab70c42ed9f5acd826781a36e3a
+  [MODIFIED] Vendor_portal.php
+    162295 bytes | SHA256 9bc72f492a6b5ab8ab8e6d252668fcbc98bc6b39ab6fae57bdaf47ea3209ea27
+  [MODIFIED] Vendors.php
+    66256 bytes | SHA256 9b02c9f8f24557dffce1234c7c20b4fbd837188c54c5084844ec81319098a481
+
+app/Database/SQL/
+-----------------
+  [NEW / UNTRACKED] vendor_code_upgrade_pod.sql
+    685 bytes | SHA256 8775556106c3a3591f4456fe2e91be724b1b72e62862be231d6ec653b97fd8d6
+  [NEW / UNTRACKED] vendor_registration_payment_first_pod.sql
+    1512 bytes | SHA256 756dae59bfdaee46649026bcc9373190da7de415f36e6223955c007e18676a03
+
+app/Language/arabic/
+--------------------
+  [MODIFIED] custom_lang.php
+    257798 bytes | SHA256 e8b267bb1ee96c0bbd9f513cc437fefa3c18cbf10a5215b6e9dc132711a66188
+
+app/Language/english/
+---------------------
+  [MODIFIED] custom_lang.php
+    75832 bytes | SHA256 c3a235feaddb43cea693920127f83751cacb3db44a3664cf61beafbce1f9866d
+
+app/Libraries/
+--------------
+  [NEW / UNTRACKED] Gate_pass_email.php
+    1332 bytes | SHA256 7d087e5a92f0ff50ffa682438e6e7243ee6c81a80358330de5b11856bf88b97d
+  [MODIFIED] Gate_pass_notifications.php
+    10550 bytes | SHA256 a980baed81457b0107304bb04758b1cb422a56a8ff0b7aced92cac88107c051b
+  [NEW / UNTRACKED] Gate_pass_pdf.php
+    13986 bytes | SHA256 cea3f823edfb47a2326f40066f3d7019c8af7fd6e2d24ce23ba657fce47a90a4
+  [NEW / UNTRACKED] Tender_award_letters.php
+    6343 bytes | SHA256 0c12fca6b3bb19cf0aef097210726fdece2cc0a2aa600df33b6cae8df72fb622
+  [NEW / UNTRACKED] Tender_clarification_files.php
+    1778 bytes | SHA256 ad002c3b601dd1d251c1108e3df4215632816dcf6257bb290777878170dea82b
+  [NEW / UNTRACKED] Tender_datetime.php
+    1064 bytes | SHA256 e9302130ffb979768cacc63b37d02b89a986fa6f0ff945884625490dd43ad5a9
+  [NEW / UNTRACKED] Tender_document_pdf.php
+    12942 bytes | SHA256 4d4dd2cbada69664835130bc91e2581827dcdd263e448700dba8e42b23b0f8a9
+  [NEW / UNTRACKED] Tender_team_validation.php
+    1213 bytes | SHA256 3ad096480f6363ece778b0b6b4c74c47ab3f24e7f5a20d369cabee1c34f4b008
+  [MODIFIED] Tender_testing_stage.php
+    7925 bytes | SHA256 a6b023f104c67b1ce0d753f0a9e98e5b2295e8542efd91241da193e4748b18f9
+  [NEW / UNTRACKED] Tender_vendor_selection.php
+    7655 bytes | SHA256 67d0b86e88e23fb43944961ecde2530e1ff2e6a08cd07e4ae9ae77e44201b097
+  [NEW / UNTRACKED] Vendor_registration_documents.php
+    6601 bytes | SHA256 f3bd76d0d452bdc47b2f8a313dfa128acee700fa20244057aee230cdbab0afca
+
+app/Libraries/Payments/
+-----------------------
+  [MODIFIED] Vendor_billing_service.php
+    15335 bytes | SHA256 abe02cd516918013ff07eec69e2bea354c5220de9b15e7a37b8bfa0be3dc2e6c
+  [MODIFIED] Vendor_payment_settlement.php
+    3024 bytes | SHA256 878954759d1c88fc6ed34c5403e9839d59cab8def6850b1ffa2eb5a07383e0ed
+  [NEW / UNTRACKED] Vendor_registration_service.php
+    14987 bytes | SHA256 b133e8e608a23d9542c50c598617be72126d9ad52469ece2615a7a9efc935215
+
+app/Libraries/Sms/
+------------------
+  [MODIFIED] WorkflowSmsOutbox.php
+    9017 bytes | SHA256 c1e2b904a88fbe70795b5efb4f9e2687cf6f41f251ff1458c5d9cd6f940a10c8
+
+app/Models/
+-----------
+  [MODIFIED] Gate_pass_requests_model.php
+    16790 bytes | SHA256 631459d428e8a97b3487807e0a4806174764878c9bcbea7a0fda3fb178b6bbfb
+  [MODIFIED] Tender_communications_model.php
+    17090 bytes | SHA256 5ed7cb47dc45d909139b6ec441adfc59f120504e7e2df12107b7fb11af1bf80c
+  [MODIFIED] Tenders_model.php
+    43526 bytes | SHA256 7060564fd40bfbf4e22eef44b0482f0baadfa63ab66cce4245fef0f2d4148914
+
+app/Views/emails/
+-----------------
+  [NEW / UNTRACKED] gate_pass_department_review.php
+    6627 bytes | SHA256 7dba22eeba4bc18885273a1427c9c7f87e2e555d85fe6acfeb22996d0a873434
+
+app/Views/guest_vendor/
+-----------------------
+  [MODIFIED] index.php
+    39969 bytes | SHA256 224eac440d9010a0ac0d5dcc6f517678f34d97bc264f3bccf0adb712987ceaff
+
+app/Views/signin/
+-----------------
+  [MODIFIED] index.php
+    4175 bytes | SHA256 bfe39fd9422e21888e013efff8df5ff852e51d567fe21606a0d1d489207e4a1e
+
+app/Views/tender_commercial_inbox/
+----------------------------------
+  [MODIFIED] index.php
+    1569 bytes | SHA256 e35c67d39a1266d8b3e609c552e98fe3376a2a22a3647902d48d308470e78734
+
+app/Views/tender_procurement_inbox/
+-----------------------------------
+  [MODIFIED] form.php
+    102326 bytes | SHA256 dc21a7d93e0e42443d5a1894502e0415ecc5219dc16d4558c6e45f8c867eb889
+  [MODIFIED] modal_form.php
+    43374 bytes | SHA256 5abe9f205e84b8bc69631948ffbce2c7a8b94e2b73ad7d3354c04b01248b7ffb
+  [NEW / UNTRACKED] vendor_audience.php
+    5040 bytes | SHA256 032d8a52d90a1fb349e3bf734d8e0c539b4d765464f0f3fc993d0b1caeb98adc
+
+app/Views/tender_procurement_manager_inbox/
+-------------------------------------------
+  [MODIFIED] details.php
+    27925 bytes | SHA256 a0443296f657c811925bbe3d4a4eb55f05e11333b3f56261a1a9e53f51a5e86e
+
+app/Views/tender_reports/
+-------------------------
+  [MODIFIED] bid_opening_form.php
+    14703 bytes | SHA256 441c607cb4f227d3b6d61647720755ef00587a4564f9f1cd0a09a2ef6660f2c1
+  [MODIFIED] details.php
+    82866 bytes | SHA256 1bf5775435f0e91cf27e173cc5f08addadfd6435ff21df61488a7988aa5399a8
+
+app/Views/tender_team_clarifications/
+-------------------------------------
+  [NEW / UNTRACKED] index.php
+    2871 bytes | SHA256 55019c3d03d08f49e253d92e61096984511e0a85d86d24f53917d5d861018df2
+
+app/Views/tender_technical_inbox/
+---------------------------------
+  [MODIFIED] index.php
+    1554 bytes | SHA256 0848cb776e93a59fb3c2d09e6e4054185aac79b1066670eafa6fcc74783809cc
+
+app/Views/vendor_groups/
+------------------------
+  [MODIFIED] modal_form.php
+    4938 bytes | SHA256 fd8e9e3d735b8697b4e455433a2e4efdc5404d9755f0acbc5ab9fb2bca145037
+
+app/Views/vendor_portal/
+------------------------
+  [NEW / UNTRACKED] registration_status.php
+    2442 bytes | SHA256 226860b3c5203fd47d8b9044f115d7ca020905f90c97586e0abe279067e16039
+
+app/Views/vendor_portal/tenders/
+--------------------------------
+  [MODIFIED] details.php
+    49756 bytes | SHA256 986ec1392452fa3de71655480c1ef61064e4e0136e1cf4e5eb4893e195a7ac5f
+  [NEW / UNTRACKED] result_letter.php
+    914 bytes | SHA256 4fa215a3e6f17f1b53789b4569820ef002bde3e3c42705e35aedbb009ebce5a5
+  [MODIFIED] view_modal.php
+    21267 bytes | SHA256 77447c25c6a1e09354f60b561829039ee1811c6c5181ab50e5957720a56965e9
+
+app/Views/vendors/
+------------------
+  [MODIFIED] details.php
+    10572 bytes | SHA256 8dbc7c0907b17ecb8c62e45eaaec8be24405b5124ffd1f95963cd67d8b2d96b0
+  [MODIFIED] modal_form.php
+    16663 bytes | SHA256 74a1b9a3e6c84075e14280f9cd13f230bb0d780287154b147880e6bc7c6d7720
+  [NEW / UNTRACKED] registration_review.php
+    3401 bytes | SHA256 b430d429155aa0977eb2ebf19ae341f2507ef152bedcffaa20fb56cba047aebe
+
+assets/css/
+-----------
+  [MODIFIED] portal-shared.css
+    316038 bytes | SHA256 c2a67aa11cbcf4111338c3224298ecdf283f050fcf45576c60be38719ec9f585
+
+assets/gate_pass/
+-----------------
+  [NEW / UNTRACKED] hsse-instructions.png
+    2014647 bytes | SHA256 64bdb18f6a852ad24a6175f135d054876e0b34f1ddef98af775d1e3b7a5ec66a
+  [NEW / UNTRACKED] letterhead.jpg
+    1064862 bytes | SHA256 79806cd45cf5ced4449b976d9349e2310b4c5a842e9059871917179ae98e75e8
+
+assets/images/
+--------------
+  [NEW / UNTRACKED] port-duqum-email-logo.png
+    25113 bytes | SHA256 204289b4cab9625203e79b2040312673b36b1681bbfce3ad9cc9ccb265fd649f
+  [NEW / UNTRACKED] port-duqum-signin-background.jpg
+    605514 bytes | SHA256 b33071558d2cadf72d663d1ef4e9debad5783f59fd82cb7404ce5abefccb576a
+
+assets/tender_documents/
+------------------------
+  [NEW / UNTRACKED] letterhead-continuation.png
+    201307 bytes | SHA256 340cd307cba4f29011242c51bdf8545844cc71e32965f56883c529d6ed53b31c
+  [NEW / UNTRACKED] letterhead-first.png
+    214709 bytes | SHA256 8bad979d30cb1aed27a777961b4f923d501c308cda71111c62862ac24ffd0590
+
+documentation/
+--------------
+  [NEW / UNTRACKED] GATE_PASS_DEPARTMENT_EMAIL_2026-10-04.zip.sha256
+    108 bytes | SHA256 c5141689b5e0da5c7169cd67b53494241b2e34b9a4010d8f74d0e11784ad2b77
+  [NEW / UNTRACKED] GATE_PASS_DEPARTMENT_EMAIL_2026-10-04_README.txt
+    3273 bytes | SHA256 75f887ec2adf0f76b6790a3c7762a153f4fe1f703ddc18d5f1dd9b8a4e454da5
+  [NEW / UNTRACKED] GATE_PASS_DEPARTMENT_EMAIL_PREVIEW_2026-10-04.png
+    58922 bytes | SHA256 f4f12699d965ff5424c339122d656e30ee0f7ebee2f3d646617ec21504afef9f
+  [NEW / UNTRACKED] GATE_PASS_PDF_INDIVIDUAL_SAMPLE_2026-10-04.pdf
+    3142751 bytes | SHA256 a9ef28a906f88e44bf559b7a899fa25c33825e3a01529129e43555dedc79522e
+  [NEW / UNTRACKED] GATE_PASS_PDF_SAMPLE_2026-10-04.pdf
+    3142899 bytes | SHA256 1b2ca5e460562dd337a9011a68cb4e360d6e4276f6028b2ccdd4b21f2b07d3ae
+  [NEW / UNTRACKED] GATE_PASS_PDF_TEMPLATE_2026-10-04.zip.sha256
+    105 bytes | SHA256 ba1498055fa9b5363e539570be18952e74f9e75188dc1e1a2da22f48b9cd3c64
+  [NEW / UNTRACKED] GATE_PASS_PDF_TEMPLATE_2026-10-04_README.md
+    5630 bytes | SHA256 525f271347f8dadc4be4469441142a5526d8c77f01a5c5379ec01b0ddc60ce5d
+  [NEW / UNTRACKED] TENDER_BID_OPENING_SAMPLE_2026-10-04.pdf
+    320271 bytes | SHA256 fb4e99a2db9892b2ed2210987e57544045becfeb158ce479d0aa77f5e5a643c1
+  [NEW / UNTRACKED] TENDER_DOCUMENT_TEMPLATES_2026-10-04.zip.sha256
+    108 bytes | SHA256 3d8eb23302c5e13f6cce32144899391126e3d13bf11c61843808f1a55e3a49de
+  [NEW / UNTRACKED] TENDER_DOCUMENT_TEMPLATES_2026-10-04_README.txt
+    4431 bytes | SHA256 5b111dbd8a3a8093fd069d2fab0b392260f4b11363ea19924bc27178375aeaca
+  [NEW / UNTRACKED] TENDER_REGRET_LETTER_SAMPLE_2026-10-04.pdf
+    319118 bytes | SHA256 816f1a771b542d5bd99326b51672a876a60b38519beb006fa8c36ca388c7f241
+  [NEW / UNTRACKED] VENDOR_REGISTRATION_POINT_1_README.md
+    4299 bytes | SHA256 d86dad665305e46c7dfab80d66e53239991758c7b2f325f3b79e5b6fcd3fe9c7
+  [NEW / UNTRACKED] VENDOR_REGISTRATION_POINT_2_README.md
+    3705 bytes | SHA256 90b31527102236f8450d9296ce4dfa9232bdabf8e61dc9c70d97239648071ecc
+  [NEW / UNTRACKED] VENDOR_REGISTRATION_POINT_3_README.md
+    3621 bytes | SHA256 dd515c8aa548702818a73349560e63065ee3825a737531ad92bb3a78e0f08d1d
+  [NEW / UNTRACKED] VENDOR_REGISTRATION_POINT_4_VERIFICATION.md
+    4131 bytes | SHA256 a7ce94c8ce3bd59f7b5dfc4583eea9769ea779aee23f4ce43db6e0d47407a6fa
+  [NEW / UNTRACKED] VENDOR_TENDER_POINTS_1_TO_6_2026-10-04.zip.sha256
+    110 bytes | SHA256 e55627e258eacde78a374ee81e9dcc4f690dc69ab547e7a52d6cb18f0e2ae069
+  [NEW / UNTRACKED] VENDOR_TENDER_POINTS_1_TO_6_2026-10-04_README.txt
+    11798 bytes | SHA256 f86eb235ea36176aeda57608bf39da095c017a90387494605e0dee83a2198bff
+
+tests/
+------
+  [MODIFIED] GatePassDiscussionDatabaseTest.php
+    21443 bytes | SHA256 d75bb36149a407c6a0e176cb5e3a03f8177468e6872b1be2b6f0f7844d9743ec
+  [MODIFIED] GatePassDownloadPortabilityTest.php
+    5272 bytes | SHA256 4584cb550c2f2105da586c6218faa17b05f17113cdb3feb4f13854d24933f7eb
+  [NEW / UNTRACKED] GatePassEmailTemplateTest.php
+    3748 bytes | SHA256 aff5ed9097cffc1ea8f9adc9d238819a433b0ad7bc8c6cc6f1df907d8cf70d45
+  [NEW / UNTRACKED] GatePassPdfTemplateTest.php
+    9009 bytes | SHA256 4ce795aa33ad6eaf7fd94b1056d161a4d27a549a32130a37fe3ec54bb8faddca
+  [NEW / UNTRACKED] TenderDatetimeTest.php
+    943 bytes | SHA256 4c84afee9e8658cf1dc4d79395826b543b16f8d821e7b1864f144e73d456ebf9
+  [NEW / UNTRACKED] TenderDocumentPdfTest.php
+    6014 bytes | SHA256 f83527860cab51a75c7bea08134cafdcf1bb74aca7c60703708289d8ff5fba7d
+  [NEW / UNTRACKED] TenderFlexibleAudienceDatabaseTest.php
+    11703 bytes | SHA256 2e86e5f934c2080cc77f8248bdf4b81c141534a12b6c78b884e14f2cc66ea616
+  [NEW / UNTRACKED] TenderWorkflowDatabaseTest.php
+    13346 bytes | SHA256 d95f96b0e240b63c081db8ffc9db350f59b93fef7efe28b00173aafd44ced7cc
+  [MODIFIED] VendorBillingBehaviorTest.php
+    37778 bytes | SHA256 6a573f6e76360211a931cb119863bf2c0a37b4497a8992612418384a8bdf0eac
+  [MODIFIED] VendorMultiCrRegistrationTest.php
+    3339 bytes | SHA256 ee91495db27266fee41b1b9cc9e7a4c1ed638b26449cde6daeebab0ac304ed93
+  [NEW / UNTRACKED] VendorRegistrationDocumentsTest.php
+    7456 bytes | SHA256 dc4504e40dd248f1be086f87fb922e0fa5e708e0ab31a7eac3c4731a29fce438
+

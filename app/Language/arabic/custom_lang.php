@@ -4010,4 +4010,38 @@ $lang['login_otp_account_email_missing'] = 'يحتاج حسابك إلى بري�
 $lang['soft_delete_in_use'] = 'هذا السجل مرتبط بسجلات نشطة. يرجى تحديث الارتباطات قبل حذفه.';
 $lang['soft_delete_restore_conflict'] = 'لا يمكن استعادة السجل لأن قيمة فريدة مستخدمة في سجل نشط أو لأن السجل الرئيسي محذوف.';
 $lang['soft_delete_setup_required'] = 'يجب تثبيت تحديث قاعدة البيانات للحذف المؤقت قبل إتمام هذا الإجراء.';
+$lang['vendor_registration_documents_help'] = 'ارفع المستندات المحددة لمجموعة المورد. لا يمكن تغيير أنواع المستندات المطلوبة. يمكنك إضافة مستندات أخرى أدناه.';
+$lang['vendor_registration_documents_choose_group'] = 'اختر مجموعة المورد لعرض متطلبات المستندات.';
+$lang['vendor_registration_documents_none_required'] = 'لا توجد مستندات مطلوبة لهذه المجموعة. المستندات الإضافية اختيارية.';
+$lang['vendor_registration_documents_group_changed'] = 'تمت إزالة المستندات التي لا تنطبق على مجموعة المورد الجديدة. يرجى مراجعة قائمة المستندات قبل الإرسال.';
+$lang['vendor_registration_document_type_unavailable'] = 'نوع المستند غير متاح لمجموعة المورد المحددة. حدّث الصفحة وراجع متطلبات المستندات.';
+$lang['vendor_registration_required_documents_missing'] = 'يرجى رفع المستندات المطلوبة:';
+$lang['vendor_registration_document_upload_incomplete'] = 'يرجى اختيار ملف كامل وصالح للمستند:';
+$lang['vendor_registration_document_dates_invalid'] = 'أدخل تواريخ صحيحة للمستند. يجب ألا يسبق تاريخ الانتهاء تاريخ الإصدار.';
+
+// Admin-assigned reference for a registered vendor company.
+$lang["vendor_code"] = "رمز المورد";
+$lang["vendor_code_help"] = "مرجع اختياري للشركة يحدده الموظف المختص. الحد الأقصى 64 حرفاً.";
+$lang["vendor_code_after_approval"] = "يمكن تعيين رمز المورد أو تعديله بعد الموافقة على التسجيل.";
+$lang["vendor_code_invalid"] = "أدخل رمز المورد في سطر واحد وبحد أقصى 64 حرفاً.";
+$lang["vendor_code_setup_required"] = "إعداد رمز المورد غير مكتمل. اطلب من مسؤول النظام تشغيل ملف vendor_code_upgrade_pod.sql.";
+
+// Closed tender recipient selection.
+$lang["tender_audience_combined"] = "فلاتر مشتركة وموردون إضافيون";
+$lang["tender_audience_title"] = "الموردون المستهدفون للمناقصة المغلقة";
+$lang["tender_audience_help"] = "اختر أي مجموعة من فئة المورد والدرجة والتخصص. يجب أن يستوفي المورد جميع الفلاتر المحددة. يضاف الموردون المختارون بشكل فردي حتى إن لم يطابقوا الفلاتر. اترك الفلتر فارغاً لتجاهله.";
+$lang["tender_audience_source"] = "سبب الاختيار";
+$lang["tender_audience_loading"] = "جارٍ تحديث قائمة الموردين...";
+$lang["tender_audience_count"] = "تم اختيار {count} من الموردين المعتمدين";
+$lang["tender_audience_empty"] = "لا يوجد موردون معتمدون مطابقون. اختر فلتراً أو أضف مورداً محدداً قبل حفظ المناقصة المغلقة.";
+$lang["tender_audience_failed"] = "تعذر تحميل معاينة الموردين. يرجى المحاولة مرة أخرى.";
+$lang["tender_audience_extra"] = "مختار بشكل فردي";
+$lang["tender_audience_matched"] = "يطابق جميع الفلاتر";
+$lang["tender_audience_extra_help"] = "هؤلاء الموردون المعتمدون مدعوون إضافيون إلى جانب الموردين المطابقين للفلاتر.";
+$lang["tender_audience_refresh_note"] = "تتم مراجعة القائمة مجدداً عند الحفظ أو الاعتماد. يشمل الاختيار الموردين والتخصصات المعتمدة فقط.";
+$lang["tender_audience_invalid"] = "يرجى اختيار فلاتر موردين صالحة. يجب أن يتبع التخصص الفرعي للتخصص المحدد.";
+$lang["tender_audience_vendor_unavailable"] = "أحد الموردين المحددين لم يعد معتمداً أو متاحاً. احذف ذلك المورد وراجع القائمة.";
+$lang["tender_audience_closed_only"] = "تطبق فلاتر الموردين المشتركة على المناقصات المغلقة. اختر طريقة استهداف أخرى للمناقصة المفتوحة.";
+$lang["tender_audience_pending"] = "الموردون بعد اعتماد هذا التغيير";
+
 return $lang;

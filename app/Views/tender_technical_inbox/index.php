@@ -6,6 +6,7 @@
         "icon" => "clipboard"
     ]);
     ?>
+    <div class="mb15"><a class="btn btn-default" href="<?php echo get_uri('tender_team_clarifications/index/technical'); ?>">Internal clarifications with procurement</a></div>
     <div class="card gp-pro-card">
         <div class="page-title clearfix">
             <h1><?php echo app_lang("tender_technical_inbox"); ?></h1>

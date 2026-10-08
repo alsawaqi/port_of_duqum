@@ -44,6 +44,11 @@ if (!empty($tender->vendor_sub_category_name)) {
     $target .= " / " . $tender->vendor_sub_category_name;
 }
 
+$target_parts = $target === '-' ? [] : [$target];
+if (!empty($tender->vendor_group_name)) $target_parts[] = app_lang('vendor_group') . ': ' . $tender->vendor_group_name;
+if (!empty($tender->vendor_grade_name)) $target_parts[] = app_lang('vendor_grade') . ': ' . $tender->vendor_grade_name;
+$target = $target_parts ? implode(' + ', $target_parts) : '-';
+
 $date_value = function ($value) {
     return !empty($value) ? format_to_datetime($value, false) : "-";
 };
@@ -784,6 +789,7 @@ $vendor_tender_header_actions = '<a href="' . esc($vendor_tender_back_url, "attr
                 </div>
                 <div class="vtd-section-body">
                     <?php if (($tender->status ?? "") === "awarded" && !empty($bid)) { ?>
+                        <?php if (!empty($has_result_letter)) { ?><a class="btn btn-default mb10" href="<?php echo get_uri('vendor_portal/result_letter/' . (int) $tender->id); ?>" target="_blank" rel="noopener">View / print result letter</a><?php } ?>
                         <?php if (!empty($is_awarded_to_vendor)) { ?>
                             <div class="alert alert-success">
                                 <strong>Congratulations.</strong> Your bid has been awarded for this tender.

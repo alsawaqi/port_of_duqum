@@ -917,6 +917,20 @@ class Tender_reports extends Security_Controller
             show_404();
         }
 
+        $session = $this->Tender_bid_openings_model->get_active_session($tender_id, 'technical');
+        if ($this->request->getGet('format') === 'pdf') {
+            if (!$session || !in_array((string) $session->status, ['unlocked', 'signed', 'manual_accepted'], true)) {
+                app_redirect('forbidden');
+            }
+            $pdf = \App\Libraries\Tender_document_pdf::opening($tender, $session,
+                $this->Tender_bid_openings_model->get_bid_summary_for_opening($tender_id),
+                $this->Tender_bid_openings_model->get_signature_rows((int) $session->id))->Output('', 'S');
+            return $this->response->download('tender-document.pdf', $pdf)
+                ->setFileName(\App\Libraries\Tender_document_pdf::filename('Bid-Opening-Record', (string) $tender->reference))
+                ->setContentType('application/pdf')->setHeader('Cache-Control', 'private, no-store')
+                ->setHeader('X-Content-Type-Options', 'nosniff')->inline();
+        }
+
         return $this->template->rander("tender_reports/bid_opening_form", [
             "tender" => $tender,
             "stage" => $stage,
@@ -927,6 +941,7 @@ class Tender_reports extends Security_Controller
             "signature_rows" => $this->_get_opening_signatures($tender_id),
             "signature_image_route" => "tender_reports/signature_image",
             "manual_form_download_url" => get_uri("tender_reports/download_manual_bid_opening_form/" . $tender_id),
+            "print_record_url" => get_uri('tender_reports/bid_opening_form/' . $tender_id . '?format=pdf'),
         ]);
     }
 

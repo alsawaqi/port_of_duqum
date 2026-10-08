@@ -1061,4 +1061,38 @@ $lang['login_otp_account_email_missing'] = 'Your account needs a valid registere
 $lang['soft_delete_in_use'] = 'This record is still linked to active records. Update those links before deleting it.';
 $lang['soft_delete_restore_conflict'] = 'This record cannot be restored because an active record uses the same unique value, or its parent is deleted.';
 $lang['soft_delete_setup_required'] = 'The database soft-delete update must be installed before this action can be completed.';
+$lang['vendor_registration_documents_help'] = 'Upload the documents listed for your vendor group. Required document types cannot be changed. You can add extra documents below.';
+$lang['vendor_registration_documents_choose_group'] = 'Select a vendor group to see its document requirements.';
+$lang['vendor_registration_documents_none_required'] = 'No documents are required for this group. Additional documents are optional.';
+$lang['vendor_registration_documents_group_changed'] = 'Documents that do not apply to the new vendor group were removed. Please review the document list before submitting.';
+$lang['vendor_registration_document_type_unavailable'] = 'This document type is unavailable for the selected vendor group. Refresh the page and review the document requirements.';
+$lang['vendor_registration_required_documents_missing'] = 'Please upload the required documents:';
+$lang['vendor_registration_document_upload_incomplete'] = 'Please choose a complete, valid file for:';
+$lang['vendor_registration_document_dates_invalid'] = 'Enter valid document dates. The expiry date must be on or after the issue date.';
+
+// Admin-assigned reference for a registered vendor company.
+$lang["vendor_code"] = "Vendor Code";
+$lang["vendor_code_help"] = "Optional company reference assigned by staff. Maximum 64 characters.";
+$lang["vendor_code_after_approval"] = "The vendor code can be assigned or changed after registration is approved.";
+$lang["vendor_code_invalid"] = "Enter a vendor code of up to 64 characters on one line.";
+$lang["vendor_code_setup_required"] = "Vendor code setup is pending. Ask your administrator to run vendor_code_upgrade_pod.sql.";
+
+// Closed tender recipient selection.
+$lang["tender_audience_combined"] = "Combined filters + extra vendors";
+$lang["tender_audience_title"] = "Closed tender recipients";
+$lang["tender_audience_help"] = "Choose any combination of group, grade and speciality. Vendors must match every selected filter. Individually selected vendors are added even if they do not match the filters. Leave a filter blank to skip it.";
+$lang["tender_audience_source"] = "Selection reason";
+$lang["tender_audience_loading"] = "Updating recipient list...";
+$lang["tender_audience_count"] = "{count} approved vendors selected";
+$lang["tender_audience_empty"] = "No approved vendors match. Choose a filter or add a specific vendor before saving a closed tender.";
+$lang["tender_audience_failed"] = "Unable to load the recipient preview. Please try again.";
+$lang["tender_audience_extra"] = "Individually selected";
+$lang["tender_audience_matched"] = "Matches all filters";
+$lang["tender_audience_extra_help"] = "These approved vendors are extra invitees, in addition to vendors matching your filters.";
+$lang["tender_audience_refresh_note"] = "The list is checked again when saved or approved. Only approved vendors and approved specialities qualify.";
+$lang["tender_audience_invalid"] = "Please select valid vendor filters. A subcategory must belong to the selected category.";
+$lang["tender_audience_vendor_unavailable"] = "A selected vendor is no longer approved or available. Remove that vendor and review the recipient list.";
+$lang["tender_audience_closed_only"] = "Combined recipient filters apply to closed tenders. Select a different target mode for an open tender.";
+$lang["tender_audience_pending"] = "Recipients after this change is approved";
+
 return $lang;

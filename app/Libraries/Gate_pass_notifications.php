@@ -43,15 +43,36 @@ final class Gate_pass_notifications
             [(int)$request->requester_id,(int)$request->company_id,(int)$request->department_id])->getResult();
         $event = 'submitted:' . $request->id . ':' . bin2hex(random_bytes(16));
         $ref = (string) $request->reference;
+        $details = $this->departmentEmailDetails($request);
         foreach ($recipients as $user) {
-            $text = (int)$user->id === (int)$request->requester_id
+            $isRequester = (int)$user->id === (int)$request->requester_id;
+            $text = $isRequester
                 ? "Your Gate Pass request {$ref} has been submitted. Sign in to track its progress."
-                : "Gate Pass request {$ref} has been submitted to your department. Sign in to review it.";
-            $this->enqueue($event, (int)$request->id, 'email', (string)$user->email, 'Gate Pass request submitted - ' . $ref,
+                : Gate_pass_email::departmentReview($details);
+            $subject = ($isRequester ? 'Gate Pass request submitted - ' : 'New Gate Pass request for review - ') . $ref;
+            $this->enqueue($event, (int)$request->id, 'email', (string)$user->email, $subject,
                 $text, (int)$user->id);
         }
         if (!array_filter($recipients, static fn($u) => (int)$u->id !== (int)$request->requester_id)) { log_message('error', 'No separate department reviewer email recipient for Gate Pass request ' . (int)$request->id); }
         if (!$recipients) { log_message('error', 'No active email recipients for Gate Pass request ' . (int)$request->id); }
+    }
+
+    private function departmentEmailDetails(object $request): object
+    {
+        $requests = $this->db->prefixTable('gate_pass_requests');
+        $users = $this->db->prefixTable('users');
+        $companies = $this->db->prefixTable('companies');
+        $departments = $this->db->prefixTable('departments');
+        $purposes = $this->db->prefixTable('gate_pass_purposes');
+        $details = $this->db->query("SELECT r.*, c.name AS company_name, d.name AS department_name,
+                p.name AS purpose_name, TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) AS requester_name
+            FROM {$requests} r
+            LEFT JOIN {$users} u ON u.id=r.requester_id AND u.deleted=0
+            LEFT JOIN {$companies} c ON c.id=r.company_id AND c.deleted=0
+            LEFT JOIN {$departments} d ON d.id=r.department_id AND d.deleted=0
+            LEFT JOIN {$purposes} p ON p.id=r.gate_pass_purpose_id AND p.deleted=0
+            WHERE r.id=? AND r.deleted=0", [(int)$request->id])->getRow();
+        return $details ?? $request;
     }
 
     public function blocked(object $block): void
@@ -92,16 +113,19 @@ final class Gate_pass_notifications
             if ($this->db->affectedRows() !== 1) { continue; }
             $status = 'failed';
             try {
-                $liveRequest = $this->db->table('gate_pass_requests')->where('id', (int) $row->request_id)->where('deleted', 0)->countAllResults();
+                $liveRequest = $this->db->table('gate_pass_requests')->where('id', (int) $row->request_id)->where('deleted', 0)->get()->getRow();
                 if (!$liveRequest) { $status = 'recipient_changed'; }
                 elseif (strtotime($row->created_at . ' UTC') < time() - 86400) { $status = 'expired'; }
                 elseif ($row->recipient_user_id) {
                     $user = $this->db->table('users')->where('id',(int)$row->recipient_user_id)->where('deleted',0)->where('status','active')->where('disable_login',0)->get()->getRow();
                     if (!$user || strtolower(trim((string)$user->email)) !== $row->destination) {
                         $status = 'recipient_changed';
+                    } elseif (Gate_pass_email::isDepartmentReview($row->message) && !$this->stillDepartmentReviewer($user, $liveRequest)) {
+                        $status = 'recipient_changed';
                     } else {
-                        $ok = $mail ? $mail($row->destination,$row->subject,$row->message)
-                            : send_app_mail($row->destination,$row->subject,nl2br(esc($row->message)));
+                        $body = Gate_pass_email::isDepartmentReview($row->message) ? $row->message : nl2br(esc($row->message));
+                        $ok = $mail ? $mail($row->destination,$row->subject,$body)
+                            : send_app_mail($row->destination,$row->subject,$body,[],false);
                         $status = $ok ? 'sent' : 'failed';
                     }
                 } elseif ($row->channel === 'sms') {
@@ -120,5 +144,13 @@ final class Gate_pass_notifications
             if ($status === 'failed') { log_message('error','Gate Pass notification delivery failed; outbox ID ' . (int)$row->id); }
         }
         return count($rows);
+    }
+
+    private function stillDepartmentReviewer(object $user, object $request): bool
+    {
+        return $this->db->table('gate_pass_department_users')->where([
+            'user_id' => (int)$user->id, 'company_id' => (int)$request->company_id,
+            'department_id' => (int)$request->department_id, 'deleted' => 0, 'status' => 'active',
+        ])->countAllResults() > 0;
     }
 }

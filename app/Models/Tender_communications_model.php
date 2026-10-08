@@ -170,7 +170,7 @@ class Tender_communications_model extends Crud_model
                     AND ($tbl.vendor_id IS NULL OR $tbl.vendor_id=0)
                   )"
             : "";
-        $vendor_direct_reply_where = $only_vendor_visible ? " OR ($tbl.parent_id IS NOT NULL AND $tbl.vendor_id=?)" : "";
+        $vendor_direct_reply_where = $only_vendor_visible ? " OR (($tbl.parent_id IS NOT NULL OR $tbl.type IN ('award_letter', 'regret_letter')) AND $tbl.vendor_id=?)" : "";
 
         $root_types = self::get_clarification_root_types();
         $root_type_placeholders = implode(",", array_fill(0, count($root_types), "?"));
@@ -238,23 +238,7 @@ class Tender_communications_model extends Crud_model
 
     public function has_vendor_visible_evaluator_clarification_request(int $tender_id, int $vendor_id): bool
     {
-        $tbl = $this->db->prefixTable("tender_communications");
-
-        $row = $this->db->query(
-            "SELECT id
-             FROM $tbl
-             WHERE deleted=0
-               AND tender_id=?
-               AND vendor_id=?
-               AND clarification_scope IN ('technical', 'commercial')
-               AND is_vendor_visible=1
-               AND type IN ('response', 'technical_clarification_response', 'commercial_clarification_response', 'technical_clarification_request', 'commercial_clarification_request')
-             ORDER BY COALESCE(published_at, created_at) DESC, id DESC
-             LIMIT 1",
-            [$tender_id, $vendor_id]
-        )->getRow();
-
-        return (bool) $row;
+        return (bool) $this->get_latest_vendor_visible_evaluator_request($tender_id, $vendor_id);
     }
 
     public function has_vendor_visible_technical_clarification_request(int $tender_id, int $vendor_id): bool
@@ -309,6 +293,8 @@ class Tender_communications_model extends Crud_model
             $params[] = $tender_bid_id;
         }
         $params[] = $response_type;
+        $params[] = $response_type;
+        if ($tender_bid_id) { $params[] = $tender_bid_id; }
 
         return $this->db->query(
             "SELECT
@@ -343,6 +329,7 @@ class Tender_communications_model extends Crud_model
                         )
                         AND $tbl.type=?
                     )
+                    OR ($tbl.type=? AND $bid_sql)
                )
              ORDER BY COALESCE($tbl.published_at, $tbl.created_at) ASC, $tbl.id ASC",
             $params

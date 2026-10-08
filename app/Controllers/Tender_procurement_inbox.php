@@ -29,7 +29,7 @@ use CodeIgniter\I18n\Time;
 
 class Tender_procurement_inbox extends Security_Controller
 {
-    private const TENDER_EMAILS_ENABLED = false;
+
 
     protected $db;
     protected $Tender_requests_model;
@@ -324,6 +324,30 @@ class Tender_procurement_inbox extends Security_Controller
         return $this->response->setJSON(["vendors" => $out]);
     }
 
+    public function preview_vendor_selection()
+    {
+        $this->access_only_tender('procurement', 'view');
+        $tender_id = (int) $this->request->getGet('tender_id');
+        $request_id = (int) $this->request->getGet('tender_request_id');
+        if ($tender_id) {
+            $this->require_tender_scope($tender_id, 'procurement');
+        }
+        if ($request_id) {
+            $this->require_tender_request_scope($request_id, 'procurement');
+        }
+        $selector = new \App\Libraries\Tender_vendor_selection($this->db);
+        try {
+            $selection = $selector->validate((array) $this->request->getGet());
+            $selection = $selector->withRequestFallback($selection, $request_id);
+            $vendors = $selector->recipients($selection);
+            $page = max(1, (int) $this->request->getGet('page'));
+            return $this->response->setJSON(['success' => true, 'total' => count($vendors),
+                'vendors' => array_slice($vendors, ($page - 1) * 50, 50), 'page' => $page]);
+        } catch (\DomainException $e) {
+            return $this->response->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
     public function modal_form()
     {
         $this->validate_submitted_data([
@@ -436,6 +460,10 @@ class Tender_procurement_inbox extends Security_Controller
             }
         }
 
+        if (!$tender || ($tender->tender_type ?? '') === 'close') {
+            $selected_target_mode = 'combined';
+        }
+
         $existing_required_codes = $tender && !empty($tender->id)
             ? $this->Tender_bid_requirements_model->get_required_codes((int) $tender->id)
             : Tender_bid_requirements_model::DEFAULT_CODES;
@@ -474,6 +502,7 @@ class Tender_procurement_inbox extends Security_Controller
             "rfq_detail" => $rfq_detail,
             "rfq_items" => $rfq_items,
             "testing_stage_options" => $this->Tender_testing_stage->options(),
+            "testing_stage_enabled" => Tender_testing_stage::enabled((bool) $this->login_user->is_admin),
             "company_id" => $company_id,
             "department_id" => $department_id,
         ];
@@ -482,6 +511,13 @@ class Tender_procurement_inbox extends Security_Controller
     public function save()
     {
         $testing_workflow_stage = $this->Tender_testing_stage->normalize($this->request->getPost("testing_workflow_stage"));
+        if (trim((string) $this->request->getPost("testing_workflow_stage")) !== ""
+            && (!$testing_workflow_stage || !Tender_testing_stage::enabled((bool) $this->login_user->is_admin))) {
+            return $this->response->setJSON(["success" => false, "message" => "Testing stages are disabled. Use the normal approval process."]);
+        }
+        if ($testing_workflow_stage && ($this->request->getPost('submit_for_approval') || $this->request->getPost('publish_now'))) {
+            return $this->response->setJSON(["success" => false, "message" => "A testing stage cannot be combined with approval or publication."]);
+        }
         $validation_rules = [
             "tender_id" => "numeric",
             "tender_request_id" => "numeric",
@@ -537,6 +573,9 @@ class Tender_procurement_inbox extends Security_Controller
         } else {
             $this->access_only_tender("procurement", "create");
         }
+        if ($existing && in_array((string) $existing->status, ['awarded', 'cancelled'], true)) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Finalized tenders cannot be changed.']);
+        }
         $old_site_visit_at = $existing ? $this->_normalize_tender_datetime($existing->site_visit_at ?? "", "start") : null;
         $old_site_visit_location = $existing ? trim((string) ($existing->site_visit_location ?? "")) : "";
         $old_site_visit_instructions = $existing ? trim((string) ($existing->site_visit_instructions ?? "")) : "";
@@ -588,6 +627,9 @@ class Tender_procurement_inbox extends Security_Controller
             exit;
         }
         $this->require_tender_company_access($company_id, "procurement");
+        if (!$this->db->table('departments')->where('id', $department_id)->where('company_id', $company_id)->where('deleted', 0)->get(1)->getRow()) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Select a department belonging to the selected company.']);
+        }
 
         $release_at = $this->_normalize_tender_datetime($this->request->getPost("release_at"), "start");
         $document_purchase_deadline = $this->_normalize_tender_datetime($this->request->getPost("document_purchase_deadline"), "end");
@@ -616,6 +658,11 @@ class Tender_procurement_inbox extends Security_Controller
             "commercial_eval_deadline" => $commercial_eval_deadline,
         ];
 
+        foreach ($new_milestones as $field => $value) {
+            if (trim((string) $this->request->getPost($field)) !== '' && $value === null) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Invalid date: ' . ucwords(str_replace('_', ' ', $field)) . '.']);
+            }
+        }
         $new_milestones = $this->_cascade_tender_milestones($old_milestones, $new_milestones);
         $release_at = $new_milestones["release_at"];
         $document_purchase_deadline = $new_milestones["document_purchase_deadline"];
@@ -637,7 +684,7 @@ class Tender_procurement_inbox extends Security_Controller
         }
 
         $target_mode = strtolower(trim((string) $this->request->getPost("target_mode")));
-        if (!in_array($target_mode, ["specialty", "group", "specific_vendors", "group_and_specific_vendors", "grade"], true)) {
+        if (!in_array($target_mode, ["specialty", "group", "specific_vendors", "group_and_specific_vendors", "grade", "combined"], true)) {
             $target_mode = "specialty";
         }
 
@@ -646,6 +693,18 @@ class Tender_procurement_inbox extends Security_Controller
         $vendor_group_id = (int) $this->request->getPost("vendor_group_id");
         $vendor_grade_id = (int) $this->request->getPost("vendor_grade_id");
         $specific_vendor_ids = $this->_clean_vendor_ids((array) $this->request->getPost("specific_vendor_ids"));
+
+        $combined_selection = null;
+        if ($target_mode === 'combined') {
+            if ($tender_type !== 'close') {
+                return $this->response->setJSON(['success' => false, 'message' => app_lang('tender_audience_closed_only')]);
+            }
+            try {
+                $combined_selection = (new \App\Libraries\Tender_vendor_selection($this->db))->validate((array) $this->request->getPost());
+            } catch (\DomainException $e) {
+                return $this->response->setJSON(['success' => false, 'message' => $e->getMessage()]);
+            }
+        }
 
         $required_sections = (array) $this->request->getPost("required_sections");
         $posted_team_ids = $this->_get_posted_team_ids();
@@ -656,6 +715,10 @@ class Tender_procurement_inbox extends Security_Controller
             }
         }
 
+        $team_error = \App\Libraries\Tender_team_validation::error($this->db, $company_id, $posted_team_ids);
+        if ($team_error) {
+            return $this->response->setJSON(['success' => false, 'message' => $team_error]);
+        }
         $data = [
             "tender_request_id" => $tender_request_id ?: null,
             "reference" => $reference,
@@ -683,11 +746,12 @@ class Tender_procurement_inbox extends Security_Controller
 
         $request_selected_vendors = $request ? $this->Tender_request_vendors_model->get_selected_vendors((int) $request->id) : [];
         $has_request_selected_vendors = count($request_selected_vendors) > 0;
+        $has_combined_target = $combined_selection && (\App\Libraries\Tender_vendor_selection::hasFilters($combined_selection) || $combined_selection['specific_vendor_ids']);
         $has_specialty_target = $target_mode === "specialty" && $vendor_category_id > 0;
         $has_group_target = in_array($target_mode, ["group", "group_and_specific_vendors"], true) && $vendor_group_id > 0;
         $has_specific_vendor_target = in_array($target_mode, ["specific_vendors", "group_and_specific_vendors"], true) && !empty($specific_vendor_ids);
         $has_grade_target = $target_mode === "grade" && $vendor_grade_id > 0;
-        $use_request_selected_vendors = $has_request_selected_vendors && !$has_specialty_target && !$has_group_target && !$has_specific_vendor_target && !$has_grade_target;
+        $use_request_selected_vendors = $has_request_selected_vendors && !$has_specialty_target && !$has_group_target && !$has_specific_vendor_target && !$has_grade_target && !$has_combined_target;
 
         if (in_array($target_mode, ["group", "group_and_specific_vendors"], true) && !$has_group_target) {
             return $this->response->setJSON(["success" => false, "message" => "Please select a vendor group."]);
@@ -699,11 +763,18 @@ class Tender_procurement_inbox extends Security_Controller
             return $this->response->setJSON(["success" => false, "message" => "Please select a vendor grade."]);
         }
 
-        if ($tender_type === "close" && !$has_request_selected_vendors && !$has_specialty_target && !$has_group_target && !$has_specific_vendor_target && !$has_grade_target) {
+        if ($tender_type === "close" && !$has_request_selected_vendors && !$has_specialty_target && !$has_group_target && !$has_specific_vendor_target && !$has_grade_target && !$has_combined_target) {
             return $this->response->setJSON([
                 "success" => false,
                 "message" => "For close tenders, select request vendors or choose a vendor specialty, group, grade, or specific vendor target."
             ]);
+        }
+
+        if ($combined_selection && $tender_type === 'close') {
+            $selector = new \App\Libraries\Tender_vendor_selection($this->db);
+            if (!$selector->recipients($selector->withRequestFallback($combined_selection, $tender_request_id))) {
+                return $this->response->setJSON(['success' => false, 'message' => app_lang('tender_audience_empty')]);
+            }
         }
 
         if ($this->_requires_manager_approval_for_tender_change($existing)) {
@@ -724,7 +795,21 @@ class Tender_procurement_inbox extends Security_Controller
                 $testing_workflow_stage
             );
 
-            $this->Tenders_model->ci_save($this->_build_manager_approval_payload("update", $change_payload), $tender_id);
+            $this->db->transBegin();
+            try {
+                $change_payload['pending_document_ids'] = $this->_save_tender_documents($tender_id, true);
+                // Keep earlier staged documents when a pending/revised change is resubmitted.
+                $prior = json_decode((string) ($existing->procurement_manager_payload ?? ''), true) ?: [];
+                $change_payload['pending_document_ids'] = array_values(array_unique(array_merge((array) ($prior['pending_document_ids'] ?? []), $change_payload['pending_document_ids'])));
+                if (!$this->Tenders_model->ci_save($this->_build_manager_approval_payload("update", $change_payload), $tender_id) || !$this->db->transStatus()) {
+                    throw new \RuntimeException('Unable to submit tender change.');
+                }
+                $this->db->transCommit();
+            } catch (\Throwable $e) {
+                $this->db->transRollback();
+                return $this->response->setStatusCode($e instanceof UploadSecurityException ? 422 : 500)
+                    ->setJSON(['success' => false, 'message' => $e instanceof UploadSecurityException ? app_lang('invalid_file_type') : app_lang('error_occurred')]);
+            }
 
             return $this->response->setJSON([
                 "success" => true,
@@ -754,23 +839,6 @@ class Tender_procurement_inbox extends Security_Controller
         $this->_save_target_rule($tender_id, $target_mode, $vendor_category_id, $vendor_sub_category_id, $vendor_group_id, $vendor_grade_id, $specific_vendor_ids);
         $this->Tender_bid_requirements_model->sync_requirements($tender_id, $required_sections);
         $this->_sync_rfq_data($tender_id);
-        try {
-            $this->_save_tender_documents($tender_id);
-        } catch (UploadSecurityException $e) {
-            $this->db->transRollback();
-            log_message('notice', 'Tender source document upload rejected.');
-            return $this->response->setStatusCode(422)->setJSON([
-                'success' => false,
-                'message' => app_lang('invalid_file_type'),
-            ]);
-        } catch (\Throwable $e) {
-            $this->db->transRollback();
-            log_message('error', 'Tender source document storage failed.');
-            return $this->response->setStatusCode(500)->setJSON([
-                'success' => false,
-                'message' => app_lang('error_occurred'),
-            ]);
-        }
 
         if ($this->_has_any_posted_team_selection($posted_team_ids)) {
             $this->_sync_tender_teams_from_post($tender_id, $posted_team_ids);
@@ -778,7 +846,9 @@ class Tender_procurement_inbox extends Security_Controller
             $this->_sync_teams_from_request($tender_id, (int) $request->id);
         }
 
-        if ($use_request_selected_vendors) {
+        if ($has_combined_target) {
+            $invited_count = $this->_replace_invites($tender_id, array_column((new \App\Libraries\Tender_vendor_selection($this->db))->recipients($combined_selection), 'id'));
+        } elseif ($use_request_selected_vendors) {
             $invited_count = $this->_sync_invites_from_request($tender_id, (int) $request->id);
         } elseif ($has_specialty_target) {
             $invited_count = $this->_sync_invites_by_specialty($tender_id, $vendor_category_id, $vendor_sub_category_id);
@@ -804,7 +874,7 @@ class Tender_procurement_inbox extends Security_Controller
         if ($publish_now) {
             $publish_error = $this->_validate_tender_can_publish($tender_id, $tender_type);
             if ($publish_error) {
-                $this->db->transComplete();
+                $this->db->transRollback();
                 return $this->response->setJSON(["success" => false, "message" => $publish_error]);
             }
 
@@ -813,7 +883,7 @@ class Tender_procurement_inbox extends Security_Controller
         } elseif ($submit_for_approval) {
             $approval_error = $this->_validate_tender_can_submit_for_manager_approval($tender_id, $tender_type);
             if ($approval_error) {
-                $this->db->transComplete();
+                $this->db->transRollback();
                 return $this->response->setJSON(["success" => false, "message" => $approval_error]);
             }
 
@@ -822,6 +892,24 @@ class Tender_procurement_inbox extends Security_Controller
 
         if ($testing_workflow_stage) {
             $this->_apply_testing_stage_override($tender_id, $testing_workflow_stage, $reference);
+        }
+
+        try {
+            $this->_save_tender_documents($tender_id);
+        } catch (UploadSecurityException $e) {
+            $this->db->transRollback();
+            log_message('notice', 'Tender source document upload rejected.');
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => app_lang('invalid_file_type'),
+            ]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'Tender source document storage failed.');
+            return $this->response->setStatusCode(500)->setJSON([
+                'success' => false,
+                'message' => app_lang('error_occurred'),
+            ]);
         }
 
         $this->_record_site_visit_notice($tender_id, $old_site_visit_at, $site_visit_at, $reference, $title, $site_visit_location, $site_visit_mandatory, $site_visit_instructions, $old_site_visit_location, $old_site_visit_mandatory, $old_site_visit_instructions);
@@ -930,7 +1018,10 @@ class Tender_procurement_inbox extends Security_Controller
         if (!$document || (int) ($document->deleted ?? 0) === 1) {
             show_404();
         }
-        $this->require_tender_scope((int) ($document->tender_id ?? 0), "procurement");
+        $tender = $this->require_tender_scope((int) ($document->tender_id ?? 0), "procurement");
+        if ($tender->status !== 'draft' || !in_array((string) $tender->procurement_manager_status, ['draft', 'revision_requested', 'rejected'], true)) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Reviewed tender documents cannot be deleted. Publish a correction or addendum from the tender report.']);
+        }
         $this->Tender_documents_model->ci_save(["deleted" => 1], $document_id);
         return $this->response->setJSON(["success" => true, "message" => "Document deleted."]);
     }
@@ -1002,39 +1093,65 @@ class Tender_procurement_inbox extends Security_Controller
 
         $tender_id = (int) $this->request->getPost("tender_id");
         $this->require_tender_scope($tender_id, "procurement");
-        $tender = $this->_get_tender_by_id($tender_id);
-        if (!$tender) {
-            return $this->response->setJSON(["success" => false, "message" => "Tender not found."]);
+        $this->db->transBegin();
+        try {
+            $table = $this->db->prefixTable('tenders');
+            $tender = $this->db->query("SELECT * FROM $table WHERE id=? AND deleted=0 FOR UPDATE", [$tender_id])->getRow();
+            if (!$tender || ($tender->status ?? '') !== 'closed' || ($tender->workflow_stage ?? '') !== 'award_decision') {
+                throw new \DomainException('Tender must be in Award Decision stage before final award.');
+            }
+            $evaluations = $this->db->prefixTable('tender_evaluations');
+            $pendingLate = $this->db->query("SELECT e.id FROM $evaluations e
+                WHERE e.tender_id=? AND e.deleted=0 AND e.submitted_after_deadline=1
+                  AND COALESCE(e.late_review_status,'pending')='pending'
+                  AND e.id=(SELECT MAX(latest.id) FROM $evaluations latest
+                    WHERE latest.deleted=0 AND latest.tender_id=e.tender_id AND latest.tender_bid_id=e.tender_bid_id AND latest.type=e.type)
+                LIMIT 1", [$tender_id])->getRow();
+            if ($pendingLate) {
+                throw new \DomainException('Review the pending late evaluations before awarding this tender.');
+            }
+            $summary = $this->_get_commercial_decision_summary($tender_id);
+            if ((int) ($summary['approved_count'] ?? 0) !== 1 || empty($summary['winner_vendor_id'])) {
+                throw new \DomainException('Exactly one commercially approved bid is required before final award.');
+            }
+            $winner_vendor_id = (int) $summary['winner_vendor_id'];
+            $now = $this->_get_tender_business_now();
+            $tender->loa_reference = $tender->loa_reference ?: ('LOA-' . $tender->reference . '-' . date('YmdHis'));
+            $saved = $this->Tenders_model->ci_save([
+                'status' => 'awarded', 'workflow_stage' => 'award_decision',
+                'award_ready_at' => $tender->award_ready_at ?: $now,
+                'award_vendor_id' => $winner_vendor_id, 'loa_reference' => $tender->loa_reference,
+                'loa_issued_at' => $now, 'updated_at' => $now,
+            ], $tender_id);
+            if (!$saved) { throw new \RuntimeException('Award could not be saved.'); }
+            (new \App\Libraries\Tender_award_letters($this->db))->record($tender, $winner_vendor_id, (int) $this->login_user->id, $now);
+            if (!$this->db->transStatus()) { throw new \RuntimeException('Award transaction failed.'); }
+            $this->db->transCommit();
+        } catch (\DomainException $e) {
+            $this->db->transRollback();
+            return $this->response->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'Tender award could not be recorded.');
+            return $this->response->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
         }
+        $delivery = $this->_send_award_and_regret_notifications($tender_id, $winner_vendor_id);
+        return $this->response->setJSON(['success' => true,
+            'message' => 'Tender awarded. Award and regret letters are available in the bidders\' portals.'
+                . ($delivery['failed'] ? ' Some emails were not delivered. Check Email settings and retry from the tender report.' : ''),
+            'email_delivery' => $delivery]);
+    }
 
-        if (($tender->status ?? "") !== "closed" || ($tender->workflow_stage ?? "") !== "award_decision") {
-            return $this->response->setJSON(["success" => false, "message" => "Tender must be in Award Decision stage before final award."]);
+    public function retry_result_emails()
+    {
+        $this->access_only_tender('procurement', 'update');
+        $tender_id = (int) $this->request->getPost('tender_id');
+        $tender = $this->require_tender_scope($tender_id, 'procurement');
+        if (($tender->status ?? '') !== 'awarded') {
+            return $this->response->setJSON(['success' => false, 'message' => 'Only awarded tenders have result letters.']);
         }
-
-        $summary = $this->_get_commercial_decision_summary($tender_id);
-        if ((int) ($summary["approved_count"] ?? 0) !== 1) {
-            return $this->response->setJSON(["success" => false, "message" => "Exactly one commercially approved bid is required before final award."]);
-        }
-
-        $winner_vendor_id = (int) ($summary["winner_vendor_id"] ?? 0);
-        if (!$winner_vendor_id) {
-            return $this->response->setJSON(["success" => false, "message" => "Unable to identify winner vendor."]);
-        }
-
-        $now = $this->_get_tender_business_now();
-        $this->Tenders_model->ci_save([
-            "status" => "awarded",
-            "workflow_stage" => "award_decision",
-            "award_ready_at" => $tender->award_ready_at ?: $now,
-            "award_vendor_id" => $winner_vendor_id,
-            "loa_reference" => $tender->loa_reference ?: ("LOA-" . (string) ($tender->reference ?? "TENDER") . "-" . date("YmdHis")),
-            "loa_issued_at" => $now,
-            "updated_at" => $now,
-        ], $tender_id);
-
-        $this->_send_award_and_regret_notifications($tender_id, $winner_vendor_id);
-
-        return $this->response->setJSON(["success" => true, "message" => "Tender awarded successfully."]);
+        $delivery = (new \App\Libraries\Tender_award_letters($this->db))->deliver($tender_id);
+        return $this->response->setJSON(['success' => true, 'message' => 'Emails sent: ' . $delivery['sent'] . '. Failed: ' . $delivery['failed'] . '.', 'email_delivery' => $delivery]);
     }
 
     public function cancel_tender()
@@ -1213,7 +1330,7 @@ class Tender_procurement_inbox extends Security_Controller
         return $ts ? date("Y-m-d", $ts) : null;
     }
 
-    private function _save_tender_documents(int $tender_id): void
+    private function _save_tender_documents(int $tender_id, bool $pending = false): array
     {
         $target_path = (new Upload_security())->prepareStorageDirectory(
             WRITEPATH . 'uploads/tender_documents/tender_' . $tender_id
@@ -1221,7 +1338,7 @@ class Tender_procurement_inbox extends Security_Controller
 
         $files = $this->request->getPost("files");
         if (!$files || !is_array($files) || !get_array_value($files, 0)) {
-            return;
+            return [];
         }
 
         // Validate every source before moving any file, avoiding partial tender
@@ -1249,6 +1366,7 @@ class Tender_procurement_inbox extends Security_Controller
             );
         }
 
+        $document_ids = [];
         foreach ($files as $serial) {
             $serial = (int) $serial;
             if (!$serial) {
@@ -1309,13 +1427,15 @@ class Tender_procurement_inbox extends Security_Controller
                 "expires_in_hours" => $time_limited ? $expires_in_hours : null,
                 "uploaded_by" => $this->login_user->id,
                 "created_at" => date("Y-m-d H:i:s"),
-                "deleted" => 0,
+                "deleted" => $pending ? 1 : 0,
             ]);
+            if ($documentId) { $document_ids[] = (int) $documentId; }
             if (!$documentId) {
                 @unlink($storedFullPath);
                 throw new \RuntimeException('The tender document record could not be saved.');
             }
         }
+        return $document_ids;
     }
 
     private function _tender_milestone_labels(): array
@@ -1577,6 +1697,10 @@ class Tender_procurement_inbox extends Security_Controller
 
     private function _save_target_rule(int $tender_id, string $target_mode, int $vendor_category_id, int $vendor_sub_category_id, int $vendor_group_id, int $vendor_grade_id, array $specific_vendor_ids): void
     {
+        if ($target_mode === 'combined') {
+            (new \App\Libraries\Tender_vendor_selection($this->db))->save($tender_id, compact('vendor_category_id', 'vendor_sub_category_id', 'vendor_group_id', 'vendor_grade_id', 'specific_vendor_ids'), (int) $this->login_user->id);
+            return;
+        }
         $tts = $this->db->prefixTable("tender_target_specialties");
         $target_vendors = $this->db->prefixTable("tender_target_vendors");
         $this->db->query("UPDATE $tts SET deleted=1 WHERE tender_id=?", [$tender_id]);
@@ -1952,6 +2076,9 @@ class Tender_procurement_inbox extends Security_Controller
             return "Procurement manager approval is required before publishing.";
         }
 
+        if ((string) $tender->status !== 'draft') {
+            return 'Only a draft tender can be submitted or published. Published tenders use the change approval process.';
+        }
         $closing_at = $this->_normalize_tender_datetime($tender->closing_at, "end");
         if (!$closing_at) {
             return "Submission deadline is required.";
@@ -1975,6 +2102,8 @@ class Tender_procurement_inbox extends Security_Controller
         }
 
         $team_ids = $this->_get_existing_tender_team_ids($tender_id);
+        $team_error = \App\Libraries\Tender_team_validation::error($this->db, (int) $tender->company_id, $team_ids);
+        if ($team_error) { return $team_error; }
         if (count($team_ids["technical"]) < 1) {
             return "At least one technical evaluator is required.";
         }
@@ -2529,6 +2658,8 @@ class Tender_procurement_inbox extends Security_Controller
              ) latest ON latest.tender_bid_id = $tb.id
              LEFT JOIN $te te ON te.id = latest.max_id
              WHERE $tb.deleted=0
+               AND $tb.status='accepted'
+               AND (COALESCE(te.submitted_after_deadline,0)=0 OR te.late_review_status='accepted')
                AND $tb.tender_id=?",
             [$tender_id]
         )->getRowArray();
@@ -2631,34 +2762,9 @@ class Tender_procurement_inbox extends Security_Controller
         }
     }
 
-    private function _send_award_and_regret_notifications(int $tender_id, int $winner_vendor_id): void
+    private function _send_award_and_regret_notifications(int $tender_id, int $winner_vendor_id): array
     {
-        $tender = $this->_get_tender_by_id($tender_id);
-        if (!$tender) {
-            return;
-        }
-
-        foreach ($this->_get_tender_recipients($tender_id) as $recipient) {
-            $vendor_id = (int) ($recipient->vendor_id ?? 0);
-            if (!$vendor_id) {
-                continue;
-            }
-
-            if ($vendor_id === $winner_vendor_id) {
-                $subject = "Tender Award Notification - " . ($tender->reference ?? "Tender");
-                $message = "Dear " . ($recipient->vendor_name ?? "Vendor") . ",\n\n"
-                    . "We are pleased to inform you that your bid has been awarded for tender "
-                    . ($tender->reference ?? "-") . " (" . ($tender->title ?? "-") . ").\n\n"
-                    . "Procurement will contact you with the next steps.\n";
-            } else {
-                $subject = "Tender Regret Notification - " . ($tender->reference ?? "Tender");
-                $message = "Dear " . ($recipient->vendor_name ?? "Vendor") . ",\n\n"
-                    . "Thank you for participating in tender " . ($tender->reference ?? "-") . " (" . ($tender->title ?? "-") . ").\n"
-                    . "After evaluation, another vendor has been selected.\n";
-            }
-
-            $this->_send_tender_email($recipient->email ?? null, $subject, $message);
-        }
+        return (new \App\Libraries\Tender_award_letters($this->db))->deliver($tender_id);
     }
 
     private function _send_cancellation_notifications(int $tender_id): void
@@ -2697,13 +2803,16 @@ class Tender_procurement_inbox extends Security_Controller
 
     private function _send_tender_email(?string $to, string $subject, string $message): void
     {
-        if (!self::TENDER_EMAILS_ENABLED || !$to) {
+        if (!$to) {
             return;
         }
 
         try {
-            send_app_mail($to, $subject, nl2br($message));
+            if (!send_app_mail($to, $subject, nl2br(esc($message)))) {
+                log_message('error', 'Tender email delivery failed; the tender result remains available in the portal.');
+            }
         } catch (\Throwable $e) {
+            log_message('error', 'Tender email delivery failed; the tender result remains available in the portal.');
         }
     }
 
@@ -2714,26 +2823,7 @@ class Tender_procurement_inbox extends Security_Controller
 
     private function _normalize_tender_datetime($value, string $edge = "end")
     {
-        $value = trim((string) $value);
-        if ($value === "") {
-            return null;
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/', $value)) {
-            $value = str_replace("T", " ", $value);
-            return strlen($value) === 16 ? $value . ":00" : $value;
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/', $value)) {
-            return $value;
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            return $value . ($edge === "end" ? " 23:59:59" : " 00:00:00");
-        }
-
-        $ts = strtotime($value);
-        return $ts === false ? null : date("Y-m-d H:i:s", $ts);
+        return \App\Libraries\Tender_datetime::normalize($value, $edge);
     }
 
     private function _make_row($row): array
@@ -2754,7 +2844,7 @@ class Tender_procurement_inbox extends Security_Controller
                 "cancelled" => "bg-danger",
                 default => "bg-secondary",
             };
-            $tender_status = "<span class='badge $class'>" . esc($tender_status_value) . "</span>";
+            $tender_status = "<span class='badge $class'>" . esc($tender_status_value === "draft" && ($row->procurement_manager_status ?? "") === "pending" ? "Awaiting manager approval" : $tender_status_value) . "</span>";
         }
 
         $manager_status_value = (string) ($row->procurement_manager_status ?? "draft");

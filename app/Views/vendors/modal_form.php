@@ -80,6 +80,19 @@
 
         <div class="form-group">
             <div class="row">
+                <label for="vendor_code" class="col-md-3"><?php echo app_lang('vendor_code'); ?></label>
+                <div class="col-md-9">
+                    <input type="text" id="vendor_code" name="vendor_code" class="form-control" maxlength="64"
+                        value="<?php echo esc($model_info->vendor_code ?? '', 'attr'); ?>"
+                        aria-describedby="vendor-code-help" <?php echo !empty($can_edit_vendor_code) ? '' : 'disabled'; ?>>
+                    <small id="vendor-code-help" class="text-muted"><?php echo app_lang(empty($vendor_code_ready)
+                        ? 'vendor_code_setup_required' : (!empty($can_edit_vendor_code) ? 'vendor_code_help' : 'vendor_code_after_approval')); ?></small>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="row">
                 <label for="email" class=" col-md-3"><?php echo app_lang('email'); ?></label>
                 <div class=" col-md-9">
                     <?php

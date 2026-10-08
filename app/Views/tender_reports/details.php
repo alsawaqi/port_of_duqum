@@ -451,6 +451,7 @@ foreach ($opening_signatures as $signature) {
                                         <tr><th>Clarification Deadline</th><td><?php echo $date_value($tender->clarification_deadline ?? null, false); ?></td></tr>
                                         <tr><th>Submission Deadline</th><td><?php echo $date_value($tender->closing_at ?? null, false); ?></td></tr>
                                         <tr><th>Bid Opening</th><td><?php echo $date_value($tender->bid_opening_at ?? null, false); ?></td></tr>
+                                        <?php if (($tender->status ?? '') === 'awarded' && !empty($can_reply_clarifications)) { ?><tr><th>Result emails</th><td><button type="button" class="btn btn-default btn-sm" id="retry-result-emails">Retry failed result emails</button><span id="result-email-status" role="status"></span></td></tr><?php } ?>
                                         <tr><th>LOA Issued</th><td><?php echo $date_value($tender->loa_issued_at ?? null, false); ?></td></tr>
                                     </tbody>
                                 </table>
@@ -855,6 +856,16 @@ foreach ($opening_signatures as $signature) {
                                         <td>
                                             <strong><?php echo esc($item->subject ?? "-"); ?></strong>
                                             <div class="text-off mt5"><?php echo nl2br(esc($item->message ?? "")); ?></div>
+                                            <?php if (in_array($communication_type, ["award_letter", "regret_letter"], true)) {
+                                                $delivery_labels = [
+                                                    "email_pending" => "Email waiting to be sent",
+                                                    "email_sending" => "Email delivery in progress",
+                                                    "email_sent" => "Email accepted by the mail server",
+                                                    "email_failed" => "Email delivery failed — use Retry result emails",
+                                                ]; ?>
+                                                <div class="mt10"><span class="badge <?php echo ($item->status ?? '') === 'email_failed' ? 'bg-warning text-dark' : 'bg-light text-dark'; ?>"><?php echo esc($delivery_labels[$item->status ?? ''] ?? 'Email delivery status unavailable'); ?></span></div>
+                                                <small class="text-off">The result letter is also available in this vendor's portal.</small>
+                                            <?php } ?>
                                             <?php if ($item_attachments) { ?>
                                                 <div class="communication-attachments mt10">
                                                     <?php foreach ($item_attachments as $attachment) { ?>
@@ -1311,3 +1322,13 @@ $(document).ready(function () {
     padding: 14px;
 }
 </style>
+
+<script>
+$(function () { $('#retry-result-emails').on('click', function () {
+    var button = $(this).prop('disabled', true);
+    $.ajax({url: '<?php echo get_uri('tender_procurement_inbox/retry_result_emails'); ?>', type: 'POST', dataType: 'json', data: {tender_id: <?php echo (int) $tender->id; ?>}})
+        .done(function (result) { $('#result-email-status').text(result.message); })
+        .fail(function () { $('#result-email-status').text('Unable to retry delivery. Please try again.'); })
+        .always(function () { button.prop('disabled', false); });
+}); });
+</script>

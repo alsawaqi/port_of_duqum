@@ -451,6 +451,18 @@ class Tender_committee_opening_inbox extends Security_Controller
             app_redirect("tender_committee_opening_inbox");
         }
 
+        if ($this->request->getGet('format') === 'pdf') {
+            // The inbox projection omits budget/currency; read the full row only after the committee and opening checks above.
+            $tender = $this->Tenders_model->get_one($tender_id);
+            $pdf = \App\Libraries\Tender_document_pdf::opening($tender, $session,
+                $this->Tender_bid_openings_model->get_bid_summary_for_opening($tender_id),
+                $this->Tender_bid_openings_model->get_signature_rows((int) $session->id))->Output('', 'S');
+            return $this->response->download('tender-document.pdf', $pdf)
+                ->setFileName(\App\Libraries\Tender_document_pdf::filename('Bid-Opening-Record', (string) $tender->reference))
+                ->setContentType('application/pdf')->setHeader('Cache-Control', 'private, no-store')
+                ->setHeader('X-Content-Type-Options', 'nosniff')->inline();
+        }
+
         return $this->template->rander("tender_reports/bid_opening_form", [
             "tender" => $tender,
             "stage" => $stage,
@@ -463,6 +475,7 @@ class Tender_committee_opening_inbox extends Security_Controller
             "manual_form_download_url" => get_uri("tender_committee_opening_inbox/download_manual_bid_opening_form/" . $tender_id),
             "back_url" => get_uri("tender_committee_opening_inbox/details/" . $tender_id),
             "back_label" => "Back to Bid Opening Review",
+            "print_record_url" => get_uri('tender_committee_opening_inbox/bid_opening_form/' . $tender_id . '?format=pdf'),
         ]);
     }
 

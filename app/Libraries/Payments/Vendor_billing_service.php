@@ -223,6 +223,10 @@ final class Vendor_billing_service
     /** Called in the staff status-change transaction, never accepts a posted payment flag. */
     public function review(object $vendor, string $decision, int $reviewerId): array
     {
+        $application = (new Vendor_registration_service($this->db))->application((int) $vendor->id);
+        if ($application && $application->status !== 'approved' && in_array($decision, ['approved','submitted','new','revise','expired'], true)) {
+            throw new DomainException('Use Registration review on the vendor details page. Registration requires verified payment or approval of the Riyadha waiver.');
+        }
         $request = $this->latestOpen((int) $vendor->id);
         if (!$request) {
             if (in_array($decision, ['approved','submitted'], true) && (string) $vendor->status !== 'approved') {
@@ -268,7 +272,7 @@ final class Vendor_billing_service
         if ((string) $vendor->status !== $status && $this->db->tableExists('vendor_status_histories')) {
             $history = ['vendor_id' => (int) $vendor->id, 'from_status' => $vendor->status, 'to_status' => $status,
                 'action_by' => $userId, 'action_at' => $now, 'created_at' => $now, 'updated_at' => $now,
-                'action' => 'submit', 'reason' => $reason];
+                'action' => $status === 'approved' ? 'approve' : 'submit', 'reason' => $reason];
             $fields = array_flip($this->db->getFieldNames('vendor_status_histories'));
             $this->db->table($this->db->prefixTable('vendor_status_histories'))->insert(array_intersect_key($history, $fields));
         }

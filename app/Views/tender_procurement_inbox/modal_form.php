@@ -115,7 +115,7 @@ $dtValue = function ($value) {
                                 <span class="form-check-label">Release tender immediately after saving</span>
                             <?php } else { ?>
                                 <input type="checkbox" class="form-check-input" name="submit_for_approval" value="1" checked>
-                                <span class="form-check-label">Send this tender to the procurement manager before publishing</span>
+                                <span class="form-check-label">Send to the procurement manager when saved. Vendors see it only after manager approval and publication.</span>
                             <?php } ?>
                         </label>
                     </div>
@@ -191,7 +191,8 @@ $dtValue = function ($value) {
             <textarea name="brief_description" class="form-control" rows="3"><?php echo esc($tender->brief_description ?? $request->brief_description ?? ""); ?></textarea>
         </div>
 
-        <div class="form-group">
+        <?php if (!empty($testing_stage_enabled)) { ?>
+<div class="form-group">
             <label>Temporary Testing Stage</label>
             <?php
             echo form_dropdown(
@@ -202,6 +203,7 @@ $dtValue = function ($value) {
             );
             ?>
         </div>
+<?php } ?>
 
         <hr>
         <h5 class="mb15">Milestones</h5>
@@ -363,7 +365,8 @@ $dtValue = function ($value) {
                     <?php echo form_dropdown(
                         "target_mode",
                         [
-                            "specialty" => "Vendor Specialty",
+                            "combined" => app_lang("tender_audience_combined"),
+                                    "specialty" => "Vendor Specialty",
                             "group" => "Vendor Group",
                             "specific_vendors" => "Specific Vendors",
                             "group_and_specific_vendors" => "Vendor Group + Specific Vendors",
@@ -450,9 +453,11 @@ $dtValue = function ($value) {
                 <div id="vendor_picker_results" class="list-group" style="max-height:260px; overflow-y:auto;">
                     <div class="list-group-item text-muted">Search for approved vendors to add.</div>
                 </div>
-                <small class="form-text text-muted">In combined mode, specific vendors are added to all approved vendors in the selected group.</small>
+                <small class="form-text text-muted"><?php echo app_lang('tender_audience_extra_help'); ?></small>
             </div>
         </div>
+
+        <?php echo view('tender_procurement_inbox/vendor_audience'); ?>
 
         <?php if (!empty($invited_vendors)) { ?>
             <div class="table-responsive mb15">
@@ -584,13 +589,24 @@ $dtValue = function ($value) {
 
 <div class="modal-footer">
     <button type="button" class="btn btn-default" data-bs-dismiss="modal"><?php echo app_lang("close"); ?></button>
-    <button type="submit" class="btn btn-primary"><?php echo !empty($tender->id) ? "Save Tender" : "Create Tender"; ?></button>
+    <button type="submit" class="btn btn-primary tender-modal-save-label">Save Draft</button>
 </div>
 
 <?php echo form_close(); ?>
 
 <script>
 $(document).ready(function () {
+    function updateTenderSaveLabel() {
+        var label = <?php echo json_encode(($tender->status ?? 'draft') === 'published' ? 'Submit Change for Approval' : 'Save Draft'); ?>;
+        if ($('#tender-procurement-form input[name=submit_for_approval]').is(':checked')) {
+            label = 'Submit for Manager Approval';
+        } else if ($('#tender-procurement-form input[name=publish_now]').is(':checked')) {
+            label = 'Publish Tender';
+        }
+        $('.tender-modal-save-label').text(label);
+    }
+    $('#tender-procurement-form input[name=submit_for_approval], #tender-procurement-form input[name=publish_now]').on('change', updateTenderSaveLabel);
+    updateTenderSaveLabel();
     function initTenderCommitteeRoleSelection(scope) {
         var $scope = $(scope);
         var $chairman = $scope.find("[data-committee-role='chairman']");
@@ -685,18 +701,29 @@ $(document).ready(function () {
 
     initTenderCommitteeRoleSelection("#tender-procurement-form");
 
+    function toggleTenderAudience() {
+        var closed = $("#tender_type").val() === 'close';
+        $("#target_mode").closest('.form-group').toggle(!closed);
+        $("#target_mode option[value='combined']").prop('disabled', !closed);
+        if (closed) $("#target_mode").val('combined').trigger('change');
+        else if ($("#target_mode").val() === 'combined') $("#target_mode").val('specialty').trigger('change');
+        toggleTargetMode();
+    }
+    $("#tender_type").on('change', toggleTenderAudience);
+    toggleTenderAudience();
+
     function toggleTargetMode() {
         var mode = $("#target_mode").val();
-        $("#target-by-specialty-wrap").toggle(mode === "specialty");
-        $("#target-by-group-wrap").toggle(mode === "group" || mode === "group_and_specific_vendors");
-        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors" || mode === "group_and_specific_vendors");
-        $("#target-by-grade-wrap").toggle(mode === "grade");
+        $("#target-by-specialty-wrap").toggle(mode === "specialty" || mode === "combined");
+        $("#target-by-group-wrap").toggle(mode === "group" || mode === "group_and_specific_vendors" || mode === "combined");
+        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors" || mode === "group_and_specific_vendors" || mode === "combined");
+        $("#target-by-grade-wrap").toggle(mode === "grade" || mode === "combined");
     }
 
     var vendorSearchTimer = null;
 
     function htmlEscape(value) {
-        return $("<div>").text(value || "").html();
+        return $("<div>").text(value || "").html().replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     function selectedVendorIds() {
@@ -794,13 +821,21 @@ $(document).ready(function () {
         $(this).closest(".tender-selected-vendor-tag").remove();
     });
 
+    $("#vendor_sub_category_id").data('initial-id', "<?php echo !empty($target_sub->id) ? (int) $target_sub->id : ""; ?>");
+    var subcategoryRequest = 0;
+    var subcategoryReady = true;
     function loadSubcategories() {
+        subcategoryReady = false;
         var categoryId = $("#vendor_category_id").val();
-        var selectedId = "<?php echo !empty($target_sub->id) ? (int) $target_sub->id : ""; ?>";
-        $("#vendor_sub_category_id").load("<?php echo get_uri('tender_procurement_inbox/get_vendor_sub_categories_dropdown'); ?>?vendor_category_id=" + categoryId, function () {
-            if (selectedId) {
-                $("#vendor_sub_category_id").val(selectedId).trigger("change");
-            }
+        var selectedId = $("#vendor_sub_category_id").data('initial-id') || '';
+        $("#vendor_sub_category_id").removeData('initial-id').empty().append(new Option('- <?php echo app_lang('select'); ?> -', '')).trigger('change');
+        var currentRequest = ++subcategoryRequest;
+        $.get("<?php echo get_uri('tender_procurement_inbox/get_vendor_sub_categories_dropdown'); ?>", {vendor_category_id: categoryId}, function (options) {
+            if (currentRequest !== subcategoryRequest) return;
+            subcategoryReady = true;
+            $("#vendor_sub_category_id").html(options).val(selectedId).trigger('change');
+        }).fail(function () {
+            if (currentRequest === subcategoryRequest) appAlert.error(<?php echo json_encode(app_lang('tender_audience_failed')); ?>);
         });
     }
 
@@ -869,6 +904,10 @@ $(document).ready(function () {
 
     $("#tender-procurement-form").appForm({
         beforeAjaxSubmit: function () {
+            if (!subcategoryReady) {
+                appAlert.error(<?php echo json_encode(app_lang('tender_audience_failed')); ?>);
+                return false;
+            }
             return validateTenderWorkdays(true);
         },
         onSuccess: function () {

@@ -59,13 +59,12 @@ foreach (['english','arabic'] as $locale) {
         $check(str_contains($rowText,'2026-09-03') && !str_contains($rowText,'2026-09-04'),
             "$controllerName does not display tomorrow as the visit end date");
     }
-    $reflection=new ReflectionClass(App\Controllers\Gate_pass_portal::class);
-    $controller=$reflection->newInstanceWithoutConstructor();
-    $request=(object)['id'=>1,'reference'=>'PDF-QA','visit_from'=>'2026-09-01','visit_to'=>'2026-09-03 23:59:59','request_type'=>'person','fee_amount'=>3,'currency'=>'OMR','company_name'=>'QA Company','purpose_name'=>'Training','department_name'=>'IT'];
-    $pass=(object)['id'=>1,'gate_pass_no'=>'QA-PASS','qr_token'=>'qa-token-only','valid_from'=>'2026-09-01','valid_to'=>'2026-09-03'];
-    $html=$reflection->getMethod('_gate_pass_pdf_html')->invoke($controller,$request,$pass,[],[]);
-    $check(str_contains($html,'2026-09-03') && !str_contains($html,'2026-09-04'),'Calendar end date does not shift to the next day');
-    $pdf=new App\Libraries\Pdf('');$pdf->setPrintHeader(false);$pdf->setPrintFooter(false);$pdf->AddPage();$pdf->writeHTML($html);
+    $request=(object)['id'=>1,'reference'=>'PDF-QA','visit_from'=>'2026-09-01','visit_to'=>'2026-09-03 23:59:59','request_type'=>'person','fee_amount'=>3,'currency'=>'OMR','company_name'=>'QA Company','purpose_name'=>'Training','department_name'=>'IT','status'=>'rop_approved','stage'=>'issued'];
+    $pass=(object)['id'=>1,'gate_pass_request_id'=>1,'status'=>'active','gate_pass_no'=>'QA-PASS','qr_token'=>'qa-token-only','valid_from'=>'2026-09-01','valid_to'=>'2026-09-03'];
+    $details=App\Libraries\Gate_pass_pdf::details($request,$pass,[],[]);
+    $check($details['to']==='2026-09-03','Calendar end date does not shift to the next day');
+    $pdf=(new App\Libraries\Gate_pass_pdf())->build($request,$pass,[],[]);
+    $check($pdf->getNumPages()===2,'The gate pass and HSSE instructions are two pages');
     $binary=$pdf->Output('qa.pdf','S');
     $check(str_starts_with($binary,'%PDF-') && strlen($binary)>2000,"$locale PDF renders");
     $check(str_replace('\\','/',K_PATH_CACHE)===str_replace('\\','/',WRITEPATH.'cache/pdf/'),'PDF uses application writable cache');

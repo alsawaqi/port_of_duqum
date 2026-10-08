@@ -63,7 +63,7 @@ class Vendor_document_types extends Security_Controller
             "id"              => "numeric",
             "name"            => "required",
             "code"            => "required",
-            "vendor_group_id" => "numeric"
+            "vendor_group_id" => "permit_empty|is_natural_no_zero"
         ]);
 
         $id = $this->request->getPost("id");
@@ -84,6 +84,8 @@ class Vendor_document_types extends Security_Controller
         ];
 
         $data = clean_data($data);
+        // "All vendor groups" is a SQL NULL, not an empty string foreign key.
+        $data['vendor_group_id'] = $vendor_group_id ? (int) $vendor_group_id : null;
 
         $save_id = $this->Vendor_document_types_model->ci_save($data, $id);
 

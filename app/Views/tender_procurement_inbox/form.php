@@ -92,7 +92,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
             <button type="button" class="tender-step" data-step="3">
                 <span>4</span>
                 <strong>Target Vendors</strong>
-                <small>Specialty or group</small>
+                <small>Filters and extra vendors</small>
             </button>
             <button type="button" class="tender-step" data-step="4">
                 <span>5</span>
@@ -194,6 +194,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                     </div>
                     <div class="col-md-6">
                         <div class="form-group tender-publish-choice">
+                            <p class="small text-muted">1. Submit to the procurement manager. 2. Manager approves or returns it. 3. Procurement publishes the approved tender from the inbox. A draft awaiting approval is not visible to vendors.</p>
                             <label><?php echo $requires_change_approval ? "Submit Change for Procurement Manager Approval" : ($can_publish_after_manager_approval ? "Publish After Manager Approval" : "Submit for Procurement Manager Approval"); ?></label>
                             <label class="form-check mt10">
                                 <?php if ($requires_change_approval) { ?>
@@ -204,7 +205,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                                     <span class="form-check-label">Release tender immediately after saving</span>
                                 <?php } else { ?>
                                     <input type="checkbox" class="form-check-input" name="submit_for_approval" value="1" checked>
-                                    <span class="form-check-label">Send this tender to the procurement manager before publishing</span>
+                                    <span class="form-check-label">Send to the procurement manager when saved. Vendors see it only after manager approval and publication.</span>
                                 <?php } ?>
                             </label>
                             <?php if (!$can_publish_after_manager_approval && $procurement_manager_status === "pending") { ?>
@@ -280,7 +281,8 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                     <textarea name="brief_description" class="form-control" rows="5"><?php echo esc($tender->brief_description ?? $request->brief_description ?? ""); ?></textarea>
                 </div>
 
-                <div class="form-group">
+                <?php if (!empty($testing_stage_enabled)) { ?>
+<div class="form-group">
                     <label>Temporary Testing Stage</label>
                     <?php echo form_dropdown(
                         "testing_workflow_stage",
@@ -289,6 +291,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                         "class='form-control select2' id='testing_workflow_stage'"
                     ); ?>
                 </div>
+<?php } ?>
             </div>
 
             <div class="tender-wizard-step-panel" data-step-panel="1">
@@ -449,6 +452,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                             <?php echo form_dropdown(
                                 "target_mode",
                                 [
+                                    "combined" => app_lang("tender_audience_combined"),
                                     "specialty" => "Vendor Specialty",
                                     "group" => "Vendor Group",
                                     "specific_vendors" => "Specific Vendors",
@@ -542,10 +546,12 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                             <button type="button" class="btn btn-default tender-open-vendor-picker">
                                 <i data-feather="search" class="icon-16"></i> Search and Add Vendors
                             </button>
-                            <div class="text-off mt5">Add approved vendors individually. In the combined mode, these vendors are added to everyone in the selected group.</div>
+                            <div class="text-off mt5"><?php echo app_lang('tender_audience_extra_help'); ?></div>
                         </div>
                     </div>
                 </div>
+
+        <?php echo view('tender_procurement_inbox/vendor_audience'); ?>
 
                 <?php if (!empty($invited_vendors)) { ?>
                     <div class="table-responsive mt15">
@@ -812,7 +818,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                             <div><dt>Commercial Weight</dt><dd data-preview="commercial_weight">-</dd></div>
                             <div><dt>Tender Fees</dt><dd data-preview="tender_fee">-</dd></div>
                             <div><dt>Manager Step</dt><dd data-preview="publish_now">-</dd></div>
-                            <div><dt>Testing Stage</dt><dd data-preview="testing_workflow_stage">-</dd></div>
+                            <?php if (!empty($testing_stage_enabled)) { ?><div><dt>Testing Stage</dt><dd data-preview="testing_workflow_stage">-</dd></div><?php } ?>
                             <div class="span-all"><dt>Description</dt><dd data-preview="brief_description">-</dd></div>
                         </dl>
                     </section>
@@ -908,7 +914,7 @@ $commercial_weight_value = $tender->commercial_weight ?? $request->commercial_we
                 </button>
                 <button type="submit" class="btn btn-success tender-save">
                     <i data-feather="check-circle" class="icon-16"></i>
-                    <?php echo $requires_change_approval ? "Submit Change for Approval" : ($is_edit ? "Save Tender" : "Create Tender"); ?>
+                    <span class="tender-save-label"><?php echo $requires_change_approval ? "Submit Change for Approval" : "Submit for Manager Approval"; ?></span>
                 </button>
             </div>
         </section>
@@ -1320,7 +1326,10 @@ $(document).ready(function () {
         setPreview("tender_fee", fieldValue("tender_fee") ? fieldValue("tender_fee") + " OMR" : "-");
         var publishAfterSave = $('input[name="publish_now"]').is(":checked");
         var submitForApproval = $('input[name="submit_for_approval"]').is(":checked");
-        setPreview("publish_now", publishAfterSave ? "Publish after save" : (submitForApproval ? "Submit for procurement manager approval" : "Save as draft"));
+        var changeApproval = <?php echo $requires_change_approval ? 'true' : 'false'; ?>;
+        var actionLabel = changeApproval ? 'Submit Change for Approval' : (publishAfterSave ? 'Publish Tender' : (submitForApproval ? 'Submit for Manager Approval' : 'Save Draft'));
+        $('.tender-save-label').text(actionLabel);
+        setPreview("publish_now", actionLabel);
         setPreview("testing_workflow_stage", selectedText("#testing_workflow_stage"));
         setPreview("brief_description", fieldValue("brief_description"));
 
@@ -1406,6 +1415,11 @@ $(document).ready(function () {
 
         if (step === 3) {
             var targetMode = $("#target_mode").val();
+            if (targetMode === 'combined' && $("#tender_type").val() === 'close' && !hasRequestSelectedVendors
+                && !$("#vendor_group_id").val() && !$("#vendor_grade_id").val() && !$("#vendor_category_id").val() && !selectedVendorTexts().length) {
+                isValid = false;
+                markField($("#selected-vendor-tags"), true);
+            }
             var requiresGroup = targetMode === "group" || targetMode === "group_and_specific_vendors";
             var requiresSpecific = targetMode === "specific_vendors" || targetMode === "group_and_specific_vendors";
             var requiresGrade = targetMode === "grade";
@@ -1452,22 +1466,41 @@ $(document).ready(function () {
         return true;
     }
 
+    function toggleTenderAudience() {
+        var closed = $("#tender_type").val() === 'close';
+        $("#target_mode").closest('.form-group').toggle(!closed);
+        $("#target_mode option[value='combined']").prop('disabled', !closed);
+        if (closed) $("#target_mode").val('combined').trigger('change');
+        else if ($("#target_mode").val() === 'combined') $("#target_mode").val('specialty').trigger('change');
+        toggleTargetMode();
+    }
+    $("#tender_type").on('change', toggleTenderAudience);
+    toggleTenderAudience();
+
     function toggleTargetMode() {
         var mode = $("#target_mode").val();
-        $("#target-by-specialty-wrap").toggle(mode === "specialty");
-        $("#target-by-group-wrap").toggle(mode === "group" || mode === "group_and_specific_vendors");
-        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors" || mode === "group_and_specific_vendors");
-        $("#target-by-grade-wrap").toggle(mode === "grade");
+        $("#target-by-specialty-wrap").toggle(mode === "specialty" || mode === "combined");
+        $("#target-by-group-wrap").toggle(mode === "group" || mode === "group_and_specific_vendors" || mode === "combined");
+        $("#target-by-specific-vendors-wrap").toggle(mode === "specific_vendors" || mode === "group_and_specific_vendors" || mode === "combined");
+        $("#target-by-grade-wrap").toggle(mode === "grade" || mode === "combined");
         renderPreview();
     }
 
+    $("#vendor_sub_category_id").data('initial-id', "<?php echo !empty($target_sub->id) ? (int) $target_sub->id : ""; ?>");
+    var subcategoryRequest = 0;
+    var subcategoryReady = true;
     function loadSubcategories() {
+        subcategoryReady = false;
         var categoryId = $("#vendor_category_id").val();
-        var selectedId = "<?php echo !empty($target_sub->id) ? (int) $target_sub->id : ""; ?>";
-        $("#vendor_sub_category_id").load("<?php echo get_uri('tender_procurement_inbox/get_vendor_sub_categories_dropdown'); ?>?vendor_category_id=" + categoryId, function () {
-            if (selectedId) {
-                $("#vendor_sub_category_id").val(selectedId).trigger("change");
-            }
+        var selectedId = $("#vendor_sub_category_id").data('initial-id') || '';
+        $("#vendor_sub_category_id").removeData('initial-id').empty().append(new Option('- <?php echo app_lang('select'); ?> -', '')).trigger('change');
+        var currentRequest = ++subcategoryRequest;
+        $.get("<?php echo get_uri('tender_procurement_inbox/get_vendor_sub_categories_dropdown'); ?>", {vendor_category_id: categoryId}, function (options) {
+            if (currentRequest !== subcategoryRequest) return;
+            subcategoryReady = true;
+            $("#vendor_sub_category_id").html(options).val(selectedId).trigger('change');
+        }).fail(function () {
+            if (currentRequest === subcategoryRequest) appAlert.error(<?php echo json_encode(app_lang('tender_audience_failed')); ?>);
         });
     }
 
@@ -1512,7 +1545,7 @@ $(document).ready(function () {
     });
 
     function htmlEscape(value) {
-        return $("<div>").text(value || "").html();
+        return $("<div>").text(value || "").html().replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     function selectedVendorIds() {
@@ -1711,6 +1744,10 @@ $(document).ready(function () {
     $("#tender-procurement-form").appForm({
         isModal: false,
         beforeAjaxSubmit: function () {
+            if (!subcategoryReady) {
+                appAlert.error(<?php echo json_encode(app_lang('tender_audience_failed')); ?>);
+                return false;
+            }
             for (var step = 0; step <= maxStep; step++) {
                 if (!validateStep(step, true)) {
                     showStep(step);

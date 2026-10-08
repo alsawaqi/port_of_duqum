@@ -13,6 +13,12 @@ class Tender_testing_stage
         "commercial" => "6. Commercial Evaluation",
     ];
 
+    public static function enabled(bool $isAdmin): bool
+    {
+        return $isAdmin && defined('ENVIRONMENT') && ENVIRONMENT !== 'production'
+            && filter_var(env('TENDER_TESTING_STAGE_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
     public function options(bool $include_blank = true): array
     {
         if (!$include_blank) {

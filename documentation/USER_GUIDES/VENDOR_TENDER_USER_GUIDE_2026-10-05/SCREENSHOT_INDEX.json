@@ -1,0 +1,472 @@
+[
+  {
+    "screen": "01-signin",
+    "title": "Sign in by email or CR number",
+    "file": "images/01-signin.jpg"
+  },
+  {
+    "screen": "02-registration-company",
+    "title": "Vendor registration - company details",
+    "file": "images/02-registration-company.jpg"
+  },
+  {
+    "screen": "03-registration-documents",
+    "title": "Required group documents",
+    "file": "images/03-registration-documents.jpg"
+  },
+  {
+    "screen": "04-cr-selection",
+    "title": "Choose the vendor CR",
+    "file": "images/04-cr-selection.jpg"
+  },
+  {
+    "screen": "05-vendor-overview",
+    "title": "Vendor portal overview",
+    "file": "images/05-vendor-overview.jpg"
+  },
+  {
+    "screen": "06-contacts",
+    "title": "Vendor Contacts",
+    "file": "images/06-contacts.jpg"
+  },
+  {
+    "screen": "07-contacts-form",
+    "title": "Add Contacts",
+    "file": "images/07-contacts-form.jpg"
+  },
+  {
+    "screen": "08-bank-accounts",
+    "title": "Vendor bank",
+    "file": "images/08-bank-accounts.jpg"
+  },
+  {
+    "screen": "09-bank-accounts-form",
+    "title": "Add Bank Accounts",
+    "file": "images/09-bank-accounts-form.jpg"
+  },
+  {
+    "screen": "10-branches",
+    "title": "Vendor Branches",
+    "file": "images/10-branches.jpg"
+  },
+  {
+    "screen": "11-branches-form",
+    "title": "Add Branches",
+    "file": "images/11-branches-form.jpg"
+  },
+  {
+    "screen": "12-credentials",
+    "title": "Vendor Credentials",
+    "file": "images/12-credentials.jpg"
+  },
+  {
+    "screen": "13-credentials-form",
+    "title": "Add Credentials",
+    "file": "images/13-credentials-form.jpg"
+  },
+  {
+    "screen": "14-specialties",
+    "title": "Vendor specialties",
+    "file": "images/14-specialties.jpg"
+  },
+  {
+    "screen": "15-specialties-form",
+    "title": "Add Specialties",
+    "file": "images/15-specialties-form.jpg"
+  },
+  {
+    "screen": "16-documents",
+    "title": "Vendor documents",
+    "file": "images/16-documents.jpg"
+  },
+  {
+    "screen": "17-documents-form",
+    "title": "Add Documents",
+    "file": "images/17-documents-form.jpg"
+  },
+  {
+    "screen": "18-vendor-tenders",
+    "title": "Vendor Tenders",
+    "file": "images/18-vendor-tenders.jpg"
+  },
+  {
+    "screen": "19-vendor-password",
+    "title": "Change your password",
+    "file": "images/19-vendor-password.jpg"
+  },
+  {
+    "screen": "20-vendor-groups",
+    "title": "Vendor Groups",
+    "file": "images/20-vendor-groups.jpg"
+  },
+  {
+    "screen": "21-group-fee-form",
+    "title": "Vendor Groups settings",
+    "file": "images/21-group-fee-form.jpg"
+  },
+  {
+    "screen": "22-vendor-group-fees",
+    "title": "Vendor Group Fees",
+    "file": "images/22-vendor-group-fees.jpg"
+  },
+  {
+    "screen": "23-document-types",
+    "title": "Vendor Document Types",
+    "file": "images/23-document-types.jpg"
+  },
+  {
+    "screen": "24-document-type-form",
+    "title": "Vendor Document Types settings",
+    "file": "images/24-document-type-form.jpg"
+  },
+  {
+    "screen": "25-vendor-grades",
+    "title": "Vendor Grades",
+    "file": "images/25-vendor-grades.jpg"
+  },
+  {
+    "screen": "26-vendor-master",
+    "title": "Vendors master",
+    "file": "images/26-vendor-master.jpg"
+  },
+  {
+    "screen": "29-update-requests",
+    "title": "Vendor Update Requests",
+    "file": "images/29-update-requests.jpg"
+  },
+  {
+    "screen": "27-vendor-admin-details",
+    "title": "Vendor details and registration review",
+    "file": "images/27-vendor-admin-details.jpg"
+  },
+  {
+    "screen": "28-vendor-code",
+    "title": "Assign a vendor code",
+    "file": "images/28-vendor-code.jpg"
+  },
+  {
+    "screen": "30-waiver-review",
+    "title": "Approve waiver or request payment",
+    "file": "images/30-waiver-review.jpg"
+  },
+  {
+    "screen": "31-waiver-payment",
+    "title": "Require payment with a reason",
+    "file": "images/31-waiver-payment.jpg"
+  },
+  {
+    "screen": "32-pending-registration",
+    "title": "Pending registration status",
+    "file": "images/32-pending-registration.jpg"
+  },
+  {
+    "screen": "40-procurement-inbox",
+    "title": "Procurement Inbox",
+    "file": "images/40-procurement-inbox.jpg"
+  },
+  {
+    "screen": "41-wizard-0",
+    "title": "Tender Details",
+    "file": "images/41-wizard-0.jpg"
+  },
+  {
+    "screen": "42-wizard-1",
+    "title": "Milestones",
+    "file": "images/42-wizard-1.jpg"
+  },
+  {
+    "screen": "43-wizard-2",
+    "title": "Team Assignment",
+    "file": "images/43-wizard-2.jpg"
+  },
+  {
+    "screen": "44-wizard-3",
+    "title": "Target Vendors",
+    "file": "images/44-wizard-3.jpg"
+  },
+  {
+    "screen": "45-wizard-4",
+    "title": "Documents and Requirements",
+    "file": "images/45-wizard-4.jpg"
+  },
+  {
+    "screen": "46-wizard-5",
+    "title": "Preview and Save Tender",
+    "file": "images/46-wizard-5.jpg"
+  },
+  {
+    "screen": "47-manager-review",
+    "title": "Procurement manager review",
+    "file": "images/47-manager-review.jpg"
+  },
+  {
+    "screen": "48-manager-decision",
+    "title": "Approve, return or reject",
+    "file": "images/48-manager-decision.jpg"
+  },
+  {
+    "screen": "49-publish-tender",
+    "title": "Publish after manager approval",
+    "file": "images/49-publish-tender.jpg"
+  },
+  {
+    "screen": "50-change-dates",
+    "title": "Propose a schedule change for manager approval",
+    "file": "images/50-change-dates.jpg"
+  },
+  {
+    "screen": "51-procurement-chat",
+    "title": "Procurement clarification chat",
+    "file": "images/51-procurement-chat.jpg"
+  },
+  {
+    "screen": "52-clarification-routing",
+    "title": "Procurement routing with attachments",
+    "file": "images/52-clarification-routing.jpg"
+  },
+  {
+    "screen": "53-group-announcement",
+    "title": "Publish group updates and attachments",
+    "file": "images/53-group-announcement.jpg"
+  },
+  {
+    "screen": "54-vendor-tender-details",
+    "title": "Vendor tender details",
+    "file": "images/54-vendor-tender-details.jpg"
+  },
+  {
+    "screen": "55-vendor-clarification",
+    "title": "Send a vendor clarification",
+    "file": "images/55-vendor-clarification.jpg"
+  },
+  {
+    "screen": "56-bid-submission",
+    "title": "Item pricing and proposal uploads",
+    "file": "images/56-bid-submission.jpg"
+  },
+  {
+    "screen": "57-tender-requests",
+    "title": "Department tender requests",
+    "file": "images/57-tender-requests.jpg"
+  },
+  {
+    "screen": "58-department-request-form",
+    "title": "Department request form",
+    "file": "images/58-department-request-form.jpg"
+  },
+  {
+    "screen": "59-department-manager",
+    "title": "Department manager review",
+    "file": "images/59-department-manager.jpg"
+  },
+  {
+    "screen": "60-finance-inbox",
+    "title": "Finance verification",
+    "file": "images/60-finance-inbox.jpg"
+  },
+  {
+    "screen": "61-opening-inbox",
+    "title": "Bid Opening Inbox",
+    "file": "images/61-opening-inbox.jpg"
+  },
+  {
+    "screen": "62-generate-codes",
+    "title": "Generate 3-Key Codes",
+    "file": "images/62-generate-codes.jpg"
+  },
+  {
+    "screen": "63-confirm-role-code",
+    "title": "Confirm your own assigned role code",
+    "file": "images/63-confirm-role-code.jpg"
+  },
+  {
+    "screen": "64-opened-package",
+    "title": "Unlocked bid package and digital signatures",
+    "file": "images/64-opened-package.jpg"
+  },
+  {
+    "screen": "65-opening-signature",
+    "title": "Draw and confirm a signature",
+    "file": "images/65-opening-signature.jpg"
+  },
+  {
+    "screen": "67-technical-inbox",
+    "title": "Technical evaluation",
+    "file": "images/67-technical-inbox.jpg"
+  },
+  {
+    "screen": "68-technical-evaluation",
+    "title": "Technical bid evaluation",
+    "file": "images/68-technical-evaluation.jpg"
+  },
+  {
+    "screen": "69-commercial-inbox",
+    "title": "Commercial evaluation",
+    "file": "images/69-commercial-inbox.jpg"
+  },
+  {
+    "screen": "70-commercial-evaluation",
+    "title": "Commercial bid evaluation",
+    "file": "images/70-commercial-evaluation.jpg"
+  },
+  {
+    "screen": "33-registration-login",
+    "title": "Registration account access",
+    "file": "images/33-registration-login.jpg"
+  },
+  {
+    "screen": "34-registration-location",
+    "title": "Registration company location",
+    "file": "images/34-registration-location.jpg"
+  },
+  {
+    "screen": "35-profile-checklist",
+    "title": "Complete profile and renewal action",
+    "file": "images/35-profile-checklist.jpg"
+  },
+  {
+    "screen": "36-categories",
+    "title": "Vendor categories",
+    "file": "images/36-categories.jpg"
+  },
+  {
+    "screen": "37-subcategories",
+    "title": "Vendor subcategories",
+    "file": "images/37-subcategories.jpg"
+  },
+  {
+    "screen": "38-specialty-filter",
+    "title": "Filter vendors by specialties",
+    "file": "images/38-specialty-filter.jpg"
+  },
+  {
+    "screen": "39-vendor-accounting",
+    "title": "Vendor payment accounting",
+    "file": "images/39-vendor-accounting.jpg"
+  },
+  {
+    "screen": "80-tender-accounting",
+    "title": "Tender payment accounting",
+    "file": "images/80-tender-accounting.jpg"
+  },
+  {
+    "screen": "81-procurement-users",
+    "title": "Tender Users master",
+    "file": "images/81-procurement-users.jpg"
+  },
+  {
+    "screen": "82-staff-user-form",
+    "title": "Create or edit a procurement user",
+    "file": "images/82-staff-user-form.jpg"
+  },
+  {
+    "screen": "83-tender-upload-files",
+    "title": "Upload tender documents and set access",
+    "file": "images/83-tender-upload-files.jpg"
+  },
+  {
+    "screen": "84-department-manager-decision",
+    "title": "Department manager decision",
+    "file": "images/84-department-manager-decision.jpg"
+  },
+  {
+    "screen": "85-finance-decision",
+    "title": "Finance verify or reject",
+    "file": "images/85-finance-decision.jpg"
+  },
+  {
+    "screen": "86-committee-request-review",
+    "title": "Committee request approval",
+    "file": "images/86-committee-request-review.jpg"
+  },
+  {
+    "screen": "87-committee-request-decision",
+    "title": "Committee approve or reject request",
+    "file": "images/87-committee-request-decision.jpg"
+  },
+  {
+    "screen": "66-proposal-handover",
+    "title": "Procurement proposal review",
+    "file": "images/66-proposal-handover.jpg"
+  },
+  {
+    "screen": "88-signed-opening",
+    "title": "All committee signatures completed",
+    "file": "images/88-signed-opening.jpg"
+  },
+  {
+    "screen": "71-award-ready",
+    "title": "Tender ready for final award",
+    "file": "images/71-award-ready.jpg"
+  },
+  {
+    "screen": "72-awarded-tender",
+    "title": "Award result and email status",
+    "file": "images/72-awarded-tender.jpg"
+  },
+  {
+    "screen": "73-evaluation-ranking",
+    "title": "Technical and commercial evaluation results",
+    "file": "images/73-evaluation-ranking.jpg"
+  },
+  {
+    "screen": "74-timeline",
+    "title": "Tender milestones and timeline",
+    "file": "images/74-timeline.jpg"
+  },
+  {
+    "screen": "75-document-audit",
+    "title": "Documents and opening audit",
+    "file": "images/75-document-audit.jpg"
+  },
+  {
+    "screen": "76-vendor-award",
+    "title": "Successful vendor outcome",
+    "file": "images/76-vendor-award.jpg"
+  },
+  {
+    "screen": "77-award-letter",
+    "title": "Letter of award",
+    "file": "images/77-award-letter.jpg"
+  },
+  {
+    "screen": "78-vendor-regret",
+    "title": "Unsuccessful vendor outcome",
+    "file": "images/78-vendor-regret.jpg"
+  },
+  {
+    "screen": "89-payment-required",
+    "title": "Registration fee and limited access",
+    "file": "images/89-payment-required.jpg"
+  },
+  {
+    "screen": "90-participation-review",
+    "title": "Approve or reject vendor participation",
+    "file": "images/90-participation-review.jpg"
+  },
+  {
+    "screen": "94-stage-control",
+    "title": "Request a formal stage reopening",
+    "file": "images/94-stage-control.jpg"
+  },
+  {
+    "screen": "91-team-clarifications",
+    "title": "Internal technical clarification replies",
+    "file": "images/91-team-clarifications.jpg"
+  },
+  {
+    "screen": "95-fee-record-form",
+    "title": "Set registration or renewal fee",
+    "file": "images/95-fee-record-form.jpg"
+  },
+  {
+    "screen": "92-opening-record",
+    "title": "Official Bid Opening Record",
+    "file": "images/92-opening-record.jpg"
+  },
+  {
+    "screen": "93-regret-letter",
+    "title": "Personalised regret letter",
+    "file": "images/93-regret-letter.jpg"
+  }
+]

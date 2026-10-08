@@ -231,6 +231,7 @@ class Gate_pass_requests_model extends Crud_model
                     $purposes.name AS purpose_name,
                     $users.first_name AS requester_first_name,
                     $users.last_name AS requester_last_name,
+                    $users.email AS requester_email,
                     COALESCE($users.phone, $users.alternative_phone) AS requester_phone,
                     CONCAT($users.first_name,' ',$users.last_name) AS requester_name,
                     (

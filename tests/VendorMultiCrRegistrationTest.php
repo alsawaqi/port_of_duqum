@@ -27,7 +27,7 @@ $assertContains('(int)($existing_user->disable_login ?? 0) === 1', $guestControl
 $assertContains('"user_id"       => (int)$user_id', $guestController, "guest registrant contact must link to its user");
 $assertContains('"module"    => "contacts"', $guestController, "guest registrant contact must enter contact approval");
 $assertContains('"is_primary"    => 1', $guestController, "guest registrant must be the primary contact");
-$assertContains('"status" => "invited"', $guestController, "guest owner access must wait for contact approval");
+$assertContains('"status" => "active"', $guestController, "guest owner may sign in for limited registration status and payment");
 $assertContains('A public registration must never reactivate an identity', $guestController, "deleted identities require administrator restoration");
 $assertNotContains('Failed to restore existing user', $guestController, "public signup cannot revive a deleted account");
 $assertNotContains('user_already_registered_as_vendor', $guestController, "an existing vendor login may register another CR");

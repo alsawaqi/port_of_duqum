@@ -12,11 +12,7 @@
             ?>
             <style type="text/css">
                 body.pod-auth-page .pod-auth-brand-panel {
-                    background-image:
-                        linear-gradient(145deg, rgba(8, 20, 35, .95), rgba(8, 20, 35, .78)),
-                        url('<?php echo esc($background_url); ?>');
-                    background-size: cover;
-                    background-position: center;
+                    --pod-auth-background-image: url('<?php echo esc($background_url); ?>');
                 }
             </style>
         <?php } ?>

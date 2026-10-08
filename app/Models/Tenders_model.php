@@ -496,6 +496,8 @@ class Tenders_model extends Crud_model
         $vg = $this->db->prefixTable("vendor_groups");
         $vgr = $this->db->prefixTable("vendor_grades");
 
+        $closed_match = \App\Libraries\Tender_vendor_selection::matchingRuleSql($vs);
+
         $sql = "SELECT
                     $t.*,
                     $tiv.invite_status,
@@ -521,6 +523,8 @@ class Tenders_model extends Crud_model
                         WHEN participated_bid.id IS NOT NULL THEN 1
                         WHEN target_vendor.id IS NOT NULL THEN 1
                         WHEN $tiv.invite_status IN ('sent', 'delivered', 'opened', 'approved') THEN 1
+                        WHEN $t.tender_type = 'close' AND $closed_match THEN 1
+                        WHEN $t.tender_type = 'close' THEN 0
                         WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 1
                         WHEN target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 1
                         WHEN target.vendor_category_id IS NOT NULL
@@ -542,6 +546,8 @@ class Tenders_model extends Crud_model
                         WHEN participated_bid.id IS NOT NULL THEN 'participated'
                         WHEN target_vendor.id IS NOT NULL THEN 'specific_vendor'
                         WHEN $tiv.id IS NOT NULL THEN 'invited'
+                        WHEN $t.tender_type = 'close' AND $closed_match THEN 'combined'
+                        WHEN $t.tender_type = 'close' THEN 'eligible'
                         WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 'vendor_group'
                         WHEN target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 'vendor_grade'
                         WHEN target.vendor_category_id IS NOT NULL
@@ -617,6 +623,7 @@ class Tenders_model extends Crud_model
                         (
                             $t.status = 'published'
                             AND $t.workflow_stage = 'bidding'
+                            AND ($t.tender_type <> 'close' OR vendor_profile.status = 'approved')
                             AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
                             AND ($t.closing_at IS NULL OR $t.closing_at > ?)
                             AND (
@@ -635,7 +642,8 @@ class Tenders_model extends Crud_model
                                         AND $t.tender_type = 'open'
                                     )
                                     OR (
-                                        target.id IS NOT NULL
+                                        ($t.tender_type = 'close' AND $closed_match)
+                                        OR ($t.tender_type <> 'close' AND target.id IS NOT NULL
                                         AND (
                                             (
                                             target.vendor_group_id IS NOT NULL
@@ -660,7 +668,7 @@ class Tenders_model extends Crud_model
                                                         )
                                                     )
                                             )
-                                        )
+                                        ))
                                     )
                                 )
                             )
@@ -690,6 +698,8 @@ class Tenders_model extends Crud_model
         $vg = $this->db->prefixTable("vendor_groups");
         $vgr = $this->db->prefixTable("vendor_grades");
 
+        $closed_match = \App\Libraries\Tender_vendor_selection::matchingRuleSql($vs);
+
         $sql = "SELECT
                     $t.*,
                     $tiv.invite_status,
@@ -715,6 +725,8 @@ class Tenders_model extends Crud_model
                         WHEN participated_bid.id IS NOT NULL THEN 1
                         WHEN target_vendor.id IS NOT NULL THEN 1
                         WHEN $tiv.invite_status IN ('sent', 'delivered', 'opened', 'approved') THEN 1
+                        WHEN $t.tender_type = 'close' AND $closed_match THEN 1
+                        WHEN $t.tender_type = 'close' THEN 0
                         WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 1
                         WHEN target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 1
                         WHEN target.vendor_category_id IS NOT NULL
@@ -736,6 +748,8 @@ class Tenders_model extends Crud_model
                         WHEN participated_bid.id IS NOT NULL THEN 'participated'
                         WHEN target_vendor.id IS NOT NULL THEN 'specific_vendor'
                         WHEN $tiv.id IS NOT NULL THEN 'invited'
+                        WHEN $t.tender_type = 'close' AND $closed_match THEN 'combined'
+                        WHEN $t.tender_type = 'close' THEN 'eligible'
                         WHEN target.vendor_group_id IS NOT NULL AND target.vendor_group_id = vendor_profile.vendor_group_id THEN 'vendor_group'
                         WHEN target.vendor_grade_id IS NOT NULL AND target.vendor_grade_id = vendor_profile.vendor_grade_id THEN 'vendor_grade'
                         WHEN target.vendor_category_id IS NOT NULL
@@ -812,6 +826,7 @@ class Tenders_model extends Crud_model
                         (
                             $t.status = 'published'
                             AND $t.workflow_stage = 'bidding'
+                            AND ($t.tender_type <> 'close' OR vendor_profile.status = 'approved')
                             AND (COALESCE($t.release_at, $t.published_at) IS NULL OR COALESCE($t.release_at, $t.published_at) <= ?)
                             AND ($t.closing_at IS NULL OR $t.closing_at > ?)
                             AND (
@@ -830,7 +845,8 @@ class Tenders_model extends Crud_model
                                         AND $t.tender_type = 'open'
                                     )
                                     OR (
-                                        target.id IS NOT NULL
+                                        ($t.tender_type = 'close' AND $closed_match)
+                                        OR ($t.tender_type <> 'close' AND target.id IS NOT NULL
                                         AND (
                                             (
                                             target.vendor_group_id IS NOT NULL
@@ -855,7 +871,7 @@ class Tenders_model extends Crud_model
                                                         )
                                                     )
                                             )
-                                        )
+                                        ))
                                     )
                                 )
                             )

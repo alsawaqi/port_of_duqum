@@ -74,23 +74,16 @@ $team_role_label = function ($role) {
 };
 
 $target_label = function ($rule) {
-    if (!empty($rule->vendor_grade_id)) {
-        return "Grade: " . trim(($rule->vendor_grade_code ? $rule->vendor_grade_code . " - " : "") . ($rule->vendor_grade_name ?? ""));
-    }
-
-    if (!empty($rule->vendor_group_id)) {
-        return "Group: " . trim(($rule->vendor_group_code ? $rule->vendor_group_code . " - " : "") . ($rule->vendor_group_name ?? ""));
-    }
-
     $parts = [];
-    if (!empty($rule->category_name)) {
-        $parts[] = $rule->category_name;
+    if (!empty($rule->vendor_group_id)) {
+        $parts[] = app_lang('vendor_group') . ': ' . ($rule->vendor_group_name ?? '');
     }
-    if (!empty($rule->sub_category_name)) {
-        $parts[] = $rule->sub_category_name;
+    if (!empty($rule->vendor_grade_id)) {
+        $parts[] = app_lang('vendor_grade') . ': ' . ($rule->vendor_grade_name ?? '');
     }
-
-    return $parts ? implode(" / ", $parts) : "Specialty target";
+    if (!empty($rule->category_name)) $parts[] = $rule->category_name;
+    if (!empty($rule->sub_category_name)) $parts[] = $rule->sub_category_name;
+    return implode(' + ', $parts);
 };
 
 $document_actions = function ($doc) {
@@ -372,7 +365,7 @@ $document_actions = function ($doc) {
                                     <tr>
                                         <td><?php echo esc($doc->doc_type ?? "-"); ?></td>
                                         <td><?php echo esc($doc->title ?? "-"); ?></td>
-                                        <td><?php echo esc($doc->original_name ?? "-"); ?></td>
+                                        <td><?php if (!empty($doc->deleted)) { ?><span class="badge bg-warning text-dark">Pending approval</span> <?php } ?><?php echo esc($doc->original_name ?? "-"); ?></td>
                                         <td><?php echo !empty($doc->size_bytes) ? esc(convert_file_size($doc->size_bytes)) : "-"; ?></td>
                                         <td><?php echo esc(trim((string) ($doc->uploaded_by_name ?? "")) ?: "-"); ?></td>
                                         <td class="text-center"><?php echo $document_actions($doc); ?></td>
@@ -424,6 +417,7 @@ $document_actions = function ($doc) {
                             <button type="button" id="manager-return-tender" class="btn btn-warning">
                                 <i data-feather="corner-up-left" class="icon-16"></i> Return for Update
                             </button>
+                            <button type="button" id="manager-reject-tender" class="btn btn-danger">Reject request</button>
                         </div>
                     <?php } ?>
                 </div>
@@ -449,6 +443,25 @@ $document_actions = function ($doc) {
                             <strong><?php echo esc($vendor->vendor_name ?? "-"); ?></strong>
                             <div class="text-off"><?php echo esc($vendor->email ?? "-"); ?></div>
                         </div>
+                    <?php } ?>
+                    <?php if (isset($pending_audience) || !empty($pending_audience_error)) { ?>
+                        <hr>
+                        <h5><?php echo app_lang('tender_audience_pending'); ?></h5>
+                        <p class="text-muted"><?php echo app_lang('tender_audience_help'); ?></p>
+                        <?php if (!empty($pending_audience_error)) { ?>
+                            <div class="alert alert-warning"><?php echo esc($pending_audience_error); ?></div>
+                        <?php } else { ?>
+                            <p><?php echo esc(str_replace('{count}', (string) count($pending_audience), app_lang('tender_audience_count'))); ?></p>
+                            <div class="table-responsive" style="max-height:320px; overflow:auto;">
+                                <table class="table table-striped"><thead><tr>
+                                    <th><?php echo app_lang('vendor_name'); ?></th><th><?php echo app_lang('cr_number'); ?></th><th><?php echo app_lang('tender_audience_source'); ?></th>
+                                </tr></thead><tbody>
+                                    <?php foreach ($pending_audience as $recipient) { ?>
+                                        <tr><td><?php echo esc($recipient['name']); ?></td><td><?php echo esc($recipient['cr_number']); ?></td><td><?php echo app_lang($recipient['explicit'] ? 'tender_audience_extra' : 'tender_audience_matched'); ?></td></tr>
+                                    <?php } ?>
+                                </tbody></table>
+                            </div>
+                        <?php } ?>
                     <?php } ?>
                 </div>
             </div>
@@ -521,13 +534,16 @@ $document_actions = function ($doc) {
             }
 
             $("#manager-approve-tender").on("click", function () {
-                if (confirm("Approve this tender for publishing?")) {
+                if (confirm("Approve this request?")) {
                     postReview("<?php echo get_uri("tender_procurement_manager_inbox/approve"); ?>", false);
                 }
             });
 
             $("#manager-return-tender").on("click", function () {
                 postReview("<?php echo get_uri("tender_procurement_manager_inbox/request_revision"); ?>", true);
+            });
+            $("#manager-reject-tender").on("click", function () {
+                postReview("<?php echo get_uri('tender_procurement_manager_inbox/reject'); ?>", true);
             });
         });
     </script>

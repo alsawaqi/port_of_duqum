@@ -42,6 +42,7 @@
                                      data-msg-required='" . app_lang('field_required') . "'"
                                 );
                                 ?>
+                                <p id="registration-group-summary" class="small text-muted mt-2" role="status"></p>
                             </div>
                         </div>
 
@@ -372,79 +373,15 @@
                     <div class="gv-section-title">
                         <h2>04. <span class="gv-section-icon"><i data-feather="file-text"></i></span><?php echo app_lang("documents"); ?></h2>
                         <p class="gv-help">
-                            <?php echo app_lang("guest_vendor_documents_help"); ?>
+                            <?php echo app_lang("vendor_registration_documents_help"); ?>
                         </p>
                     </div>
 
-                    <div class="row">
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="vendor_document_type_id">
-                                    <?php echo app_lang('document_type'); ?> <span class="text-danger">*</span>
-                                </label>
-                                <?php
-                                echo form_dropdown(
-                                    "vendor_document_type_id[]",
-                                    $vendor_document_types_dropdown,
-                                    "",
-                                    "class='select2 validate-hidden gv-document-type' id='vendor_document_type_id'
-                     data-rule-required='true'
-                     data-msg-required='" . app_lang('field_required') . "'"
-                                );
-                                ?>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="document_file">
-                                    <?php echo app_lang('document'); ?> <span class="text-danger">*</span>
-                                </label>
-                                <?php
-                                echo form_upload([
-                                    "id"   => "document_file",
-                                    "name" => "file",
-                                    "class" => "form-control",
-                                    "data-rule-required" => true,
-                                    "data-msg-required"  => app_lang('field_required')
-                                ]);
-                                ?>
-                                <small class="text-muted">
-                                    <?php echo app_lang("allowed_document_formats"); ?>
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="issued_at"><?php echo app_lang('issued_at'); ?></label>
-                                <?php
-                                echo form_input([
-                                    "id"   => "issued_at",
-                                    "name" => "issued_at[]",
-                                    "type" => "date",
-                                    "class" => "form-control",
-                                ]);
-                                ?>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="expires_at"><?php echo app_lang('expires_at'); ?></label>
-                                <?php
-                                echo form_input([
-                                    "id"   => "expires_at",
-                                    "name" => "expires_at[]",
-                                    "type" => "date",
-                                    "class" => "form-control",
-                                ]);
-                                ?>
-                            </div>
-                        </div>
-                    </div>
+                    <div id="registration-fee-summary" class="alert alert-info" role="status">Choose a vendor group to see the registration fee.</div>
+                    <input type="hidden" name="registration_amount" id="registration-quoted-amount" value="">
+                    <p id="registration-documents-hint" class="text-muted" role="status"></p>
+                    <div id="registration-documents-changed" class="alert alert-warning d-none" role="status"><?php echo app_lang('vendor_registration_documents_group_changed'); ?></div>
+                    <div id="registration-required-documents"></div>
                     <div id="guest-vendor-extra-documents"></div>
                     <button type="button" class="btn btn-default gv-add-document" data-gv-document-add>
                         <i data-feather="plus-circle" class="icon-16"></i> <?php echo app_lang("add_document"); ?>
@@ -456,7 +393,7 @@
             <div class="gv-footer">
                 <?php echo view("signin/re_captcha"); ?>
                 <p class="note mb0">
-                    <?php echo app_lang("guest_vendor_submit_note"); ?>
+                    Paid registrations continue to Bank Muscat. Waived registrations require admin approval. You can sign in to check your status and retry payment.
                 </p>
 
                 <a class="registration-back" href="<?php echo get_uri('signin'); ?>"><i data-feather="arrow-left" class="icon-16"></i><?php echo app_lang('guest_back_signin'); ?></a>
@@ -482,7 +419,7 @@
             if (window.feather) feather.replace();
         }, 60);
 
-        $("#vendor_group_id, #country_id, #region_id, #city_id, #vendor_document_type_id").select2({
+        $("#vendor_group_id, #country_id, #region_id, #city_id").select2({
             width: "100%",
             placeholder: "",
             allowClear: true
@@ -492,7 +429,18 @@
             width: "100%"
         });
 
-        $("#document_file").attr("name", "file[]");
+        var registrationQuotes = <?php echo json_encode($registration_quotes ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        var registrationDocumentTypes = <?php echo json_encode($registration_document_types ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        $('#vendor_group_id').on('change', function () {
+            var quote = registrationQuotes[this.value];
+            var ready = quote && !quote.error;
+            $('#registration-quoted-amount').val(ready ? quote.amount : '');
+            $('#registration-fee-summary, #registration-group-summary').text(!quote ? 'Choose a vendor group to see the registration fee.' :
+                quote.error || (quote.waiver ? 'Fee waiver requested: upload Riyadha and wait for admin approval.' :
+                    'Registration fee: ' + quote.currency + ' ' + quote.amount + '. Payment completes your registration.'));
+            $('#guest-vendor-form button[type=submit]').prop('disabled', !ready);
+            renderRegistrationDocuments(ready ? (registrationDocumentTypes[this.value] || []) : [], !!ready);
+        });
 
         function bindDigitsOnly($el) {
             var strip = function() {
@@ -512,70 +460,121 @@
 
         bindDigitsOnly($("#phone_local"));
 
-        var documentTypeOptionsHtml = <?php
-            $document_type_options_html = "";
-            foreach ($vendor_document_types_dropdown as $value => $label) {
-                $document_type_options_html .= "<option value=\"" . esc($value) . "\">" . esc($label) . "</option>";
-            }
-            echo json_encode($document_type_options_html);
-        ?>;
+        var documentIndex = 0;
+        var activeDocumentTypes = [];
+        var requiredLabel = <?php echo json_encode(app_lang('required')); ?>;
+        var optionalLabel = <?php echo json_encode(app_lang('optional')); ?>;
 
-        var documentIndex = 1;
-        $("[data-gv-document-add]").on("click", function() {
-            documentIndex++;
+        function documentOptions($select, selected) {
+            $select.empty().append($('<option></option>').val('').text(<?php echo json_encode('- ' . app_lang('select_document_type') . ' -'); ?>));
+            activeDocumentTypes.forEach(function (type) {
+                $select.append($('<option></option>').val(type.id).text(type.name + (type.code ? ' (' + type.code + ')' : '')));
+            });
+            $select.val(selected || '').trigger('change');
+        }
+
+        function documentRow(type) {
+            var fixed = !!type;
+            var key = fixed ? 'required-' + type.id : 'extra-' + (++documentIndex);
             var row = $(`
                 <div class="gv-document-row" data-gv-document-row>
                     <div class="gv-document-row-header">
-                        <span class="gv-document-row-title"><?php echo app_lang("document"); ?> ${documentIndex}</span>
-                        <button type="button" class="gv-document-remove" data-gv-document-remove aria-label="<?php echo app_lang("remove"); ?>">
-                            <i data-feather="x" class="icon-14"></i>
-                        </button>
+                        <span class="gv-document-row-title" data-document-title></span>
+                        <button type="button" class="gv-document-remove" data-gv-document-remove aria-label="<?php echo app_lang('remove'); ?>"><i data-feather="x" class="icon-14"></i></button>
                     </div>
                     <div class="row">
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="document-type-${documentIndex}"><?php echo app_lang('document_type'); ?> <span class="text-danger">*</span></label>
-                                <select id="document-type-${documentIndex}" name="vendor_document_type_id[]" class="select2 validate-hidden gv-document-type" data-rule-required="true" data-msg-required="<?php echo app_lang('field_required'); ?>">
-                                    ${documentTypeOptionsHtml}
-                                </select>
-                            </div>
+                        <div class="col-lg-6 form-group">
+                            <label data-document-label="type"><?php echo app_lang('document_type'); ?></label>
+                            <select class="form-control gv-document-type validate-hidden" name="vendor_document_type_id[]" required></select>
                         </div>
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="document-file-${documentIndex}"><?php echo app_lang('document'); ?> <span class="text-danger">*</span></label>
-                                <input id="document-file-${documentIndex}" type="file" name="file[]" class="form-control" data-rule-required="true" data-msg-required="<?php echo app_lang('field_required'); ?>">
-                                <small class="text-muted"><?php echo app_lang("allowed_document_formats"); ?></small>
-                            </div>
+                        <div class="col-lg-6 form-group">
+                            <label data-document-label="file"><?php echo app_lang('document'); ?> <span data-required-mark class="text-danger">*</span></label>
+                            <input type="file" name="file[]" class="form-control" data-document-file>
+                            <small class="text-muted"><?php echo app_lang('allowed_document_formats'); ?></small>
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="document-issued-${documentIndex}"><?php echo app_lang('issued_at'); ?></label>
-                                <input id="document-issued-${documentIndex}" type="date" name="issued_at[]" class="form-control">
-                            </div>
+                        <div class="col-lg-6 form-group">
+                            <label data-document-label="issued"><?php echo app_lang('issued_at'); ?></label>
+                            <input type="date" name="issued_at[]" class="form-control" data-document-issued>
                         </div>
-                        <div class="col-lg-6">
-                            <div class="form-group">
-                                <label for="document-expires-${documentIndex}"><?php echo app_lang('expires_at'); ?></label>
-                                <input id="document-expires-${documentIndex}" type="date" name="expires_at[]" class="form-control">
-                            </div>
+                        <div class="col-lg-6 form-group">
+                            <label data-document-label="expires"><?php echo app_lang('expires_at'); ?></label>
+                            <input type="date" name="expires_at[]" class="form-control" data-document-expires>
                         </div>
                     </div>
                 </div>
             `);
-            $("#guest-vendor-extra-documents").append(row);
-            row.find(".gv-document-type").select2({
-                width: "100%",
-                placeholder: "",
-                allowClear: true
+            var $type = row.find('select');
+            if (fixed) {
+                row.attr('data-fixed-type', type.id);
+                row.find('[data-gv-document-remove]').remove();
+                $type = $('<input type="text" class="form-control" disabled>').val(type.name + (type.code ? ' (' + type.code + ')' : '')).replaceAll($type);
+                row.find('[data-document-file]').attr('name', 'registration_file_' + type.id);
+                row.find('[data-document-issued]').attr('name', 'registration_issued_at[' + type.id + ']');
+                row.find('[data-document-expires]').attr('name', 'registration_expires_at[' + type.id + ']');
+            } else {
+                row.find('[data-document-title]').text(<?php echo json_encode(app_lang('document')); ?> + ' ' + documentIndex);
+                documentOptions($type);
+            }
+            ['type', 'file', 'issued', 'expires'].forEach(function (field) {
+                var input = field === 'type' ? $type : row.find('[data-document-' + field + ']');
+                input.attr('id', 'registration-' + key + '-' + field);
+                row.find('[data-document-label="' + field + '"]').attr('for', input.attr('id'));
             });
+            row.data('required', fixed ? !!type.required : true);
+            row.find('[data-document-file]').prop('required', row.data('required'));
+            return row;
+        }
+
+        function renderRegistrationDocuments(types, ready) {
+            activeDocumentTypes = types;
+            var removedUpload = false;
+            var existing = {};
+            $('#registration-required-documents [data-fixed-type]').each(function () { existing[$(this).attr('data-fixed-type')] = $(this).detach(); });
+            types.forEach(function (type) {
+                var row = existing[type.id] || documentRow(type);
+                delete existing[type.id];
+                row.data('required', !!type.required);
+                row.find('[data-document-title]').text(type.name + ' — ' + (type.required ? requiredLabel : optionalLabel));
+                row.find('[data-required-mark]').toggle(!!type.required);
+                row.find('[data-document-file]').prop('required', !!type.required || !!row.find('[data-document-issued]').val() || !!row.find('[data-document-expires]').val());
+                $('#registration-required-documents').append(row);
+            });
+            Object.values(existing).forEach(function (row) {
+                removedUpload = removedUpload || !!row.find('[data-document-file]').val();
+                row.remove();
+            });
+            $('#guest-vendor-extra-documents [data-gv-document-row]').each(function () {
+                var row = $(this), selected = row.find('select').val();
+                if (!ready || (selected && !types.some(function (type) { return String(type.id) === selected; }))) {
+                    removedUpload = removedUpload || !!row.find('[data-document-file]').val();
+                    row.remove();
+                } else { documentOptions(row.find('select'), selected); }
+            });
+            $('#registration-documents-changed').toggleClass('d-none', !removedUpload);
+            $('#registration-documents-hint').text(!ready ? <?php echo json_encode(app_lang('vendor_registration_documents_choose_group')); ?> :
+                (types.some(function (type) { return type.required; }) ? '' : <?php echo json_encode(app_lang('vendor_registration_documents_none_required')); ?>));
+            $('[data-gv-document-add]').prop('disabled', !ready || !types.length);
+            if (window.feather) feather.replace();
+        }
+
+        $('[data-gv-document-add]').on('click', function () {
+            var row = documentRow(null);
+            $('#guest-vendor-extra-documents').append(row);
+            row.find('select').select2({width: '100%'});
             if (window.feather) feather.replace();
         });
-
-        $(document).on("click", "[data-gv-document-remove]", function() {
-            $(this).closest("[data-gv-document-row]").remove();
+        $(document).on('click', '[data-gv-document-remove]', function () { $(this).closest('[data-gv-document-row]').remove(); });
+        $(document).on('change', '[data-document-file]', function () {
+            var validator = $('#guest-vendor-form').data('validator');
+            if (validator) { validator.element(this); }
         });
+        $(document).on('change', '[data-document-issued], [data-document-expires]', function () {
+            var row = $(this).closest('[data-gv-document-row]');
+            row.find('[data-document-file]').prop('required', row.data('required') || !!row.find('[data-document-issued]').val() || !!row.find('[data-document-expires]').val());
+        });
+        $('#vendor_group_id').trigger('change');
 
         $("#toggle-password").on("click", function() {
             const $pw = $("#password");
@@ -601,6 +600,12 @@
         }
 
         function showError(field, message) {
+            if (field === 'registration_documents') {
+                document.getElementById('gv-documents').scrollIntoView({block: 'start', behavior: 'smooth'});
+                $('#gv-documents').trigger('focus');
+                appAlert.error(message);
+                return;
+            }
             if (field === "password") {
                 $("#password").addClass("is-invalid");
                 $("#password-error").removeClass("d-none").text(message);
@@ -679,22 +684,14 @@
                     duration: 10000
                 });
 
-                $("#guest-vendor-form")[0].reset();
-                $("#vendor_group_id, #country_id, #region_id, #city_id, #vendor_document_type_id").val("").trigger("change");
-                $("#phone_country_code").val("+968").trigger("change");
-                $("#guest-vendor-extra-documents").empty();
-                documentIndex = 1;
-
-                $(".gv-section").css({
-                    opacity: 0,
-                    transform: "translateY(8px)"
-                });
-                setTimeout(function() {
-                    $(".gv-section").css({
-                        opacity: "",
-                        transform: ""
-                    });
-                }, 120);
+                if (res.checkout_url) {
+                    window.location.assign(res.checkout_url);
+                    return;
+                }
+                var confirmation = $('<div class="alert alert-success m-4" role="status"></div>').text(res.message);
+                confirmation.append($('<p class="mt-3"></p>').append($('<a></a>').attr('href', <?php echo json_encode(get_uri('signin')); ?>).text('Sign in to check your application')));
+                $('#guest-vendor-form').hide().after(confirmation);
+                confirmation[0].scrollIntoView({block: 'center'});
             },
             onError: function(result) {
                 appLoader.hide();

@@ -340,6 +340,7 @@ class Tender_commercial_inbox extends Security_Controller
         try {
             $this->_save_commercial_finding_files($evaluation_id, $tender_id, $bid_id);
         } catch (UploadSecurityException $e) {
+            $db->transRollback();
             log_message('notice', 'Commercial finding attachment rejected.');
             return $this->response->setStatusCode(422)->setJSON([
                 'success' => false,
@@ -543,6 +544,8 @@ class Tender_commercial_inbox extends Security_Controller
         }
 
         $now = date("Y-m-d H:i:s");
+        $db = db_connect();
+        $db->transBegin();
         $saved = $this->Tender_communications_model->ci_save(clean_data([
             "tender_id" => $tender_id,
             "vendor_id" => $bid ? (int) ($bid->vendor_id ?? 0) : null,
@@ -563,6 +566,7 @@ class Tender_commercial_inbox extends Security_Controller
         ]));
 
         if (!$saved) {
+            $db->transRollback();
             return $this->response->setJSON([
                 "success" => false,
                 "message" => app_lang("error_occurred")
@@ -572,13 +576,23 @@ class Tender_commercial_inbox extends Security_Controller
         try {
             $this->_save_clarification_files((int) $saved, $tender_id, $bid ? (int) ($bid->vendor_id ?? 0) : null);
         } catch (UploadSecurityException $e) {
+            $db->transRollback();
             log_message('notice', 'Commercial clarification attachment rejected.');
             return $this->response->setStatusCode(422)->setJSON([
                 'success' => false,
                 'message' => app_lang('invalid_file_type'),
             ]);
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'Clarification attachment could not be stored.');
+            return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
         }
 
+        if (!$db->transStatus()) {
+            $db->transRollback();
+            return $this->response->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
+        }
+        $db->transCommit();
         return $this->response->setJSON([
             "success" => true,
             "message" => "Clarification request sent to procurement.",
@@ -856,45 +870,7 @@ class Tender_commercial_inbox extends Security_Controller
 
     private function _save_clarification_files(int $communication_id, int $tender_id, ?int $vendor_id): void
     {
-        $files = method_exists($this->request, "getFileMultiple")
-            ? ($this->request->getFileMultiple("clarification_files") ?: [])
-            : (($this->request->getFiles()["clarification_files"] ?? []) ?: []);
-
-        if (!$files) {
-            return;
-        }
-
-        if (!is_array($files)) {
-            $files = [$files];
-        }
-
-        $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-
-        $saved_files = [];
-        $security = new Upload_security();
-        foreach ($files as $file) {
-            if (!$file || !$file->isValid() || $file->hasMoved()) {
-                continue;
-            }
-
-            $stored = $security->storeUploadedFile(
-                $file,
-                $upload_dir,
-                Upload_security::CONTEXT_SECURITY_DOCUMENT,
-                'tc_'
-            );
-            $new_name = $stored['stored_name'];
-
-            $saved_files[] = [
-                "disk" => "local",
-                "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $stored['original_name'],
-                "mime_type" => $stored['detected_mime'],
-                "size_bytes" => $stored['size_bytes'],
-            ];
-        }
-
-        $this->Tender_communications_model->save_attachments($communication_id, $tender_id, $vendor_id, $saved_files, (int) $this->login_user->id);
+        \App\Libraries\Tender_clarification_files::save($this->request, $communication_id, $tender_id, $vendor_id, (int) $this->login_user->id);
     }
 
     private function _make_row($row)

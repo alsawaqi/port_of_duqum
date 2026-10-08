@@ -33,7 +33,9 @@ final class WorkflowSmsOutbox
             } else {
                 $bids = $this->db->prefixTable('tender_bids');
                 $invites = $this->db->prefixTable('tender_invited_vendors');
-                $rows = $this->db->query("SELECT vendor_id FROM {$bids} WHERE tender_id=? AND deleted=0 AND status<>'draft' UNION SELECT vendor_id FROM {$invites} WHERE tender_id=? AND deleted=0", [$subjectId, $subjectId])->getResultArray();
+                $rows = $event['reason'] === 'awarded'
+                    ? $this->db->query("SELECT DISTINCT vendor_id FROM {$bids} WHERE tender_id=? AND deleted=0 AND status<>'draft'", [$subjectId])->getResultArray()
+                    : $this->db->query("SELECT vendor_id FROM {$bids} WHERE tender_id=? AND deleted=0 AND status<>'draft' UNION SELECT vendor_id FROM {$invites} WHERE tender_id=? AND deleted=0", [$subjectId, $subjectId])->getResultArray();
                 $vendors = array_map('intval', array_column($rows, 'vendor_id'));
             }
             foreach ($vendors as $vendorId) {

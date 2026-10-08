@@ -1,3 +1,0 @@
-<?php
-
-//not needed it. 

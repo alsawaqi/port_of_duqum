@@ -12,6 +12,10 @@
     ]);
     ?>
 
+    <?php if (!empty($registration_application)): ?>
+        <?php echo view('vendors/registration_review', ['application' => $registration_application,
+            'vendor' => $vendor, 'can_review' => $can_review_registration ?? false]); ?>
+    <?php endif; ?>
     <div class="card pod-vendor-card">
         <div class="pod-vendor-card-header">
             <div>
@@ -25,6 +29,10 @@
 
         <div class="pod-vendor-card-body">
             <div class="pod-vendor-summary-grid">
+                <div class="pod-vendor-summary-item">
+                    <span><?php echo app_lang('vendor_code'); ?></span>
+                    <strong><?php echo esc(($vendor->vendor_code ?? '') !== '' ? $vendor->vendor_code : '-'); ?></strong>
+                </div>
                 <div class="pod-vendor-summary-item">
                     <span><?php echo app_lang("vendor_grade"); ?></span>
                     <strong><?php echo esc(vendor_grade_label($vendor->vendor_grade_name ?? "", $vendor->vendor_grade_code ?? "")); ?></strong>

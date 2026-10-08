@@ -9,6 +9,7 @@ $signature_image_route = trim((string) ($signature_image_route ?? "tender_report
 $manual_form_download_url = (string) ($manual_form_download_url ?? "");
 $back_url = $back_url ?? get_uri("tender_reports/details/" . (int) ($tender->id ?? 0));
 $back_label = $back_label ?? "Back to Tender Report";
+$print_record_url = $print_record_url ?? get_uri('tender_reports/bid_opening_form/' . (int) ($tender->id ?? 0) . '?format=pdf');
 $supplier_rows = array_values(array_filter($vendors, static function ($vendor) {
     return !empty($vendor->bid_id);
 }));
@@ -99,9 +100,9 @@ $attendance_rows = $signed_attendance ?: array_map(static function ($row) {
 $opening_header_actions = '<a href="' . esc($back_url, "attr") . '" class="btn btn-default gp-pro-btn gp-pro-btn-icon">'
     . '<i data-feather="arrow-left" class="icon-16"></i> ' . esc($back_label)
     . '</a>'
-    . '<button type="button" class="btn btn-primary gp-pro-btn gp-pro-btn-icon" onclick="window.print();">'
-    . '<i data-feather="printer" class="icon-16"></i> Print'
-    . '</button>';
+    . '<a href="' . esc($print_record_url, 'attr') . '" target="_blank" rel="noopener" class="btn btn-primary gp-pro-btn gp-pro-btn-icon">'
+    . '<i data-feather="printer" class="icon-16"></i> Print / Download Record'
+    . '</a>';
 ?>
 
 <div id="page-content" class="page-wrapper clearfix gp-pro-page pod-page-shell pod-tender-page tender-opening-print">

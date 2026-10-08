@@ -8,12 +8,14 @@ class Vendor_groups extends Security_Controller
 {
 
     protected $Vendor_groups_model;
+    protected $db;
 
     function __construct()
     {
         parent::__construct();
         $this->access_only_team_members();
         $this->Vendor_groups_model = new Vendor_groups_model();
+        $this->db = db_connect();
     }
 
     function index()
@@ -39,6 +41,10 @@ class Vendor_groups extends Security_Controller
             $this->access_only_vendor_groups_create();
         }
         $view_data["model_info"] = $this->Vendor_groups_model->get_one($id);
+        $fee = $this->_registration_fee((int) $id);
+        $view_data['registration_fee'] = $fee;
+        $view_data['can_set_registration_fee'] = $fee ? $this->can_update_vendor_group_fees() : $this->can_create_vendor_group_fees();
+        $view_data['registration_currency'] = config('EservicesPayments')->currency;
         return $this->template->view("vendor_groups/modal_form", $view_data);
     }
 
@@ -47,7 +53,8 @@ class Vendor_groups extends Security_Controller
         $this->validate_submitted_data(array(
             "id" => "numeric",
             "name" => "required",
-            "code" => "required"
+            "code" => "required",
+            "default_validity_days" => "required|is_natural_no_zero"
         ));
 
         $id = $this->request->getPost("id");
@@ -66,7 +73,41 @@ class Vendor_groups extends Security_Controller
         );
 
         $data = clean_data($data);
-        $save_id = $this->Vendor_groups_model->ci_save($data, $id);
+        $amount = $this->request->getPost('registration_amount');
+        $this->db->transBegin();
+        try {
+            // Serialize fee edits for an existing group. Existing applications retain their snapshots.
+            if ($id) {
+                $this->db->query('SELECT id FROM ' . $this->db->prefixTable('vendor_groups') . ' WHERE id=? FOR UPDATE', [(int) $id]);
+            }
+            $fee = $this->_registration_fee((int) $id);
+            if ($amount !== null) {
+                if (!($fee ? $this->can_update_vendor_group_fees() : $this->can_create_vendor_group_fees())) {
+                    throw new \DomainException('You do not have permission to change registration fees.');
+                }
+                try { $amount = \App\Libraries\Payments\Vendor_billing_service::normalizedFee((string) $amount); }
+                catch (\InvalidArgumentException $e) { throw new \DomainException('Enter a non-negative registration fee with up to three decimal places.'); }
+            }
+            $save_id = $this->Vendor_groups_model->ci_save($data, $id);
+            if (!$save_id) { throw new \RuntimeException('Unable to save vendor group.'); }
+            if ($amount !== null) {
+                $feeData = ['amount' => $amount, 'currency' => config('EservicesPayments')->currency];
+                if ($fee) {
+                    $this->db->table('vendor_group_fees')->where('id', (int) $fee->id)->update($feeData);
+                } else {
+                    $this->db->table('vendor_group_fees')->insert($feeData + ['vendor_group_id' => $save_id,
+                        'fee_type' => 'registration', 'active_from' => gmdate('Y-m-d'), 'active_to' => null,
+                        'is_active' => 1, 'deleted' => 0, 'created_by' => (int) $this->login_user->id]);
+                }
+            }
+            if ($this->db->transStatus() === false) { throw new \RuntimeException('Unable to save registration fee.'); }
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            if (!$e instanceof \DomainException) { log_message('error', 'Vendor group save failed: {error}', ['error' => $e->getMessage()]); }
+            echo json_encode(['success' => false, 'message' => $e instanceof \DomainException ? $e->getMessage() : app_lang('error_occurred')]);
+            return;
+        }
 
         if ($save_id) {
             echo json_encode(array(
@@ -114,6 +155,15 @@ class Vendor_groups extends Security_Controller
                 echo json_encode(array("success" => false, "message" => app_lang($this->Vendor_groups_model->delete_error ?: "record_cannot_be_deleted")));
             }
         }
+    }
+
+    private function _registration_fee(int $groupId): ?object
+    {
+        $date = gmdate('Y-m-d');
+        return $this->db->query('SELECT * FROM ' . $this->db->prefixTable('vendor_group_fees') .
+            " WHERE vendor_group_id=? AND fee_type='registration' AND deleted=0 AND is_active=1
+            AND (active_from IS NULL OR active_from<=?) AND (active_to IS NULL OR active_to>=?)
+            ORDER BY active_from DESC, id DESC LIMIT 1", [$groupId, $date, $date])->getRow() ?: null;
     }
 
     private function _row_data($id)

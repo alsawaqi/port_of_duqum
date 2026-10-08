@@ -35,6 +35,7 @@ use App\Libraries\Vendor_portal_authorizer;
 use App\Libraries\Payments\Eservice_payment_manager;
 use App\Libraries\Payments\Eservice_payment_state;
 use App\Libraries\Payments\Vendor_billing_service;
+use App\Libraries\Payments\Vendor_registration_service;
 use App\Libraries\Upload_security;
 use App\Libraries\UploadSecurityException;
 
@@ -126,6 +127,51 @@ class Vendor_portal extends Security_Controller
         $this->Tender_evaluations_model = new Tender_evaluations_model();
         $this->Tender_rfq_details_model = new Tender_rfq_details_model();
         $this->Tender_rfq_items_model = new Tender_rfq_items_model();
+        $membership = $this->_active_vendor_membership();
+        $application = $membership ? (new Vendor_registration_service($this->db))->application((int) $membership->vendor_id) : null;
+        if ($application && $application->status !== 'approved') {
+            $method = strtolower(service('router')->methodName());
+            if (!in_array($method, ['index','view','overview','registration_status','pay_registration'], true)) {
+                if (service('request')->isAJAX()) {
+                    service('response')->setStatusCode(403)->setJSON(['success' => false,
+                        'message' => 'Complete registration payment or wait for waiver approval before using the vendor portal.'])->send();
+                    exit;
+                }
+                app_redirect('vendor_portal/registration_status');
+            }
+        }
+    }
+
+    public function registration_status()
+    {
+        $vendorId = $this->_require_vendor_access();
+        $application = (new Vendor_registration_service($this->db))->application($vendorId);
+        if (!$application || $application->status === 'approved') {
+            app_redirect('vendor_portal');
+        }
+        return $this->template->rander('vendor_portal/registration_status', [
+            'application' => $application, 'vendor' => $this->Vendors_model->get_one($vendorId),
+            'can_pay' => $this->_can_edit_vendor_profile(),
+            'vendor_memberships' => $this->Vendor_users_model->get_accessible_memberships((int) $this->login_user->id),
+        ]);
+    }
+
+    public function pay_registration()
+    {
+        if (strtoupper($this->request->getMethod()) !== 'POST') { return $this->response->setStatusCode(405); }
+        $vendorId = $this->_require_vendor_profile_write_access();
+        try {
+            $result = (new Vendor_registration_service($this->db))->startPayment($vendorId, (int) $this->login_user->id);
+            $code = (int) ($result['status_code'] ?? 500);
+            unset($result['status_code']);
+            return $this->response->setStatusCode($code)->setJSON($result);
+        } catch (\DomainException $e) {
+            return $this->response->setStatusCode(422)->setJSON(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Registration checkout failed: {error}', ['error' => $e->getMessage()]);
+            return $this->response->setStatusCode(503)->setJSON(['success' => false,
+                'message' => 'Payment is temporarily unavailable. Your application is saved; please try again later.']);
+        }
     }
 
 
@@ -219,7 +265,7 @@ class Vendor_portal extends Security_Controller
         }
 
         if (($tender->status ?? "") === "awarded" && $bid) {
-            $is_awarded_to_vendor = strtolower((string) ($latest_commercial_evaluation->decision ?? "")) === "accepted";
+            $is_awarded_to_vendor = (int) ($tender->award_vendor_id ?? 0) === $vendor_id;
             $is_regretted_vendor = !$is_awarded_to_vendor;
         }
 
@@ -236,6 +282,7 @@ class Vendor_portal extends Security_Controller
             "latest_commercial_evaluation" => $latest_commercial_evaluation,
             "is_awarded_to_vendor"         => $is_awarded_to_vendor,
             "is_regretted_vendor"          => $is_regretted_vendor,
+            "has_result_letter" => (bool) $this->db->table('tender_communications')->where('tender_id', $tender_id)->where('vendor_id', $vendor_id)->where('deleted', 0)->whereIn('type', ['award_letter', 'regret_letter'])->get(1)->getRow(),
             "rfq_detail"                   => $this->Tender_rfq_details_model->get_by_tender($tender_id),
             "rfq_items"                    => $rfq_items,
             "bid_item_price_map"           => $bid_item_price_map,
@@ -839,6 +886,7 @@ class Vendor_portal extends Security_Controller
             }
         }
 
+        $this->db->transBegin();
         $saved = $this->Tender_communications_model->ci_save(clean_data([
             "tender_id" => $tender_id,
             "vendor_id" => $vendor_id,
@@ -858,6 +906,7 @@ class Vendor_portal extends Security_Controller
         ]));
 
         if (!$saved) {
+            $this->db->transRollback();
             return $this->response->setJSON([
                 "success" => false,
                 "message" => app_lang("error_occurred")
@@ -867,17 +916,48 @@ class Vendor_portal extends Security_Controller
         try {
             $this->_save_clarification_files((int) $saved, $tender_id, $vendor_id);
         } catch (UploadSecurityException $e) {
+            $this->db->transRollback();
             log_message('notice', 'Vendor clarification attachment rejected.');
             return $this->response->setStatusCode(422)->setJSON([
                 'success' => false,
                 'message' => app_lang('invalid_file_type'),
             ]);
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'Clarification attachment could not be stored.');
+            return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
         }
 
+        if (!$this->db->transStatus()) {
+            $this->db->transRollback();
+            return $this->response->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
+        }
+        $this->db->transCommit();
         return $this->response->setJSON([
             "success" => true,
             "message" => "Clarification submitted successfully."
         ]);
+    }
+
+    public function result_letter($tender_id = 0)
+    {
+        $vendor_id = $this->_require_vendor_tender_access();
+        $tender_id = (int) $tender_id;
+        $tender = $this->Tenders_model->get_vendor_visible_tender($tender_id, $vendor_id);
+        if (!$tender || ($tender->status ?? '') !== 'awarded') { show_404(); }
+        $letter = db_connect()->table('tender_communications')->where('tender_id', $tender_id)
+            ->where('vendor_id', $vendor_id)->where('deleted', 0)->where('is_vendor_visible', 1)
+            ->whereIn('type', ['award_letter', 'regret_letter'])->orderBy('id', 'DESC')->get(1)->getRow();
+        if (!$letter) { show_404(); }
+        if ($letter->type === 'regret_letter') {
+            $pdf = \App\Libraries\Tender_document_pdf::regret($letter)->Output('', 'S');
+            return $this->response->download('tender-document.pdf', $pdf)
+                ->setFileName(\App\Libraries\Tender_document_pdf::filename('Regret-Letter', (string) $letter->id))
+                ->setContentType('application/pdf')->setHeader('Cache-Control', 'private, no-store')
+                ->setHeader('X-Content-Type-Options', 'nosniff')->inline();
+        }
+        return $this->response->setHeader('Cache-Control', 'private, no-store')
+            ->setBody(view('vendor_portal/tenders/result_letter', ['letter' => $letter]));
     }
 
     public function download_clarification_attachment($id = 0)
@@ -988,44 +1068,7 @@ class Vendor_portal extends Security_Controller
 
     private function _save_clarification_files(int $communication_id, int $tender_id, int $vendor_id): void
     {
-        $files = method_exists($this->request, "getFileMultiple")
-            ? ($this->request->getFileMultiple("clarification_files") ?: [])
-            : (($this->request->getFiles()["clarification_files"] ?? []) ?: []);
-
-        if (!$files) {
-            return;
-        }
-
-        if (!is_array($files)) {
-            $files = [$files];
-        }
-
-        $upload_dir = WRITEPATH . "uploads/tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/";
-
-        $saved_files = [];
-        $security = new Upload_security();
-        foreach ($files as $file) {
-            if (!$file || !$file->isValid() || $file->hasMoved()) {
-                continue;
-            }
-            $stored = $security->storeUploadedFile(
-                $file,
-                $upload_dir,
-                Upload_security::CONTEXT_SECURITY_DOCUMENT,
-                'tc_'
-            );
-            $new_name = $stored['stored_name'];
-
-            $saved_files[] = [
-                "disk" => "local",
-                "path" => "tender_clarifications/tender_" . $tender_id . "/communication_" . $communication_id . "/" . $new_name,
-                "original_name" => $stored['original_name'],
-                "mime_type" => $stored['detected_mime'],
-                "size_bytes" => $stored['size_bytes'],
-            ];
-        }
-
-        $this->Tender_communications_model->save_attachments($communication_id, $tender_id, $vendor_id, $saved_files, (int) $this->login_user->id);
+        \App\Libraries\Tender_clarification_files::save($this->request, $communication_id, $tender_id, $vendor_id, (int) $this->login_user->id);
     }
 
     private function _is_tender_submission_open($tender): bool
@@ -1119,14 +1162,10 @@ class Vendor_portal extends Security_Controller
             return true;
         }
 
-        if (
-            in_array(strtolower((string) ($tender->status ?? "")), ["closed"], true)
+        return ($tender->status ?? '') === 'closed'
+            && in_array((string) ($tender->workflow_stage ?? ''), ['technical', 'commercial'], true)
             && $this->_vendor_participated_in_tender((int) ($tender->id ?? 0), $vendor_id)
-        ) {
-            return true;
-        }
-
-        return $this->Tender_communications_model->has_vendor_visible_evaluator_clarification_request((int) ($tender->id ?? 0), $vendor_id);
+            && $this->Tender_communications_model->has_vendor_visible_evaluator_clarification_request((int) ($tender->id ?? 0), $vendor_id);
     }
 
     private function _vendor_participated_in_tender(int $tender_id, int $vendor_id): bool
@@ -1188,10 +1227,10 @@ class Vendor_portal extends Security_Controller
             $target .= " / " . $row->vendor_sub_category_name;
         }
         if (!empty($row->vendor_group_name)) {
-            $target = "Group: " . $row->vendor_group_name . (!empty($row->vendor_group_code) ? " (" . $row->vendor_group_code . ")" : "");
+            $target .= ($target ? " + " : "") . "Group: " . $row->vendor_group_name . (!empty($row->vendor_group_code) ? " (" . $row->vendor_group_code . ")" : "");
         }
         if (!empty($row->vendor_grade_name) || !empty($row->vendor_grade_code)) {
-            $target = "Grade: " . trim(($row->vendor_grade_code ? $row->vendor_grade_code . " - " : "") . ($row->vendor_grade_name ?? ""));
+            $target .= ($target ? " + " : "") . "Grade: " . trim(($row->vendor_grade_code ? $row->vendor_grade_code . " - " : "") . ($row->vendor_grade_name ?? ""));
         }
         if (!$target) {
             $target = "Open to eligible vendors";
@@ -1200,6 +1239,7 @@ class Vendor_portal extends Security_Controller
         $eligibility_labels = [
             "participated" => "Participated",
             "specific_vendor" => "Selected vendor",
+            "combined" => app_lang("tender_audience_matched"),
             "invited" => "Invited",
             "vendor_group" => "Vendor group",
             "vendor_grade" => "Vendor grade",
@@ -2055,6 +2095,9 @@ class Vendor_portal extends Security_Controller
     {
         $vendor_id = $this->_require_vendor_access();
 
+        $application = (new Vendor_registration_service($this->db))->application($vendor_id);
+        if ($application && $application->status !== 'approved') { return $this->registration_status(); }
+
         $view_data["vendor_info"] = $this->Vendors_model->get_one($vendor_id);
         $view_data["vendor_memberships"] = $this->Vendor_users_model->get_accessible_memberships((int) $this->login_user->id);
         $view_data["tab"] = $tab;
@@ -2069,6 +2112,8 @@ class Vendor_portal extends Security_Controller
     function overview()
     {
         $vendor_id = $this->_require_vendor_access();
+        $application = (new Vendor_registration_service($this->db))->application($vendor_id);
+        if ($application && $application->status !== 'approved') { return $this->registration_status(); }
         $view_data["vendor_info"] = $this->Vendors_model->get_one($vendor_id);
         $view_data["profile_checklist"] = $this->_get_vendor_profile_checklist($vendor_id);
         $view_data["billing"] = (new Vendor_billing_service($this->db))->summary($view_data["vendor_info"]);

@@ -1595,6 +1595,26 @@ body.pod-auth-page {
     z-index: 1;
 }
 
+/* Keep the port entrance visible across the complete sign-in aside. */
+.signin-page .pod-auth-brand-panel {
+    background-color: #0a2338;
+    background-image:
+        linear-gradient(180deg, rgba(6, 21, 38, .78) 0%, rgba(6, 21, 38, .62) 36%, rgba(6, 21, 38, .28) 65%, rgba(6, 21, 38, .82) 100%),
+        var(--pod-auth-background-image, url("../images/port-duqum-signin-background.jpg"));
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.signin-page .pod-auth-brand-panel::before,
+.signin-page .pod-auth-brand-panel::after {
+    content: none;
+}
+
+.signin-page .pod-auth-copy p {
+    color: rgba(255, 255, 255, .92);
+}
+
 .pod-auth-brand-lockup {
     display: flex;
     align-items: center;

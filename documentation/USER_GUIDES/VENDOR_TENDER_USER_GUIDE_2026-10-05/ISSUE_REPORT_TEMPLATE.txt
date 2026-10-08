@@ -1,0 +1,23 @@
+PORT OF DUQM — VENDOR / TENDER TEST ISSUE
+
+Checklist Test ID / Guide section:
+Module and page:
+Portal domain / environment:
+Date and time (including time zone):
+Tester and role:
+Vendor CR / tender reference:
+
+Steps to reproduce:
+1.
+2.
+3.
+
+Expected result:
+Actual result:
+Exact error message:
+Attachment / screenshot filenames:
+Application payment / message reference and status (if relevant):
+Result: Failed / Blocked
+Priority / effect on testing:
+
+Do not include account passwords, OTP codes, provider keys or full card details.

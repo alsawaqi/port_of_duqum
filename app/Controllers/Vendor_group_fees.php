@@ -65,7 +65,7 @@ class Vendor_group_fees extends Security_Controller
         $this->validate_submitted_data(array(
             "id" => "numeric",
             "vendor_group_id" => "required|numeric",
-            "fee_type" => "required",
+            "fee_type" => "required|in_list[registration,renewal]",
             "currency" => "required",
             "amount" => "required|numeric"
         ));
@@ -79,6 +79,12 @@ class Vendor_group_fees extends Security_Controller
 
         $active_from = $this->request->getPost('active_from');
         $active_to   = $this->request->getPost('active_to');
+        try {
+            $amount = \App\Libraries\Payments\Vendor_billing_service::normalizedFee((string) $this->request->getPost('amount'));
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['success' => false, 'message' => 'Enter a non-negative fee with up to three decimal places.']);
+            return;
+        }
 
         $active_from = $active_from ? $this->_check_valid_date($active_from) : null;
         $active_to   = $active_to ? $this->_check_valid_date($active_to) : null;
@@ -98,7 +104,7 @@ class Vendor_group_fees extends Security_Controller
             "vendor_group_id" => (int) $this->request->getPost('vendor_group_id'),
             "fee_type"        => $this->request->getPost('fee_type'),
             "currency"        => strtoupper(trim($this->request->getPost('currency'))),
-            "amount"          => $this->request->getPost('amount'),
+            "amount"          => $amount,
             "active_from"     => $active_from,
             "active_to"       => $active_to,
             "is_active"       => $this->request->getPost('is_active') ? 1 : 0
@@ -109,6 +115,8 @@ class Vendor_group_fees extends Security_Controller
         }
 
         $data = clean_data($data);
+        $data['active_from'] = $active_from;
+        $data['active_to'] = $active_to;
         $save_id = $this->Vendor_group_fees_model->ci_save($data, $id);
 
         if ($save_id) {

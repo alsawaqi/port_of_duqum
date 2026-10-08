@@ -10,6 +10,8 @@ use App\Libraries\Upload_security;
 use App\Libraries\UploadSecurityException;
 use App\Libraries\ReCAPTCHA;
 use App\Libraries\Runtime_schema_guard;
+use App\Libraries\Payments\Vendor_registration_service;
+use App\Libraries\Vendor_registration_documents;
 
 class Guest_vendor extends App_Controller
 {
@@ -44,10 +46,23 @@ class Guest_vendor extends App_Controller
         // Vendor groups dropdown
         $groups_dropdown = ["" => "- " . app_lang("select_vendor_group") . " -"];
         $groups = $this->Vendor_groups_model->get_details()->getResult();
+        $registration_quotes = [];
+        $registration_document_types = [];
+        $documents = new Vendor_registration_documents($this->db);
+        $registration = new Vendor_registration_service($this->db);
         foreach ($groups as $g) {
+            if (empty($g->is_active)) { continue; }
             $groups_dropdown[$g->id] = $g->name . " (" . $g->code . ")";
+            try {
+                $registration_quotes[$g->id] = $registration->quote((int) $g->id);
+                $registration_document_types[$g->id] = array_values($documents->definitions((int) $g->id, $registration_quotes[$g->id]['riyada_type_id']));
+            } catch (\DomainException $e) {
+                $registration_quotes[$g->id] = ['error' => $e->getMessage()];
+            }
         }
         $view_data["vendor_groups_dropdown"] = $groups_dropdown;
+        $view_data['registration_quotes'] = $registration_quotes;
+        $view_data['registration_document_types'] = $registration_document_types;
 
         // Countries dropdown
         $country_table = $this->db->prefixTable('country');
@@ -63,24 +78,6 @@ class Guest_vendor extends App_Controller
         $view_data["cities_dropdown"] = ["" => "- " . app_lang("select_city") . " -"];
         $view_data["intl_dial_codes"] = require APPPATH . "Config/intl_phone_dial_codes.php";
 
-
-        $doc_types_table = $this->db->prefixTable('vendor_document_types');
-        $doc_types = $this->db->query("
-                                SELECT id, name, code
-                                FROM $doc_types_table
-                                WHERE deleted = 0 AND is_active = 1
-                                ORDER BY name ASC
-                            ")->getResult();
-
-        $doc_types_dropdown = ["" => "- " . app_lang("select_document_type") . " -"];
-        foreach ($doc_types as $dt) {
-            $label = $dt->name;
-            if (!empty($dt->code)) {
-                $label .= " (" . $dt->code . ")";
-            }
-            $doc_types_dropdown[$dt->id] = $label;
-        }
-        $view_data["vendor_document_types_dropdown"] = $doc_types_dropdown;
 
         return $this->template->rander("guest_vendor/index", $view_data);
     }
@@ -129,13 +126,29 @@ class Guest_vendor extends App_Controller
                 // optional vendor address fields
 
 
-                "vendor_document_type_id" => "required",
+                "vendor_document_type_id" => "permit_empty",
                 "issued_at"               => "permit_empty",
                 "expires_at"              => "permit_empty",
                 "address"     => "permit_empty",
                 "po_box"      => "permit_empty",
                 "postal_code" => "permit_empty",
             ]);
+
+            $registration = new Vendor_registration_service($db);
+            $registrationQuote = $registration->quote((int) $this->request->getPost('vendor_group_id'));
+            $shownAmount = $this->request->getPost('registration_amount');
+            if ($shownAmount !== null && (string) $shownAmount !== $registrationQuote['amount']) {
+                throw new \DomainException('The registration fee changed. Refresh the page to review the current amount.');
+            }
+            $documents = new Vendor_registration_documents($db);
+            try {
+                $document_rows = $documents->submission(
+                    $documents->definitions((int) $registrationQuote['vendor_group_id'], $registrationQuote['riyada_type_id']),
+                    $this->request->getPost(), $this->request->getFiles(), $registrationQuote['riyada_type_id']
+                );
+            } catch (\DomainException $e) {
+                return $this->response->setJSON(['success' => false, 'message' => $e->getMessage(), 'field' => 'registration_documents']);
+            }
 
             // ✅ Guest page is CREATE ONLY
             $vendor_email = strtolower(trim((string) $this->request->getPost("email")));
@@ -382,7 +395,7 @@ class Guest_vendor extends App_Controller
                         "invited_by" => 0,
                         "vendor_role_id" => 1,
                         "is_owner" => 1,
-                        "status" => "invited",
+                        "status" => "active",
                         "deleted" => 0
                     ]));
                 if (!$ok) {
@@ -399,7 +412,7 @@ class Guest_vendor extends App_Controller
 
                     "vendor_role_id" => 1,     // Owner
                     "is_owner"       => 1,
-                    "status"         => "invited",
+                    "status"         => "active",
                     "deleted"        => 0
                 ];
 
@@ -464,6 +477,8 @@ class Guest_vendor extends App_Controller
                 "after"     => $contact_data,
             ];
 
+            // The initial owner is reviewed with the registration application.
+            // Later contacts still use the independent contact approval queue.
             $contact_request_id = $this->Vendor_update_requests_model->ci_save([
                 "vendor_id"    => (int)$save_vendor_id,
                 "requested_by" => (int)$user_id,
@@ -480,73 +495,8 @@ class Guest_vendor extends App_Controller
             }
 
 
-            // 3) Save initial vendor documents + create VUR rows (pending)
-            $doc_type_ids = $this->request->getPost("vendor_document_type_id");
-            $issued_ats = $this->request->getPost("issued_at");
-            $expires_ats = $this->request->getPost("expires_at");
-            $files = $this->request->getFileMultiple("file");
-
-            if (!is_array($doc_type_ids)) {
-                $doc_type_ids = [$doc_type_ids];
-            }
-            if (!is_array($issued_ats)) {
-                $issued_ats = [$issued_ats];
-            }
-            if (!is_array($expires_ats)) {
-                $expires_ats = [$expires_ats];
-            }
-            if (!$files) {
-                $single_file = $this->request->getFile("file");
-                $files = $single_file ? [$single_file] : [];
-            }
-
-            $max_documents = max(count($doc_type_ids), count($files), count($issued_ats), count($expires_ats));
-            $document_rows = [];
-            for ($i = 0; $i < $max_documents; $i++) {
-                $doc_type_id = (int)($doc_type_ids[$i] ?? 0);
-                $file = $files[$i] ?? null;
-                $has_file = $file && $file->isValid() && !$file->hasMoved();
-                $has_dates = !empty($issued_ats[$i]) || !empty($expires_ats[$i]);
-
-                if (!$doc_type_id && !$has_file && !$has_dates) {
-                    continue;
-                }
-
-                if (!$doc_type_id || !$has_file) {
-                    $db->transRollback();
-
-                    echo json_encode([
-                        "success" => false,
-                        "message" => app_lang("vendor_document_row_required"),
-                        "errors"  => [
-                            "vendor_document_type_id" => !$doc_type_id ? app_lang("field_required") : null,
-                            "file"                    => !$has_file ? app_lang("file_is_required") : null,
-                        ],
-                    ]);
-                    return;
-                }
-
-                $document_rows[] = [
-                    "vendor_document_type_id" => $doc_type_id,
-                    "issued_at" => $issued_ats[$i] ?? null,
-                    "expires_at" => $expires_ats[$i] ?? null,
-                    "file" => $file,
-                ];
-            }
-
-            if (!$document_rows) {
-                $db->transRollback();
-
-                echo json_encode([
-                    "success" => false,
-                    "message" => app_lang("file_is_required"),
-                    "errors"  => [
-                        "vendor_document_type_id" => !$doc_type_id ? app_lang("field_required") : null,
-                        "file"                    => !$has_file ? app_lang("file_is_required") : null,
-                    ],
-                ]);
-                return;
-            }
+            // The current group's document types and required uploads were validated before any writes.
+            $riyadaDocumentId = null;
 
             // Upload to same structure as vendor portal
             $upload_dir = WRITEPATH . "uploads/vendor_documents/vendor_" . $save_vendor_id . "/";
@@ -591,6 +541,7 @@ class Guest_vendor extends App_Controller
                     $err = $db->error();
                     throw new \RuntimeException("Vendor document insert error: " . ($err["message"] ?? "unknown"));
                 }
+                if (!empty($document_row['registration_riyada'])) { $riyadaDocumentId = (int) $doc_id; }
 
                 // Build vendor_update_requests payload (same structure as vendor portal)
                 $changes = [
@@ -612,9 +563,17 @@ class Guest_vendor extends App_Controller
                     "updated_at"   => date("Y-m-d H:i:s"),
                 ];
 
-                $this->Vendor_update_requests_model->ci_save($vur_data);
+                if (!$this->Vendor_update_requests_model->ci_save($vur_data)) {
+                    throw new \RuntimeException('Unable to save the document review request.');
+                }
             }
 
+
+            $application = $registration->create($this->Vendors_model->get_one((int) $save_vendor_id),
+                (int) $user_id, (int) $contact_id, $riyadaDocumentId);
+            if ((string) $application->amount !== $registrationQuote['amount']) {
+                throw new \DomainException('The registration fee changed. Refresh the page to review the current amount.');
+            }
 
             if ($db->transStatus() === false) {
                 $err = $db->error();
@@ -623,11 +582,23 @@ class Guest_vendor extends App_Controller
 
             $db->transCommit();
 
-            echo json_encode([
-                "success" => true,
-                "message" => app_lang("guest_vendor_application_saved")
-            ]);
-            return;
+            $response = ['success' => true, 'registration_status' => $application->status,
+                'message' => 'Your application is pending Riyadha waiver approval. Sign in to check its status.'];
+            if ($application->status === 'pending_payment') {
+                try {
+                    $checkout = $registration->startPayment((int) $save_vendor_id, (int) $user_id);
+                    if (!empty($checkout['success'])) {
+                        $response['checkout_url'] = $checkout['checkout_url'];
+                        $response['message'] = 'Application saved. Continue to Bank Muscat to complete registration.';
+                    } else {
+                        $response['message'] = 'Application saved; registration is awaiting payment. ' . $checkout['message'] . ' Sign in to try again.';
+                    }
+                } catch (\Throwable $e) {
+                    log_message('error', 'Registration checkout unavailable after application saved.');
+                    $response['message'] = 'Application saved; registration is awaiting payment. Sign in to try payment again.';
+                }
+            }
+            return $this->response->setJSON($response);
         } catch (\Throwable $e) {
 
             // rollback if needed
@@ -648,6 +619,7 @@ class Guest_vendor extends App_Controller
                 return $this->response->setStatusCode(422)->setJSON([
                     'success' => false,
                     'message' => app_lang('invalid_file_type'),
+                    'field' => 'registration_documents',
                 ]);
             }
 

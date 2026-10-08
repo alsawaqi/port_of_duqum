@@ -116,10 +116,22 @@ class Tender_procurement_manager_inbox extends Security_Controller
         }
 
         $payload = $this->_decode_manager_payload($tender);
+        $pending_audience = null;
+        $pending_audience_error = '';
+        if (($tender->procurement_manager_status ?? '') === 'pending' && ($payload['target']['target_mode'] ?? '') === 'combined') {
+            try {
+                $selector = new \App\Libraries\Tender_vendor_selection($this->db);
+                $pending_audience = $selector->recipients($selector->withRequestFallback($selector->validate($payload['target']), (int) ($tender->tender_request_id ?? 0)));
+            } catch (\DomainException $e) {
+                $pending_audience_error = $e->getMessage();
+            }
+        }
 
         return $this->template->rander("tender_procurement_manager_inbox/details", [
             "tender" => $tender,
             "payload" => $payload,
+            "pending_audience" => $pending_audience,
+            "pending_audience_error" => $pending_audience_error,
             "pending_action_summary" => $this->_pending_action_summary($tender),
             "schedule" => $this->_get_tender_schedule_rows($tender),
             "teams" => $this->_get_tender_team_rows($tender_id),
@@ -166,6 +178,13 @@ class Tender_procurement_manager_inbox extends Security_Controller
             "updated_at" => $now,
         ];
 
+        $pendingPayload = $this->_decode_manager_payload($tender);
+        if (!empty($pendingPayload['testing_workflow_stage']) && !Tender_testing_stage::enabled((bool) $this->login_user->is_admin)) {
+            return $this->response->setJSON(['success' => false, 'message' => 'This request contains a disabled testing stage. Return it for revision and resubmit using the normal workflow.']);
+        }
+        if (in_array((string) $tender->status, ['awarded', 'cancelled'], true)) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Finalized tenders cannot be changed.']);
+        }
         switch ($action) {
             case "cancel":
                 $approval_payload["status"] = "cancelled";
@@ -178,8 +197,28 @@ class Tender_procurement_manager_inbox extends Security_Controller
                 ]);
 
             case "update":
-                $this->_apply_approved_manager_update($tender, $this->_decode_manager_payload($tender));
+                $payload = $this->_decode_manager_payload($tender);
+                if (($payload['target']['target_mode'] ?? '') === 'combined') {
+                    try {
+                        $selector = new \App\Libraries\Tender_vendor_selection($this->db);
+                        $selection = $selector->validate($payload['target']);
+                        $selection = $selector->withRequestFallback($selection, (int) ($tender->tender_request_id ?? 0));
+                        if (($payload['tender_fields']['tender_type'] ?? $tender->tender_type) === 'close' && !$selector->recipients($selection)) {
+                            throw new \DomainException(app_lang('tender_audience_empty'));
+                        }
+                    } catch (\DomainException $e) {
+                        return $this->response->setJSON(['success' => false, 'message' => $e->getMessage()]);
+                    }
+                }
+                $team_error = \App\Libraries\Tender_team_validation::error($this->db, (int) $tender->company_id, (array) ($payload['team_ids'] ?? []));
+                if ($team_error) { return $this->response->setJSON(['success' => false, 'message' => $team_error]); }
+                $this->db->transStart();
+                $this->_apply_approved_manager_update($tender, $payload);
                 $this->Tenders_model->ci_save($approval_payload, $tender_id);
+                $this->db->transComplete();
+                if (!$this->db->transStatus()) {
+                    return $this->response->setJSON(['success' => false, 'message' => app_lang('error_occurred')]);
+                }
 
                 return $this->response->setJSON([
                     "success" => true,
@@ -207,6 +246,29 @@ class Tender_procurement_manager_inbox extends Security_Controller
             "message" => "Tender approved. Procurement can publish it now.",
             "redirect_url" => get_uri("tender_procurement_manager_inbox/details/" . $tender_id),
         ]);
+    }
+
+    public function reject()
+    {
+        $this->validate_submitted_data(['tender_id' => 'required|numeric', 'comment' => 'required']);
+        $this->access_only_tender('procurement_manager_inbox', 'update');
+        $tender_id = (int) $this->request->getPost('tender_id');
+        $tender = $this->_get_tender_for_manager($tender_id);
+        if (!$tender || $tender->procurement_manager_status !== 'pending') {
+            return $this->response->setJSON(['success' => false, 'message' => 'Only pending requests can be rejected.']);
+        }
+        $comment = trim((string) $this->request->getPost('comment'));
+        if ($comment === '') {
+            return $this->response->setJSON(['success' => false, 'message' => 'A rejection reason is required.']);
+        }
+        $saved = $this->Tenders_model->ci_save([
+            'procurement_manager_status' => 'rejected', 'procurement_manager_comment' => $comment,
+            'procurement_manager_reviewed_by' => (int) $this->login_user->id,
+            'procurement_manager_reviewed_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
+        ], $tender_id);
+        return $this->response->setJSON(['success' => (bool) $saved,
+            'message' => $saved ? 'Request rejected. Procurement can revise and resubmit it.' : app_lang('error_occurred'),
+            'redirect_url' => get_uri('tender_procurement_manager_inbox/details/' . $tender_id)]);
     }
 
     public function request_revision()
@@ -320,6 +382,10 @@ class Tender_procurement_manager_inbox extends Security_Controller
             $this->_sync_tender_teams_from_payload($tender_id, $team_ids);
         }
 
+        $pendingIds = array_values(array_filter(array_map('intval', (array) ($payload['pending_document_ids'] ?? []))));
+        if ($pendingIds) {
+            $this->db->table('tender_documents')->where('tender_id', $tender_id)->whereIn('id', $pendingIds)->update(['deleted' => 0]);
+        }
         $fresh = $this->_get_tender_for_manager($tender_id);
         if ($fresh) {
             $this->_sync_invites_from_payload($fresh, $target);
@@ -714,6 +780,11 @@ class Tender_procurement_manager_inbox extends Security_Controller
 
     private function _sync_target_rule_from_payload(int $tender_id, array $target): void
     {
+        if (($target['target_mode'] ?? '') === 'combined') {
+            $selector = new \App\Libraries\Tender_vendor_selection($this->db);
+            $selector->save($tender_id, $selector->validate($target), (int) $this->login_user->id);
+            return;
+        }
         $target_table = $this->db->prefixTable("tender_target_specialties");
         $target_vendors_table = $this->db->prefixTable("tender_target_vendors");
         $now = date("Y-m-d H:i:s");
@@ -818,6 +889,18 @@ class Tender_procurement_manager_inbox extends Security_Controller
     private function _sync_invites_from_payload($tender, array $target): void
     {
         $tender_id = (int) ($tender->id ?? 0);
+        if (($target['target_mode'] ?? '') === 'combined') {
+            $selector = new \App\Libraries\Tender_vendor_selection($this->db);
+            $selection = $selector->validate($target);
+            if (\App\Libraries\Tender_vendor_selection::hasFilters($selection) || $selection['specific_vendor_ids']) {
+                $this->_replace_invites($tender_id, array_column($selector->recipients($selection), 'id'));
+            } elseif (!empty($tender->tender_request_id) && $tender->tender_type === 'close') {
+                $this->_sync_invites_from_request($tender_id, (int) $tender->tender_request_id);
+            } else {
+                $this->_clear_invites($tender_id);
+            }
+            return;
+        }
         $tender_type = (string) ($tender->tender_type ?? "open");
         $tender_request_id = (int) ($tender->tender_request_id ?? 0);
         $mode = (string) ($target["target_mode"] ?? "specialty");
@@ -1218,12 +1301,16 @@ class Tender_procurement_manager_inbox extends Security_Controller
         $docs = $this->db->prefixTable("tender_documents");
         $users = $this->db->prefixTable("users");
 
+        $record = $this->_get_tender_for_manager($tender_id);
+        $payload = $record && in_array($record->procurement_manager_status, ['pending', 'revision_requested'], true) ? $this->_decode_manager_payload($record) : [];
+        $pendingIds = array_values(array_filter(array_map('intval', (array) ($payload['pending_document_ids'] ?? []))));
+        $pendingSql = $pendingIds ? ' OR ' . $docs . '.id IN (' . implode(',', $pendingIds) . ')' : '';
         return $this->db->query(
             "SELECT $docs.*,
                     TRIM(CONCAT(COALESCE($users.first_name, ''), ' ', COALESCE($users.last_name, ''))) AS uploaded_by_name
              FROM $docs
              LEFT JOIN $users ON $users.id=$docs.uploaded_by AND $users.deleted=0
-             WHERE $docs.deleted=0
+             WHERE ($docs.deleted=0 $pendingSql)
                AND $docs.tender_id=?
              ORDER BY $docs.created_at DESC, $docs.id DESC",
             [$tender_id]
@@ -1239,7 +1326,7 @@ class Tender_procurement_manager_inbox extends Security_Controller
         }
 
         $doc = $this->Tender_documents_model->get_one($id);
-        if (!$doc || (int) ($doc->deleted ?? 0) === 1) {
+        if (!$doc || empty($doc->id)) {
             show_404();
         }
 
@@ -1247,6 +1334,8 @@ class Tender_procurement_manager_inbox extends Security_Controller
             app_redirect("forbidden");
         }
 
+        $accessibleIds = array_map(static fn($row) => (int) $row->id, $this->_get_tender_documents((int) $doc->tender_id));
+        if (!in_array($id, $accessibleIds, true)) { show_404(); }
         $full_path = (new Upload_security())->resolveStoredFile(
             (string) ($doc->path ?? ""),
             "tender_documents"
